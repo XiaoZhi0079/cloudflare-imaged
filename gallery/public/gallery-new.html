@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GoodTry — 画廊</title>
+<meta name="description" content="GoodTry 艺术摄影画廊">
+<style>
+/* ===== RESET ===== */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-size:16px;scroll-behavior:smooth}
+body{font-family:var(--font-body);background:var(--bg);color:var(--fg);line-height:1.6;-webkit-font-smoothing:antialiased}
+img{display:block;max-width:100%}
+a{color:var(--accent);text-decoration:underline;text-underline-offset:3px}
+a:hover{opacity:0.7}
+button{border:none;background:none;cursor:pointer;font:inherit;color:inherit}
+ul{list-style:none}
+
+/* ===== TOKENS ===== */
+:root {
+  --bg: oklch(97% 0.003 100);
+  --surface: oklch(100% 0 0);
+  --fg: oklch(12% 0.01 100);
+  --muted: oklch(42% 0.015 100);
+  --border: oklch(88% 0.005 100);
+  --accent: oklch(35% 0.03 60);
+
+  --font-display: 'Times New Roman', 'Iowan Old Style', Georgia, serif;
+  --font-body: ui-monospace, 'IBM Plex Mono', 'JetBrains Mono', Menlo, monospace;
+
+  --gutter: clamp(1.5rem, 4vw, 3rem);
+  --content-w: min(1400px, 100% - var(--gutter)*2);
+  --shadow: 0 1px 3px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.06);
+}
+
+/* ===== HEADER ===== */
+header {
+  border-bottom: 1px solid var(--border);
+  padding: var(--gutter) 0;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.header-inner {
+  max-width: var(--content-w);
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+.brand {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 5vw, 3.5rem);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--fg);
+  text-decoration: none;
+  transition: opacity 0.2s;
+}
+.brand:hover {
+  opacity: 0.7;
+}
+.brand span {
+  font-family: var(--font-body);
+  font-size: 0.35em;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  display: block;
+  margin-top: 0.35em;
+  color: var(--muted);
+}
+.tagline {
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* ===== TAG FILTER ===== */
+.tag-bar {
+  max-width: var(--content-w);
+  margin: 0 auto;
+  padding: 1.25rem var(--gutter);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.tag-bar-label {
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin-right: 0.5rem;
+}
+.tag-pill {
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  padding: 0.4rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--fg);
+  transition: all 0.2s;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.tag-pill:hover {
+  background: var(--fg);
+  color: var(--surface);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow);
+}
+.tag-pill.active {
+  background: var(--accent);
+  color: var(--surface);
+  border-color: var(--accent);
+}
+
+/* ===== GALLERY GRID ===== */
+.gallery-section {
+  max-width: var(--content-w);
+  margin: 0 auto;
+  padding: var(--gutter);
+}
+
+.gallery-grid {
+  column-count: 3;
+  column-gap: 1.5rem;
+}
+@media (max-width: 1024px) { .gallery-grid { column-count: 2; } }
+@media (max-width: 640px) { .gallery-grid { column-count: 1; } }
+
+.gallery-item {
+  break-inside: avoid;
+  margin-bottom: 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  overflow: hidden;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: var(--shadow);
+}
+.gallery-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08), 0 12px 32px rgba(0,0,0,0.12);
+  cursor: pointer;
+}
+.gallery-item img {
+  width: 100%;
+  display: block;
+  transition: opacity 0.2s;
+}
+.gallery-item:hover img {
+  opacity: 0.92;
+}
+.gallery-item .caption {
+  padding: 0.75rem 1rem;
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+/* Loading & Empty States */
+.loading-state,
+.empty-state {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 4rem 2rem;
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.loading-state .spinner {
+  display: inline-block;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-bottom: 0.75rem;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ===== LIGHTBOX ===== */
+.lightbox {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0,0,0,0.95);
+  backdrop-filter: blur(12px);
+  padding: var(--gutter);
+  cursor: zoom-out;
+}
+.lightbox.open { display: flex; align-items: center; justify-content: center; }
+.lightbox img {
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+  cursor: default;
+  border-radius: 8px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.lightbox-close {
+  position: absolute;
+  top: 1.5rem;
+  right: 1.5rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  color: rgba(255,255,255,0.7);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 8px;
+  background: rgba(0,0,0,0.3);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.lightbox-close:hover {
+  color: #fff;
+  background: rgba(0,0,0,0.6);
+  border-color: rgba(255,255,255,0.4);
+}
+.lightbox-info {
+  position: absolute;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  color: rgba(255,255,255,0.6);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  background: rgba(0,0,0,0.5);
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  backdrop-filter: blur(8px);
+}
+
+/* ===== FOOTER ===== */
+footer {
+  border-top: 1px solid var(--border);
+  padding: var(--gutter) 0;
+  margin-top: 2rem;
+  background: var(--surface);
+}
+.footer-inner {
+  max-width: var(--content-w);
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+.footer-inner a {
+  color: var(--accent);
+  transition: opacity 0.2s;
+}
+.footer-inner a:hover {
+  opacity: 0.7;
+}
+
+/* ===== SCROLLBAR ===== */
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="header-inner">
+    <a class="brand" href="/">
+      GoodTry
+      <span>Image Gallery</span>
+    </a>
+    <div class="tagline">Art &amp; Photography</div>
+  </div>
+</header>
+
+<!-- TAG FILTER -->
+<div class="tag-bar" id="tagBar">
+  <span class="tag-bar-label">Filter</span>
+  <button class="tag-pill active" data-tag="">All</button>
+  <!-- tags injected by JS -->
+</div>
+
+<!-- GALLERY -->
+<section class="gallery-section">
+  <div class="gallery-grid" id="galleryGrid">
+    <div class="loading-state">
+      <div class="spinner"></div>
+      <div>Loading images…</div>
+    </div>
+  </div>
+</section>
+
+<!-- LIGHTBOX -->
+<div class="lightbox" id="lightbox">
+  <button class="lightbox-close" id="lbClose">✕</button>
+  <img id="lbImg" src="" alt="">
+  <div class="lightbox-info" id="lbInfo"></div>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <span>© GoodTry Image Gallery</span>
+    <nav>
+      <a href="/admin/">Admin</a>
+    </nav>
+  </div>
+</footer>
+
+<script>
+/* ===== API CONFIG ===== */
+const API_BASE = '/api/public/images';
+const TAG_API  = '/api/public/tags';
+
+/* ===== STATE ===== */
+let currentTag = '';
+let allImages = [];
+let page = 1;
+let isLoading = false;
+let hasMore = true;
+
+/* ===== DOM REFS ===== */
+const grid = document.getElementById('galleryGrid');
+const tagBar = document.getElementById('tagBar');
+const lb = document.getElementById('lightbox');
+const lbImg = document.getElementById('lbImg');
+const lbInfo = document.getElementById('lbInfo');
+
+/* ===== LOAD TAGS ===== */
+async function loadTags() {
+  try {
+    const r = await fetch(TAG_API);
+    const tags = await r.json();
+    const list = Array.isArray(tags) ? tags : (tags?.tags || tags?.data || []);
+    list.forEach(t => {
+      const name = typeof t === 'string' ? t : (t.name || t.tag || '');
+      if (!name) return;
+      const btn = document.createElement('button');
+      btn.className = 'tag-pill';
+      btn.dataset.tag = name;
+      btn.textContent = name;
+      btn.addEventListener('click', () => filterByTag(name));
+      tagBar.appendChild(btn);
+    });
+  } catch (e) {
+    console.warn('Tags load failed:', e);
+  }
+}
+
+/* ===== FILTER ===== */
+function filterByTag(tag) {
+  document.querySelectorAll('.tag-pill').forEach(b => b.classList.remove('active'));
+  document.querySelector(`.tag-pill[data-tag="${tag}"]`)?.classList.add('active');
+  document.querySelector('.tag-pill[data-tag=""]')?.classList.add('active');
+  currentTag = tag || '';
+  page = 1;
+  hasMore = true;
+  loadImages(true);
+}
+
+/* ===== LOAD IMAGES ===== */
+async function loadImages(reset = false) {
+  if (isLoading || !hasMore) return;
+  isLoading = true;
+
+  if (reset) grid.innerHTML = '<div class="loading-state"><div class="spinner"></div><div>Loading images…</div></div>';
+
+  try {
+    const params = new URLSearchParams({ page, limit: 30 });
+    if (currentTag) params.set('tag', currentTag);
+    const r = await fetch(`${API_BASE}?${params}`);
+    const data = await r.json();
+    const images = Array.isArray(data) ? data : (data?.images || data?.data || []);
+    hasMore = images.length === 30;
+    page++;
+
+    if (reset) {
+      allImages = images;
+      grid.innerHTML = '';
+    } else {
+      allImages = allImages.concat(images);
+    }
+
+    if (allImages.length === 0) {
+      grid.innerHTML = '<div class="empty-state">No images found</div>';
+      isLoading = false;
+      return;
+    }
+
+    images.forEach(img => {
+      const url = img.url || img.src || img.path || '';
+      const name = img.name || img.filename || '';
+      const item = document.createElement('div');
+      item.className = 'gallery-item';
+      item.innerHTML = `<img src="${url}" alt="${name}" loading="lazy"><div class="caption">${name}</div>`;
+      item.querySelector('img').addEventListener('click', () => openLightbox(url, name));
+      grid.appendChild(item);
+    });
+
+    /* Intersection observer for infinite scroll */
+    if (!grid._observer) {
+      const sentinel = document.createElement('div');
+      sentinel.style.height = '1px';
+      grid.after(sentinel);
+      grid._observer = new IntersectionObserver(entries => {
+        if (entries[0].isIntersecting) loadImages();
+      }, { rootMargin: '400px' });
+      grid._observer.observe(sentinel);
+    }
+  } catch (e) {
+    grid.innerHTML = `<div class="empty-state">Failed to load images<br><span style="font-size:0.7em;opacity:0.6">${e.message}</span></div>`;
+  }
+  isLoading = false;
+}
+
+/* ===== LIGHTBOX ===== */
+function openLightbox(url, name) {
+  lbImg.src = url;
+  lbImg.alt = name;
+  lbInfo.textContent = name;
+  lb.classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeLightbox() {
+  lb.classList.remove('open');
+  document.body.style.overflow = '';
+}
+lb.addEventListener('click', e => { if (e.target === lb) closeLightbox(); });
+document.getElementById('lbClose').addEventListener('click', closeLightbox);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
+
+/* ===== INIT ===== */
+loadTags();
+loadImages();
+</script>
+</body>
+</html>

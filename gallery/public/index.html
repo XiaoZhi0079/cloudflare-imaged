@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gallery</title>
+    <link rel="stylesheet" href="/assets/main.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="hero">
+        <p class="eyebrow">&#x56FE;&#x7247;&#x753B;&#x5ECA;</p>
+        <h1>&#x6309;&#x6807;&#x7B7E;&#x6D4F;&#x89C8;&#x7CBE;&#x9009;&#x56FE;&#x7247;</h1>
+        <p class="hero-copy">&#x5207;&#x6362;&#x6807;&#x7B7E;&#xFF0C;&#x5FEB;&#x901F;&#x67E5;&#x770B;&#x6574;&#x7406;&#x597D;&#x7684;&#x56FE;&#x7247;&#x5185;&#x5BB9;&#x3002;</p>
+      </header>
+      <nav class="tag-strip" id="tag-strip" aria-label="&#x6807;&#x7B7E;&#x5BFC;&#x822A;"></nav>
+      <main>
+        <section class="gallery-grid" id="gallery-grid" aria-live="polite"></section>
+      </main>
+    </div>
+    <div class="modal hidden" id="image-modal" role="dialog" aria-modal="true">
+      <button class="modal-close" id="modal-close" type="button">&#x00D7;</button>
+      <img id="modal-image" alt="" />
+      <div class="modal-meta" id="modal-meta"></div>
+    </div>
+    <script type="module" src="/assets/gallery.js"></script>
+  </body>
+</html>

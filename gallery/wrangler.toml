@@ -1,0 +1,8 @@
+name = "gallery-mvp"
+compatibility_date = "2026-03-02"
+pages_build_output_dir = "./public"
+
+[[d1_databases]]
+binding = "GALLERY_DB"
+database_name = "gallery-mvp"
+database_id = "replace-with-real-d1-id"

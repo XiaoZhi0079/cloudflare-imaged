@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gallery 图片工作台</title>
+    <link rel="stylesheet" href="/assets/main.css" />
+    <link rel="stylesheet" href="/assets/sidebar-layout.css" />
+  </head>
+  <body class="admin-body" data-admin-page="library">
+    <div class="app-shell admin-shell admin-sidebar-layout">
+      <!-- 左侧标签导航栏 -->
+      <aside class="admin-sidebar" id="admin-sidebar">
+        <div class="admin-sidebar-header">
+          <div>
+            <p class="admin-section-label">筛选</p>
+            <h3>标签</h3>
+          </div>
+        </div>
+        <div id="tag-list" class="admin-tag-nav-list"></div>
+        <div class="admin-sidebar-footer">
+          <button id="tag-manager-open" class="button-secondary button-block" type="button" disabled>
+            管理标签
+          </button>
+        </div>
+      </aside>
+
+      <!-- 右侧主内容区 -->
+      <main class="admin-main-content" id="library-workbench">
+        <!-- 顶部状态和认证 -->
+        <section class="admin-header-section">
+          <div class="admin-header-title">
+            <p class="admin-section-label">Library</p>
+            <h2>图片库</h2>
+          </div>
+          <div id="admin-status" class="status-banner" data-state="info" aria-live="polite">请输入管理密钥后继续。</div>
+        </section>
+
+        <section id="admin-auth" class="panel admin-panel admin-auth-compact">
+          <div class="admin-auth-grid">
+            <label class="field">
+              <span>管理密钥</span>
+              <input id="admin-key" type="password" placeholder="输入密钥" />
+            </label>
+            <button id="admin-connect" class="button-primary" type="button">验证</button>
+          </div>
+        </section>
+
+        <!-- 工具栏 -->
+        <section class="admin-toolbar-compact" aria-label="图片筛选和操作">
+          <div class="admin-toolbar-left">
+            <label class="field admin-search-field">
+              <span>搜索</span>
+              <input id="admin-search" type="search" placeholder="搜索文件名..." disabled />
+            </label>
+            <div class="admin-count-badge">
+              <span id="admin-visible-count">0</span> 张图片
+            </div>
+          </div>
+          <div class="admin-toolbar-right">
+            <button id="admin-upload-open-toolbar" class="button-primary" type="button" disabled>
+              + 上传图片
+            </button>
+          </div>
+        </section>
+
+        <!-- 批量操作栏 -->
+        <div id="admin-bulk-toolbar" class="admin-bulk-toolbar" hidden>
+          <span id="bulk-selected-count">已选择 0 张</span>
+          <div class="inline-actions">
+            <button id="bulk-assign-tags" class="button-secondary" type="button">批量标签</button>
+            <button id="bulk-clear-selection" class="button-ghost" type="button">取消选择</button>
+            <button id="bulk-delete" class="button-danger" type="button">删除</button>
+          </div>
+        </div>
+
+        <!-- 图片网格 -->
+        <section class="admin-library-main" aria-label="图片列表">
+          <div id="image-list" class="admin-image-grid"></div>
+        </section>
+      </main>
+    </div>
+
+    <!-- 标签管理抽屉 -->
+    <section id="admin-tag-drawer" class="admin-tag-drawer" hidden aria-label="标签管理">
+      <div class="admin-drawer-panel">
+        <div class="admin-drawer-header">
+          <div>
+            <p class="admin-section-label">Taxonomy</p>
+            <h2>标签管理</h2>
+          </div>
+          <button id="tag-manager-close" class="button-ghost" type="button">关闭</button>
+        </div>
+        <div class="admin-inline-form admin-tag-manager-form">
+          <label class="field">
+            <span>新标签</span>
+            <input id="new-tag-name" type="text" disabled />
+          </label>
+          <button id="create-tag" class="button-secondary" type="button" disabled>新增</button>
+        </div>
+        <div id="tag-manager-list" class="list-stack admin-list-stack"></div>
+      </div>
+    </section>
+
+    <!-- 上传抽屉 -->
+    <section id="admin-upload-drawer" class="admin-upload-drawer" hidden aria-label="上传图片">
+      <div class="admin-drawer-panel">
+        <div class="admin-drawer-header">
+          <div>
+            <p class="admin-section-label">Upload</p>
+            <h2>上传图片</h2>
+          </div>
+          <button id="admin-upload-close" class="button-ghost" type="button">关闭</button>
+        </div>
+        <div class="upload-grid admin-upload-grid">
+          <label class="field admin-file-field">
+            <span>选择图片</span>
+            <input id="upload-files" type="file" accept="image/*" multiple disabled />
+          </label>
+          <div class="field admin-tag-field">
+            <span>上传时绑定标签</span>
+            <div id="upload-tag-options" class="check-grid"></div>
+          </div>
+        </div>
+        <div id="upload-summary" class="list-item admin-upload-summary">尚未选择图片。</div>
+        <button id="upload-submit" class="button-primary" type="button" disabled>上传并打标签</button>
+      </div>
+    </section>
+
+    <!-- 图片详情抽屉 -->
+    <section id="admin-detail-drawer" class="admin-detail-drawer" hidden aria-label="图片详情">
+      <div class="admin-drawer-panel">
+        <div class="admin-drawer-header">
+          <div>
+            <p class="admin-section-label">Details</p>
+            <h2>图片信息</h2>
+          </div>
+          <button id="detail-close" class="button-ghost" type="button">关闭</button>
+        </div>
+        <div id="detail-preview" class="admin-detail-preview"></div>
+        <label class="field">
+          <span>文件名</span>
+          <input id="detail-file-name" type="text" disabled />
+        </label>
+        <label class="field">
+          <span>目录</span>
+          <input id="detail-directory" type="text" disabled />
+        </label>
+        <div class="field">
+          <span>标签</span>
+          <div id="detail-tag-options" class="check-grid"></div>
+        </div>
+        <div class="admin-drawer-actions">
+          <button id="detail-save" class="button-primary" type="button" disabled>保存</button>
+          <button id="detail-delete" class="button-danger" type="button" disabled>删除</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 对话框 -->
+    <div id="admin-dialog" class="admin-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="admin-dialog-title">
+      <div class="admin-dialog-panel">
+        <div class="admin-dialog-header">
+          <h2 id="admin-dialog-title"></h2>
+          <button id="admin-dialog-close" class="button-ghost" type="button" aria-label="关闭">关闭</button>
+        </div>
+        <div id="admin-dialog-body" class="admin-dialog-body"></div>
+        <div class="admin-dialog-actions">
+          <button id="admin-dialog-cancel" class="button-secondary" type="button">取消</button>
+          <button id="admin-dialog-confirm" class="button-primary" type="button">确认</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 保留原有的 select 元素供 JS 使用 -->
+    <select id="admin-tag-filter" hidden disabled>
+      <option value="">全部标签</option>
+    </select>
+
+    <script type="module" src="/assets/admin.js"></script>
+  </body>
+</html>

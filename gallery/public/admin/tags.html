@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gallery &#x6807;&#x7B7E;&#x7BA1;&#x7406;</title>
+    <link rel="stylesheet" href="/assets/main.css" />
+  </head>
+  <body class="admin-body" data-admin-page="tags">
+    <div class="app-shell admin-shell">
+      <header class="admin-topbar">
+        <div>
+          <p class="admin-kicker">Gallery Admin</p>
+          <h1>&#x6807;&#x7B7E;&#x7BA1;&#x7406;</h1>
+        </div>
+        <div class="admin-topbar-actions">
+          <a href="/" class="admin-gallery-link">&#x67E5;&#x770B;&#x524D;&#x53F0;</a>
+        </div>
+      </header>
+
+      <nav class="admin-page-nav" aria-label="&#x7BA1;&#x7406;&#x529F;&#x80FD;">
+        <a class="admin-page-link" href="/admin/">&#x6982;&#x89C8;</a>
+        <a class="admin-page-link" href="/admin/upload.html">&#x4E0A;&#x4F20;&#x56FE;&#x7247;</a>
+        <a class="admin-page-link is-active" href="/admin/tags.html">&#x6807;&#x7B7E;&#x7BA1;&#x7406;</a>
+        <a class="admin-page-link" href="/admin/images.html">&#x56FE;&#x7247;&#x7BA1;&#x7406;</a>
+      </nav>
+
+      <section class="admin-hero" aria-label="&#x6807;&#x7B7E;&#x6982;&#x89C8;">
+        <div>
+          <p class="admin-section-label">Taxonomy</p>
+          <h2>&#x7BA1;&#x7406;&#x516C;&#x5F00;&#x5C55;&#x793A;&#x4E2D;&#x7684;&#x6807;&#x7B7E;&#x8BCD;&#x8868;&#x548C;&#x6392;&#x5E8F;&#x3002;</h2>
+        </div>
+        <div id="admin-status" class="status-banner" data-state="info" aria-live="polite">&#x8BF7;&#x8F93;&#x5165;&#x7BA1;&#x7406;&#x5BC6;&#x94A5;&#x540E;&#x7EE7;&#x7EED;&#x3002;</div>
+      </section>
+
+      <div class="admin-layout">
+        <section id="admin-auth" class="panel admin-panel admin-auth-strip">
+          <div class="panel-header compact-header">
+            <div>
+              <p class="admin-section-label">Access</p>
+              <h2>&#x8EAB;&#x4EFD;&#x9A8C;&#x8BC1;</h2>
+            </div>
+          </div>
+          <label class="field admin-auth-field">
+            <span>&#x7BA1;&#x7406;&#x5BC6;&#x94A5;</span>
+            <input id="admin-key" type="password" />
+          </label>
+          <button id="admin-connect" class="button-primary" type="button">&#x8FDB;&#x5165;&#x540E;&#x53F0;</button>
+          <div class="admin-note">&#x9A8C;&#x8BC1;&#x540E;&#x53EF;&#x7F16;&#x8F91;&#x6807;&#x7B7E;&#x8BCD;&#x8868;&#x3002;</div>
+        </section>
+
+        <main class="admin-workspace">
+          <section class="panel admin-panel admin-tags-panel admin-page-panel">
+            <div class="panel-header compact-header">
+              <div>
+                <p class="admin-section-label">Taxonomy</p>
+                <h2>&#x6807;&#x7B7E;&#x8BCD;&#x8868;</h2>
+              </div>
+            </div>
+            <div class="admin-inline-form">
+              <label class="field">
+                <span>&#x65B0;&#x6807;&#x7B7E;</span>
+                <input id="new-tag-name" type="text" disabled />
+              </label>
+              <button id="create-tag" class="button-secondary" type="button" disabled>&#x65B0;&#x589E;</button>
+            </div>
+            <div id="tag-list" class="list-stack admin-list-stack"></div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <div id="admin-dialog" class="admin-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="admin-dialog-title">
+      <div class="admin-dialog-panel">
+        <div class="admin-dialog-header">
+          <h2 id="admin-dialog-title"></h2>
+          <button id="admin-dialog-close" class="button-ghost" type="button" aria-label="&#x5173;&#x95ED;">&#x5173;&#x95ED;</button>
+        </div>
+        <div id="admin-dialog-body" class="admin-dialog-body"></div>
+        <div class="admin-dialog-actions">
+          <button id="admin-dialog-cancel" class="button-secondary" type="button">&#x53D6;&#x6D88;</button>
+          <button id="admin-dialog-confirm" class="button-primary" type="button">&#x786E;&#x8BA4;</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/assets/admin.js"></script>
+  </body>
+</html>
