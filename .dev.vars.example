@@ -1,0 +1,8 @@
+GALLERY_ADMIN_KEY=gallery-secret
+GALLERY_PUBLIC_BASE_URL=http://127.0.0.1:8788/file
+GALLERY_UPLOAD_NAME_TYPE=origin
+GALLERY_UPLOAD_FOLDER=gallery
+R2_ACCOUNT_ID=your-account-id
+R2_BUCKET_NAME=gallery
+R2_ACCESS_KEY_ID=your-access-key-id
+R2_SECRET_ACCESS_KEY=your-secret-access-key

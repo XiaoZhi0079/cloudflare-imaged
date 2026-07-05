@@ -70,7 +70,7 @@ If you want to prepare the local database explicitly, you can run:
 npx wrangler d1 execute GALLERY_DB --local --file schema.sql --persist-to ./.wrangler/state
 ```
 
-For local direct uploads, provide real R2 signing credentials in the shell before starting preview.
+For local direct uploads, copy .dev.vars.example to .dev.vars and fill in your real R2 signing credentials before starting preview.
 
 Start local preview:
 
@@ -85,3 +85,4 @@ Local URLs:
 - Image route: `http://127.0.0.1:8788/file/...`
 
 The admin page expects the same `GALLERY_ADMIN_KEY` value that the Functions runtime receives.
+
