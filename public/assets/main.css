@@ -1524,6 +1524,16 @@ body:has(.admin-shell) {
   align-items: start;
 }
 
+.admin-library-footer {
+  display: flex;
+  justify-content: center;
+  margin-top: 16px;
+}
+
+.admin-library-footer .button-secondary[hidden] {
+  display: none;
+}
+
 .admin-image-card {
   position: relative;
   display: grid;
@@ -1772,3 +1782,4 @@ body:has(.admin-shell) {
     max-height: calc(100dvh - 16px);
   }
 }
+

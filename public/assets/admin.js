@@ -41,6 +41,7 @@ const bulkAssignTagsButton = $("#bulk-assign-tags");
 const bulkDeleteButton = $("#bulk-delete");
 const bulkClearSelectionButton = $("#bulk-clear-selection");
 const visibleCount = $("#admin-visible-count");
+const loadMoreImagesButton = $("#admin-load-more");
 const tagManagerPanel = $("#tag-manager-panel");
 const tagManagerToggleButton = $("#tag-manager-toggle");
 const tagManagerList = $("#tag-manager-list");
@@ -69,10 +70,13 @@ let activeImageId = null;
 let searchQuery = "";
 let selectedTagFilters = new Set();
 let activeDialog = null;
+let visibleImageRenderCount = 120;
 const tagManagerPreferenceKey = "gallery-tag-manager-expanded";
 let wantsTagManagerExpanded = sessionStorage.getItem(tagManagerPreferenceKey) === "true";
 const DIRECT_UPLOAD_BATCH_SIZE = 12;
 const MAX_UPLOAD_SUMMARY_ITEMS = 60;
+const INITIAL_ADMIN_IMAGE_RENDER_COUNT = 120;
+const ADMIN_IMAGE_RENDER_INCREMENT = 120;
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -170,6 +174,7 @@ function clearState() {
   activeImageId = null;
   searchQuery = "";
   selectedTagFilters = new Set();
+  resetImageRenderLimit();
   closeImageDetailDrawer();
   updateBulkToolbar();
   updateVisibleCount();
@@ -537,7 +542,7 @@ function setTagsState(nextTags, { rerenderImages = false } = {}) {
   renderTags();
 
   if (rerenderImages && imageList) {
-    renderImages();
+    renderImages({ resetLimit: true });
   }
 }
 
@@ -804,14 +809,14 @@ function bindTagFilterActions() {
       }
 
       renderTagFilterOptions();
-      renderImages();
+      renderImages({ resetLimit: true });
     });
   });
 
   tagFilterList.querySelector("[data-clear-tag-filters]")?.addEventListener("click", () => {
     selectedTagFilters = new Set();
     renderTagFilterOptions();
-    renderImages();
+    renderImages({ resetLimit: true });
   });
 }
 
@@ -1140,10 +1145,29 @@ function syncSelectedImageIds() {
   selectedImageIds = new Set([...selectedImageIds].filter((imageId) => existingIds.has(normalizeImageId(imageId))));
 }
 
-function updateVisibleCount(count = isLibraryPage() ? getFilteredImages().length : images.length) {
-  if (visibleCount) {
-    visibleCount.textContent = String(count);
+function resetImageRenderLimit() {
+  visibleImageRenderCount = INITIAL_ADMIN_IMAGE_RENDER_COUNT;
+}
+
+function updateVisibleCount(visible = isLibraryPage() ? getFilteredImages().length : images.length, total = visible) {
+  if (!visibleCount) {
+    return;
   }
+
+  visibleCount.textContent = visible === total ? String(visible) : `${visible} / ${total}`;
+}
+
+function updateLoadMoreButton(filteredCount, renderedCount) {
+  if (!loadMoreImagesButton) {
+    return;
+  }
+
+  const remainingCount = Math.max(0, filteredCount - renderedCount);
+  loadMoreImagesButton.hidden = remainingCount === 0;
+  loadMoreImagesButton.disabled = !isConnected || remainingCount === 0;
+  loadMoreImagesButton.textContent = remainingCount > 0
+    ? `继续显示 ${Math.min(ADMIN_IMAGE_RENDER_INCREMENT, remainingCount)} 张`
+    : "已全部显示";
 }
 
 function updateBulkToolbar() {
@@ -1296,20 +1320,29 @@ function bindImageActions() {
   });
 }
 
-function renderImages() {
+function renderImages({ resetLimit = false } = {}) {
   if (!imageList) {
     return;
+  }
+
+  if (resetLimit) {
+    resetImageRenderLimit();
   }
 
   syncSelectedImageIds();
   const shouldRenderGrid = isLibraryPage() || imageList.classList.contains("admin-image-grid");
   const currentImages = shouldRenderGrid ? getFilteredImages() : images;
+  const renderedImages = shouldRenderGrid
+    ? currentImages.slice(0, visibleImageRenderCount)
+    : currentImages;
+
   imageList.innerHTML = currentImages.length
     ? shouldRenderGrid
-      ? renderAdminImageGrid(currentImages)
-      : renderAdminImageList(currentImages)
-    : emptyState("\u8fd8\u6ca1\u6709\u5f55\u5165\u56fe\u7247\u3002");
-  updateVisibleCount(currentImages.length);
+      ? renderAdminImageGrid(renderedImages)
+      : renderAdminImageList(renderedImages)
+    : emptyState("还没有录入图片。");
+  updateVisibleCount(renderedImages.length, currentImages.length);
+  updateLoadMoreButton(currentImages.length, renderedImages.length);
   updateBulkToolbar();
   bindImageActions();
 }
@@ -1331,7 +1364,7 @@ async function loadImages() {
 
   images = Array.isArray(payload.images) ? payload.images : [];
   syncSelectedImageIds();
-  renderImages();
+  renderImages({ resetLimit: true });
 }
 
 async function refreshPageData() {
@@ -1448,8 +1481,18 @@ function initLibraryPage() {
 
   searchInput?.addEventListener("input", () => {
     searchQuery = searchInput.value.trim().toLowerCase();
+    renderImages({ resetLimit: true });
+  });
+
+  loadMoreImagesButton?.addEventListener("click", () => {
+    if (!isConnected) {
+      return;
+    }
+
+    visibleImageRenderCount += ADMIN_IMAGE_RENDER_INCREMENT;
     renderImages();
   });
+
   bulkAssignTagsButton?.addEventListener("click", () => {
     runButtonAction(bulkAssignTagsButton, assignTagsToSelectedImages).catch(() => {});
   });

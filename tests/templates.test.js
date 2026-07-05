@@ -76,6 +76,7 @@ test("admin index is an image library workbench", () => {
   assert.match(html, /可多选，全部匹配/);
   assert.match(html, /id="admin-bulk-toolbar"/);
   assert.match(html, /id="image-list"[^>]*admin-image-grid/);
+  assert.match(html, /id="admin-load-more"/);
   assert.match(html, /id="tag-workbench"[\s\S]*id="tag-manager-panel"[\s\S]*id="image-list"/);
   assert.match(html, /id="admin-upload-drawer"/);
   assert.match(html, /id="admin-detail-drawer"/);
@@ -184,6 +185,10 @@ test("admin script uses in-page dialogs instead of browser prompts", () => {
   assert.match(js, /sessionStorage\.setItem\("gallery-tag-manager-expanded"/);
   assert.match(js, /const tagFilterList = \$\("#admin-tag-filter-list"\);/);
   assert.match(js, /let selectedTagFilters = new Set\(\);/);
+  assert.match(js, /const loadMoreImagesButton = \$\("#admin-load-more"\);/);
+  assert.match(js, /const INITIAL_ADMIN_IMAGE_RENDER_COUNT = 120/);
+  assert.match(js, /function updateLoadMoreButton\(/);
+  assert.match(js, /loadMoreImagesButton\?\.addEventListener\("click"/);
   assert.match(js, /function bindTagFilterActions/);
   assert.doesNotMatch(js, /function bindTagRailActions/);
   assert.match(js, /function initUploadPage/);
@@ -297,3 +302,4 @@ test("runtime templates stay aligned with shared templates", () => {
 
   assert.equal(runtime, shared);
 });
+
