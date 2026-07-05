@@ -72,6 +72,7 @@ let activeDialog = null;
 const tagManagerPreferenceKey = "gallery-tag-manager-expanded";
 let wantsTagManagerExpanded = sessionStorage.getItem(tagManagerPreferenceKey) === "true";
 const DIRECT_UPLOAD_BATCH_SIZE = 12;
+const MAX_UPLOAD_SUMMARY_ITEMS = 60;
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -622,20 +623,26 @@ function renderTags() {
   }
 }
 
+function createEmptyFilesMeta(files) {
+  return files.map(() => ({ width: null, height: null }));
+}
+
 function renderUploadSummary(files = Array.from(uploadFilesInput?.files ?? []), filesMeta = selectedFilesMeta) {
   if (!uploadSummary) {
     return;
   }
 
   if (!files.length) {
-    uploadSummary.innerHTML = "\u5c1a\u672a\u9009\u62e9\u56fe\u7247\u3002";
+    uploadSummary.innerHTML = "尚未选择图片。";
     return;
   }
 
-  uploadSummary.innerHTML = `<div class="upload-file-list">${files
+  const visibleFiles = files.slice(0, MAX_UPLOAD_SUMMARY_ITEMS);
+  const remainingCount = Math.max(0, files.length - visibleFiles.length);
+  const summaryRows = visibleFiles
     .map((file, index) => {
       const meta = filesMeta[index] ?? {};
-      const dimensionText = meta.width && meta.height ? `${meta.width} x ${meta.height}` : "\u5c3a\u5bf8\u5f85\u8bfb\u53d6";
+      const dimensionText = meta.width && meta.height ? `${meta.width} x ${meta.height}` : "尺寸稍后写入";
       return `
         <div class="upload-file-row">
           <strong>${escapeHtml(file.name)}</strong>
@@ -644,36 +651,16 @@ function renderUploadSummary(files = Array.from(uploadFilesInput?.files ?? []), 
         </div>
       `;
     })
-    .join("")}</div>`;
+    .join("");
+  const remainingHtml = remainingCount > 0
+    ? `<div class="upload-file-row upload-file-row-more">还有 ${remainingCount} 张图片未展开显示</div>`
+    : "";
+
+  uploadSummary.innerHTML = `<div class="upload-file-list">${summaryRows}${remainingHtml}</div>`;
 }
 
 function getSelectedUploadTagIds() {
   return [...selectedUploadTagIds];
-}
-
-async function readImageMeta(file) {
-  if (!String(file.type ?? "").startsWith("image/")) {
-    return { width: null, height: null };
-  }
-
-  const objectUrl = URL.createObjectURL(file);
-
-  try {
-    const dimensions = await new Promise((resolve, reject) => {
-      const image = new Image();
-      image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
-      image.onerror = () => reject(new Error(`\u65e0\u6cd5\u8bfb\u53d6\u56fe\u7247\u5c3a\u5bf8\uff1a${file.name}`));
-      image.src = objectUrl;
-    });
-
-    return dimensions;
-  } finally {
-    URL.revokeObjectURL(objectUrl);
-  }
-}
-
-async function collectSelectedFilesMeta(files) {
-  return await Promise.all(files.map((file) => readImageMeta(file)));
 }
 
 async function handleFileSelection() {
@@ -688,10 +675,9 @@ async function handleFileSelection() {
     return;
   }
 
-  setStatus(`\u6b63\u5728\u8bfb\u53d6 ${files.length} \u5f20\u56fe\u7247\u7684\u4fe1\u606f...`, "info");
-  selectedFilesMeta = await collectSelectedFilesMeta(files);
+  selectedFilesMeta = createEmptyFilesMeta(files);
   renderUploadSummary(files, selectedFilesMeta);
-  setStatus(`\u5df2\u9009\u62e9 ${files.length} \u5f20\u56fe\u7247\u3002`, "info");
+  setStatus(`已选择 ${files.length} 张图片。`, "info");
 }
 
 async function runTagAction(tagId, action) {
@@ -1627,6 +1613,4 @@ function boot() {
 }
 
 boot();
-
-
 
