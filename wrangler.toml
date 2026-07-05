@@ -1,0 +1,13 @@
+name = "gallery-mvp"
+compatibility_date = "2026-03-02"
+pages_build_output_dir = "./public"
+
+[[d1_databases]]
+binding = "GALLERY_DB"
+database_name = "gallery"
+database_id = "0c0700b3-6f89-4b06-bf5d-91902a0155d5"
+
+[[r2_buckets]]
+binding = "GALLERY_BUCKET"
+bucket_name = "gallery"
+preview_bucket_name = "gallery"

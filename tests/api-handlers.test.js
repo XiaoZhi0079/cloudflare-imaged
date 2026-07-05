@@ -1,0 +1,529 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
+
+import { createGalleryRepository } from "../src/server/gallery-repository.js";
+import { onRequest as publicTagsHandler } from "../functions/api/public/tags.js";
+import { onRequest as publicImagesHandler } from "../functions/api/public/images.js";
+import { onRequest as adminTagsHandler } from "../functions/api/admin/tags.js";
+import { onRequest as adminImagesHandler } from "../functions/api/admin/images.js";
+import { onRequest as adminImportHandler } from "../functions/api/admin/images/import.js";
+import { onRequest as adminUploadHandler } from "../functions/api/admin/images/upload/index.js";
+import { onRequest as adminTagAssignmentsHandler } from "../functions/api/admin/images/tag-assignments.js";
+
+function createTestEnv(options = {}) {
+  const database = new DatabaseSync(":memory:");
+  if (options.withSchema !== false) {
+    const schema = readFileSync(new URL("../schema.sql", import.meta.url), "utf8");
+    database.exec(schema);
+  }
+
+  return {
+    GALLERY_DB: database,
+    GALLERY_ADMIN_KEY: "gallery-secret",
+    GALLERY_BUCKET: createMockBucket(),
+    GALLERY_PUBLIC_BASE_URL: "https://gallery.example.com/file",
+  };
+}
+
+test("public tags handler bootstraps the schema when the database is empty", async () => {
+  const env = createTestEnv({ withSchema: false });
+
+  const response = await publicTagsHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/public/tags"),
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    tags: [],
+  });
+});
+
+test("public tags handler returns visible ordered tags only", async () => {
+  const env = createTestEnv();
+  const repository = createGalleryRepository(env.GALLERY_DB);
+
+  await repository.createTag({ name: "欧美美女", sortOrder: 3, isVisible: true });
+  await repository.createTag({ name: "校园风情", sortOrder: 1, isVisible: true });
+  await repository.createTag({ name: "隐藏分类", sortOrder: 0, isVisible: false });
+
+  const response = await publicTagsHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/public/tags"),
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    tags: [
+      { id: 2, name: "校园风情", slug: "校园风情", sortOrder: 1 },
+      { id: 1, name: "欧美美女", slug: "欧美美女", sortOrder: 2 },
+    ],
+  });
+});
+
+test("public images handler returns images for the requested tag", async () => {
+  const env = createTestEnv();
+  const repository = createGalleryRepository(env.GALLERY_DB);
+  const campus = await repository.createTag({ name: "校园风情", sortOrder: 1, isVisible: true });
+  const japan = await repository.createTag({ name: "日本美女", sortOrder: 2, isVisible: true });
+
+  const campusImage = await repository.upsertImage({
+    storageKey: "girls/campus-01.webp",
+    fileName: "campus-01.webp",
+    fileUrl: "https://gallery.example.com/file/girls/campus-01.webp",
+    width: 900,
+    height: 1350,
+    syncStatus: "ok",
+  });
+  const japanImage = await repository.upsertImage({
+    storageKey: "girls/japan-01.webp",
+    fileName: "japan-01.webp",
+    fileUrl: "https://gallery.example.com/file/girls/japan-01.webp",
+    width: 720,
+    height: 1280,
+    syncStatus: "ok",
+  });
+
+  await repository.replaceImageTags(campusImage.id, [campus.id]);
+  await repository.replaceImageTags(japanImage.id, [japan.id]);
+
+  const response = await publicImagesHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/public/images?tag=%E6%A0%A1%E5%9B%AD%E9%A3%8E%E6%83%85"),
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    images: [
+      {
+        id: campusImage.id,
+        fileName: "campus-01.webp",
+        fileUrl: "https://gallery.example.com/file/girls/campus-01.webp",
+        width: 900,
+        height: 1350,
+        tags: ["校园风情"],
+      },
+    ],
+  });
+});
+
+test("admin tags handler creates tags when the admin key is valid", async () => {
+  const env = createTestEnv();
+
+  const response = await adminTagsHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/tags", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-gallery-admin-key": "gallery-secret",
+      },
+      body: JSON.stringify({
+        name: "田园景色",
+        sortOrder: 1,
+        isVisible: true,
+      }),
+    }),
+  });
+
+  assert.equal(response.status, 201);
+  assert.deepEqual(await response.json(), {
+    tag: {
+      id: 1,
+      name: "田园景色",
+      slug: "田园景色",
+      sortOrder: 1,
+      isVisible: true,
+    },
+  });
+});
+
+test("admin tags handler rejects blank tag names", async () => {
+  const env = createTestEnv();
+
+  const response = await adminTagsHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/tags", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-gallery-admin-key": "gallery-secret",
+      },
+      body: JSON.stringify({
+        name: "   ",
+      }),
+    }),
+  });
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), {
+    error: "标签名称不能为空。",
+  });
+});
+
+test("admin tags handler rejects duplicate tags with a conflict response", async () => {
+  const env = createTestEnv();
+  const repository = createGalleryRepository(env.GALLERY_DB);
+  await repository.createTag({ name: "校园风情", sortOrder: 1, isVisible: true });
+
+  const response = await adminTagsHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/tags", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-gallery-admin-key": "gallery-secret",
+      },
+      body: JSON.stringify({
+        name: "校园风情",
+        sortOrder: 2,
+        isVisible: true,
+      }),
+    }),
+  });
+
+  assert.equal(response.status, 409);
+  assert.deepEqual(await response.json(), {
+    error: "标签已存在。",
+  });
+});
+
+test("admin tags handler reorders tags into contiguous slots when sort order is updated", async () => {
+  const env = createTestEnv();
+  const repository = createGalleryRepository(env.GALLERY_DB);
+  const first = await repository.createTag({ name: "tag-alpha", sortOrder: 1, isVisible: true });
+  const second = await repository.createTag({ name: "tag-bravo", sortOrder: 2, isVisible: true });
+  const third = await repository.createTag({ name: "tag-charlie", sortOrder: 3, isVisible: true });
+
+  const response = await adminTagsHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/tags", {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json",
+        "x-gallery-admin-key": "gallery-secret",
+      },
+      body: JSON.stringify({
+        id: third.id,
+        sortOrder: 2,
+      }),
+    }),
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    tag: {
+      id: third.id,
+      name: "tag-charlie",
+      slug: "tag-charlie",
+      sortOrder: 2,
+      isVisible: true,
+    },
+  });
+
+  const listResponse = await adminTagsHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/tags", {
+      headers: {
+        "x-gallery-admin-key": "gallery-secret",
+      },
+    }),
+  });
+
+  assert.deepEqual((await listResponse.json()).tags, [
+    { id: first.id, name: "tag-alpha", slug: "tag-alpha", sortOrder: 1, isVisible: true },
+    { id: third.id, name: "tag-charlie", slug: "tag-charlie", sortOrder: 2, isVisible: true },
+    { id: second.id, name: "tag-bravo", slug: "tag-bravo", sortOrder: 3, isVisible: true },
+  ]);
+});
+
+test("admin tags handler updates tag fields when the admin key is valid", async () => {
+  const env = createTestEnv();
+  const repository = createGalleryRepository(env.GALLERY_DB);
+  const tag = await repository.createTag({ name: "日本美女", sortOrder: 2, isVisible: true });
+
+  const response = await adminTagsHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/tags", {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json",
+        "x-gallery-admin-key": "gallery-secret",
+      },
+      body: JSON.stringify({
+        id: tag.id,
+        name: "日系写真",
+        sortOrder: 1,
+        isVisible: false,
+      }),
+    }),
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    tag: {
+      id: tag.id,
+      name: "日系写真",
+      slug: "日系写真",
+      sortOrder: 1,
+      isVisible: false,
+    },
+  });
+});
+
+test("admin tags handler deletes a tag when the admin key is valid", async () => {
+  const env = createTestEnv();
+  const repository = createGalleryRepository(env.GALLERY_DB);
+  const tag = await repository.createTag({ name: "校园风情", sortOrder: 1, isVisible: true });
+
+  const response = await adminTagsHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/tags", {
+      method: "DELETE",
+      headers: {
+        "content-type": "application/json",
+        "x-gallery-admin-key": "gallery-secret",
+      },
+      body: JSON.stringify({ id: tag.id }),
+    }),
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    deletedTagId: tag.id,
+  });
+
+  const listResponse = await adminTagsHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/tags", {
+      headers: {
+        "x-gallery-admin-key": "gallery-secret",
+      },
+    }),
+  });
+
+  assert.deepEqual((await listResponse.json()).tags, []);
+});
+
+test("admin images handler returns an empty list on a fresh database", async () => {
+  const env = createTestEnv({ withSchema: false });
+
+  const response = await adminImagesHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/images", {
+      headers: {
+        "x-gallery-admin-key": "gallery-secret",
+      },
+    }),
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    images: [],
+  });
+});
+
+
+test("admin tag assignment handler rejects missing tag ids", async () => {
+  const env = createTestEnv();
+  const repository = createGalleryRepository(env.GALLERY_DB);
+  const image = await repository.upsertImage({
+    storageKey: "girls/japan-01.webp",
+    fileName: "japan-01.webp",
+    fileUrl: "https://gallery.example.com/file/girls/japan-01.webp",
+    width: 720,
+    height: 1280,
+    syncStatus: "ok",
+  });
+
+  const response = await adminTagAssignmentsHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/images/tag-assignments", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-gallery-admin-key": "gallery-secret",
+      },
+      body: JSON.stringify({
+        imageId: image.id,
+        tagIds: [999],
+      }),
+    }),
+  });
+
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), {
+    error: "?????????????????",
+  });
+});
+
+test("admin tag assignment handler replaces image tag bindings", async () => {
+  const env = createTestEnv();
+  const repository = createGalleryRepository(env.GALLERY_DB);
+  const campus = await repository.createTag({ name: "校园风情", sortOrder: 1, isVisible: true });
+  const japan = await repository.createTag({ name: "日本美女", sortOrder: 2, isVisible: true });
+  const image = await repository.upsertImage({
+    storageKey: "girls/japan-01.webp",
+    fileName: "japan-01.webp",
+    fileUrl: "https://gallery.example.com/file/girls/japan-01.webp",
+    width: 720,
+    height: 1280,
+    syncStatus: "ok",
+  });
+
+  const response = await adminTagAssignmentsHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/images/tag-assignments", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-gallery-admin-key": "gallery-secret",
+      },
+      body: JSON.stringify({
+        imageId: image.id,
+        tagIds: [campus.id, japan.id],
+      }),
+    }),
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    imageId: image.id,
+    tagIds: [campus.id, japan.id],
+  });
+});
+
+
+
+function createMockBucket() {
+  const objects = new Map();
+
+  return {
+    objects,
+    async put(key, value, options = {}) {
+      const bytes = value instanceof ArrayBuffer
+        ? new Uint8Array(value)
+        : value instanceof Uint8Array
+          ? value
+          : new Uint8Array(await value.arrayBuffer());
+      objects.set(key, {
+        body: new Uint8Array(bytes),
+        httpMetadata: { ...(options.httpMetadata ?? {}) },
+        customMetadata: { ...(options.customMetadata ?? {}) },
+      });
+
+      return { key };
+    },
+    async get(key) {
+      const entry = objects.get(key);
+      if (!entry) {
+        return null;
+      }
+
+      return {
+        body: new Uint8Array(entry.body),
+        httpMetadata: { ...(entry.httpMetadata ?? {}) },
+        customMetadata: { ...(entry.customMetadata ?? {}) },
+      };
+    },
+    async delete(key) {
+      objects.delete(key);
+    },
+  };
+}
+
+test("admin upload handler returns a gone response after switching to direct R2 uploads", async () => {
+  const response = await adminUploadHandler({
+    env: createTestEnv(),
+    request: new Request("https://gallery.example.com/api/admin/images/upload", {
+      method: "POST",
+      headers: {
+        "x-gallery-admin-key": "gallery-secret",
+      },
+      body: new FormData(),
+    }),
+  });
+
+  assert.equal(response.status, 410);
+  assert.deepEqual(await response.json(), {
+    error: "Gallery 已改为直传 R2，请使用 /api/admin/images/upload/init 和 /api/admin/images/upload/complete。",
+  });
+});
+
+test("admin images handler renames and moves gallery files inside the gallery bucket", async () => {
+  const env = {
+    ...createTestEnv(),
+    GALLERY_BUCKET: createMockBucket(),
+    GALLERY_PUBLIC_BASE_URL: "https://gallery.example.com/file",
+  };
+  await env.GALLERY_BUCKET.put("gallery/campus-01.webp", new Uint8Array([1, 2, 3]), {
+    httpMetadata: { contentType: "image/webp" },
+  });
+  const repository = createGalleryRepository(env.GALLERY_DB);
+  const image = await repository.upsertImage({
+    storageKey: "gallery/campus-01.webp",
+    fileName: "campus-01.webp",
+    fileUrl: "https://gallery.example.com/file/gallery/campus-01.webp",
+    width: 900,
+    height: 1350,
+    syncStatus: "ok",
+  });
+
+  const renameResponse = await adminImagesHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/images", {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json",
+        "x-gallery-admin-key": "gallery-secret",
+      },
+      body: JSON.stringify({ imageId: image.id, fileName: "campus-02.webp" }),
+    }),
+  });
+
+  assert.equal(renameResponse.status, 200);
+  assert.equal(env.GALLERY_BUCKET.objects.has("gallery/campus-01.webp"), false);
+  assert.ok(env.GALLERY_BUCKET.objects.has("gallery/campus-02.webp"));
+
+  const moveResponse = await adminImagesHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/images", {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json",
+        "x-gallery-admin-key": "gallery-secret",
+      },
+      body: JSON.stringify({ imageId: image.id, directory: "archive" }),
+    }),
+  });
+
+  assert.equal(moveResponse.status, 200);
+  assert.equal(env.GALLERY_BUCKET.objects.has("gallery/campus-02.webp"), false);
+  assert.ok(env.GALLERY_BUCKET.objects.has("archive/campus-02.webp"));
+});
+
+test("admin images import handler is no longer available after gallery split", async () => {
+  const env = createTestEnv();
+
+  const response = await adminImportHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/images/import", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-gallery-admin-key": "gallery-secret",
+      },
+      body: JSON.stringify({ recursive: true }),
+    }),
+  });
+
+  assert.equal(response.status, 410);
+  assert.deepEqual(await response.json(), {
+    error: "Image import has been removed from Gallery.",
+  });
+});
+
+
+
