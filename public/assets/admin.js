@@ -1233,16 +1233,14 @@ async function assignTagsToSelectedImages() {
     return;
   }
 
-  for (const imageId of imageIds) {
-    await fetchJson("/api/admin/images/tag-assignments", {
-      method: "POST",
-      body: JSON.stringify({ imageId: Number(imageId), tagIds }),
-    });
-  }
+  await fetchJson("/api/admin/images/tag-assignments/bulk", {
+    method: "POST",
+    body: JSON.stringify({ imageIds: imageIds.map((imageId) => Number(imageId)), tagIds }),
+  });
 
   selectedImageIds = new Set();
   await loadImages();
-  setStatus(`\u5df2\u66f4\u65b0 ${imageIds.length} \u5f20\u56fe\u7247\u7684\u6807\u7b7e\u3002`, "success");
+  setStatus(`已更新 ${imageIds.length} 张图片的标签。`, "success");
 }
 
 async function deleteSelectedImages() {
@@ -1254,27 +1252,26 @@ async function deleteSelectedImages() {
   }
 
   const confirmed = await openConfirmDialog({
-    title: "\u5220\u9664\u6240\u9009\u56fe\u7247",
-    message: `\u5220\u9664 ${imageIds.length} \u5f20\u56fe\u7247\uff1f\u6b64\u64cd\u4f5c\u4f1a\u540c\u65f6\u5220\u9664\u5e95\u5c42\u6587\u4ef6\u3002`,
-    confirmLabel: "\u5220\u9664",
+    title: "删除所选图片",
+    message: `删除 ${imageIds.length} 张图片？此操作会同时删除底层文件。`,
+    confirmLabel: "删除",
     danger: true,
   });
   if (!confirmed) {
     return;
   }
 
-  for (const imageId of imageIds) {
-    await fetchJson("/api/admin/images", {
-      method: "DELETE",
-      body: JSON.stringify({ imageId: Number(imageId) }),
-    });
-  }
+  await fetchJson("/api/admin/images/bulk-delete", {
+    method: "POST",
+    body: JSON.stringify({ imageIds: imageIds.map((imageId) => Number(imageId)) }),
+  });
 
   selectedImageIds = new Set();
   closeImageDetailDrawer();
   await loadImages();
-  setStatus(`\u5df2\u5220\u9664 ${imageIds.length} \u5f20\u56fe\u7247\u3002`, "success");
+  setStatus(`已删除 ${imageIds.length} 张图片。`, "success");
 }
+
 function bindImageActions() {
   if (!imageList) {
     return;
@@ -1656,4 +1653,5 @@ function boot() {
 }
 
 boot();
+
 

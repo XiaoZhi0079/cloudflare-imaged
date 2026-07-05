@@ -11,6 +11,8 @@ import { onRequest as adminImagesHandler } from "../functions/api/admin/images.j
 import { onRequest as adminImportHandler } from "../functions/api/admin/images/import.js";
 import { onRequest as adminUploadHandler } from "../functions/api/admin/images/upload/index.js";
 import { onRequest as adminTagAssignmentsHandler } from "../functions/api/admin/images/tag-assignments.js";
+import { onRequest as adminBulkTagAssignmentsHandler } from "../functions/api/admin/images/tag-assignments/bulk.js";
+import { onRequest as adminBulkDeleteHandler } from "../functions/api/admin/images/bulk-delete.js";
 
 function createTestEnv(options = {}) {
   const database = new DatabaseSync(":memory:");
@@ -355,7 +357,7 @@ test("admin tag assignment handler rejects missing tag ids", async () => {
 
   assert.equal(response.status, 400);
   assert.deepEqual(await response.json(), {
-    error: "?????????????????",
+    error: "存在无效标签，无法完成设置。",
   });
 });
 
@@ -396,6 +398,112 @@ test("admin tag assignment handler replaces image tag bindings", async () => {
 });
 
 
+
+
+test("admin bulk tag assignment handler replaces tags for multiple images", async () => {
+  const env = createTestEnv();
+  const repository = createGalleryRepository(env.GALLERY_DB);
+  const campus = await repository.createTag({ name: "校园风情", sortOrder: 1, isVisible: true });
+  const japan = await repository.createTag({ name: "日本美女", sortOrder: 2, isVisible: true });
+  const imageA = await repository.upsertImage({
+    storageKey: "girls/a.webp",
+    fileName: "a.webp",
+    fileUrl: "https://gallery.example.com/file/girls/a.webp",
+    width: 720,
+    height: 1280,
+    syncStatus: "ok",
+  });
+  const imageB = await repository.upsertImage({
+    storageKey: "girls/b.webp",
+    fileName: "b.webp",
+    fileUrl: "https://gallery.example.com/file/girls/b.webp",
+    width: 720,
+    height: 1280,
+    syncStatus: "ok",
+  });
+
+  const response = await adminBulkTagAssignmentsHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/images/tag-assignments/bulk", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-gallery-admin-key": "gallery-secret",
+      },
+      body: JSON.stringify({
+        imageIds: [imageA.id, imageB.id],
+        tagIds: [campus.id, japan.id],
+      }),
+    }),
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    updatedCount: 2,
+    imageIds: [imageA.id, imageB.id],
+    tagIds: [campus.id, japan.id],
+  });
+
+  const images = await repository.listImages();
+  assert.deepEqual(images.map((image) => image.tags), [
+    ["校园风情", "日本美女"],
+    ["校园风情", "日本美女"],
+  ]);
+});
+
+test("admin bulk delete handler removes multiple images and bucket objects", async () => {
+  const env = {
+    ...createTestEnv(),
+    GALLERY_BUCKET: createMockBucket(),
+    GALLERY_PUBLIC_BASE_URL: "https://gallery.example.com/file",
+  };
+  await env.GALLERY_BUCKET.put("gallery/a.webp", new Uint8Array([1, 2, 3]), {
+    httpMetadata: { contentType: "image/webp" },
+  });
+  await env.GALLERY_BUCKET.put("gallery/b.webp", new Uint8Array([4, 5, 6]), {
+    httpMetadata: { contentType: "image/webp" },
+  });
+  const repository = createGalleryRepository(env.GALLERY_DB);
+  const imageA = await repository.upsertImage({
+    storageKey: "gallery/a.webp",
+    fileName: "a.webp",
+    fileUrl: "https://gallery.example.com/file/gallery/a.webp",
+    width: 720,
+    height: 1280,
+    syncStatus: "ok",
+  });
+  const imageB = await repository.upsertImage({
+    storageKey: "gallery/b.webp",
+    fileName: "b.webp",
+    fileUrl: "https://gallery.example.com/file/gallery/b.webp",
+    width: 720,
+    height: 1280,
+    syncStatus: "ok",
+  });
+
+  const response = await adminBulkDeleteHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/images/bulk-delete", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-gallery-admin-key": "gallery-secret",
+      },
+      body: JSON.stringify({
+        imageIds: [imageA.id, imageB.id],
+      }),
+    }),
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    deletedCount: 2,
+    imageIds: [imageA.id, imageB.id],
+  });
+  assert.equal(env.GALLERY_BUCKET.objects.has("gallery/a.webp"), false);
+  assert.equal(env.GALLERY_BUCKET.objects.has("gallery/b.webp"), false);
+  assert.deepEqual(await repository.listImages(), []);
+});
 
 function createMockBucket() {
   const objects = new Map();
@@ -524,6 +632,8 @@ test("admin images import handler is no longer available after gallery split", a
     error: "Image import has been removed from Gallery.",
   });
 });
+
+
 
 
 

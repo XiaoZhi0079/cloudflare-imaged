@@ -26,7 +26,7 @@ export async function onRequest({ env, request }) {
   const missingTagIds = tagIds.filter((tagId) => !existingTagIds.has(tagId));
 
   if (missingTagIds.length > 0) {
-    return jsonResponse({ error: "?????????????????" }, 400);
+    return jsonResponse({ error: "存在无效标签，无法完成设置。" }, 400);
   }
 
   await repository.replaceImageTags(body.imageId, tagIds);
