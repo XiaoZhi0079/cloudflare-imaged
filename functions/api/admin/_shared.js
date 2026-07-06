@@ -51,6 +51,15 @@ export function toApiTag(tag) {
   };
 }
 
+export function toApiCategory(category) {
+  return {
+    id: category.id,
+    name: category.name,
+    directorySlug: category.directory_slug ?? category.directorySlug,
+    sortOrder: Number(category.sort_order ?? category.sortOrder ?? 0),
+  };
+}
+
 export function toApiImage(image) {
   return {
     id: image.id,
@@ -59,6 +68,7 @@ export function toApiImage(image) {
     width: image.width,
     height: image.height,
     tags: image.tags ?? [],
+    ...(image.category ? { category: image.category } : {}),
   };
 }
 

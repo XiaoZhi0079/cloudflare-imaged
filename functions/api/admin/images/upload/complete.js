@@ -49,6 +49,19 @@ export async function onRequest({ env, request }) {
     return jsonResponse({ error: "存在无效标签，无法完成上传。" }, 400);
   }
 
+  let category = null;
+  const categoryId = Number(payload?.categoryId);
+  if (Number.isInteger(categoryId) && categoryId > 0) {
+    category = await repository.getCategoryById(categoryId);
+    if (!category) {
+      return jsonResponse({ error: "所选主分类无效。" }, 400);
+    }
+  }
+
+  if (!category && !String(env.GALLERY_UPLOAD_FOLDER ?? "").trim()) {
+    return jsonResponse({ error: "请选择一个主分类。" }, 400);
+  }
+
   const uploadedImageIds = [];
   for (const file of files) {
     const object = typeof env.GALLERY_BUCKET?.head === "function"
@@ -66,6 +79,7 @@ export async function onRequest({ env, request }) {
       width: file.width,
       height: file.height,
       syncStatus: "ok",
+      categoryId: category?.id ?? null,
     });
     await repository.replaceImageTags(image.id, tagIds);
     uploadedImageIds.push(image.id);

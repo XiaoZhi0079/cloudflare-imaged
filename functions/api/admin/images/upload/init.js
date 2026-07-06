@@ -26,6 +26,25 @@ function normalizeFileDrafts(value) {
     .filter((item) => item.name);
 }
 
+async function resolveSelectedCategory(repository, env, payload) {
+  const categoryId = Number(payload?.categoryId);
+  if (Number.isInteger(categoryId) && categoryId > 0) {
+    const category = await repository.getCategoryById(categoryId);
+    if (!category) {
+      return { error: "所选主分类无效。" };
+    }
+
+    return { category, uploadFolder: category.directory_slug };
+  }
+
+  const uploadFolder = String(env.GALLERY_UPLOAD_FOLDER ?? "").trim().replace(/^\/+|\/+$/g, "");
+  if (uploadFolder) {
+    return { category: null, uploadFolder };
+  }
+
+  return { error: "请选择一个主分类。" };
+}
+
 export async function onRequest({ env, request }) {
   const authFailure = requireAdminKey(request, env);
   if (authFailure) {
@@ -67,10 +86,15 @@ export async function onRequest({ env, request }) {
     return jsonResponse({ error: "存在无效标签，无法完成上传。" }, 400);
   }
 
+  const selectedCategory = await resolveSelectedCategory(repository, env, payload);
+  if (selectedCategory.error) {
+    return jsonResponse({ error: selectedCategory.error }, 400);
+  }
+
   const uploads = [];
   for (const file of files) {
     const storedFileName = createStoredFileName({ name: file.name }, uploadPolicy.uploadNameType);
-    const storageKey = buildStorageKey(uploadPolicy.uploadFolder, storedFileName);
+    const storageKey = buildStorageKey(selectedCategory.uploadFolder, storedFileName);
     const imageRecord = toImageRecord(storageKey, env.GALLERY_PUBLIC_BASE_URL, {
       width: file.width,
       height: file.height,
@@ -84,6 +108,16 @@ export async function onRequest({ env, request }) {
 
     uploads.push({
       ...imageRecord,
+      ...(selectedCategory.category
+        ? {
+            category: {
+              id: selectedCategory.category.id,
+              name: selectedCategory.category.name,
+              directorySlug: selectedCategory.category.directory_slug,
+              sortOrder: Number(selectedCategory.category.sort_order ?? 0),
+            },
+          }
+        : {}),
       contentType,
       method: "PUT",
       headers: {

@@ -1,5 +1,11 @@
 import { normalizeTagName, slugifyTagName } from "../shared/tag-utils.js";
 
+const DEFAULT_CATEGORIES = [
+  { name: "性感美人", directorySlug: "sexy-beauty", sortOrder: 1 },
+  { name: "气质美人", directorySlug: "elegant-beauty", sortOrder: 2 },
+  { name: "风景", directorySlug: "scenery", sortOrder: 3 },
+];
+
 const SCHEMA_STATEMENTS = [
   `
     CREATE TABLE IF NOT EXISTS tags (
@@ -8,6 +14,16 @@ const SCHEMA_STATEMENTS = [
       slug TEXT NOT NULL UNIQUE,
       sort_order INTEGER NOT NULL DEFAULT 0,
       is_visible INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `,
+  `
+    CREATE TABLE IF NOT EXISTS categories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      directory_slug TEXT NOT NULL UNIQUE,
+      sort_order INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
@@ -23,7 +39,9 @@ const SCHEMA_STATEMENTS = [
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       sync_status TEXT NOT NULL DEFAULT 'ok',
-      note TEXT
+      note TEXT,
+      category_id INTEGER,
+      FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
     )
   `,
   `
@@ -37,10 +55,31 @@ const SCHEMA_STATEMENTS = [
     )
   `,
   `CREATE INDEX IF NOT EXISTS idx_tags_visible_order ON tags(is_visible, sort_order, name)`,
+  `CREATE INDEX IF NOT EXISTS idx_categories_order ON categories(sort_order, name)`,
   `CREATE INDEX IF NOT EXISTS idx_images_file_id ON images(storage_key)`,
+  `CREATE INDEX IF NOT EXISTS idx_images_category_id ON images(category_id)`,
   `CREATE INDEX IF NOT EXISTS idx_image_tags_image_id ON image_tags(image_id)`,
   `CREATE INDEX IF NOT EXISTS idx_image_tags_tag_id ON image_tags(tag_id)`,
 ];
+
+const MIGRATION_STATEMENTS = [
+  `ALTER TABLE images ADD COLUMN category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL`,
+];
+
+const SELECT_IMAGE_COLUMNS = `
+  images.id,
+  images.storage_key AS storageKey,
+  images.file_name AS fileName,
+  images.file_url AS fileUrl,
+  images.width,
+  images.height,
+  images.sync_status AS syncStatus,
+  images.note,
+  categories.id AS categoryId,
+  categories.name AS categoryName,
+  categories.directory_slug AS categoryDirectorySlug,
+  categories.sort_order AS categorySortOrder
+`;
 
 function bindStatement(database, sql, params) {
   const statement = database.prepare(sql);
@@ -79,6 +118,30 @@ async function first(database, sql, params = []) {
   const result = await bindStatement(database, sql, params).first();
 
   return result ? toPlainRecord(result) : null;
+}
+
+function mapImageRow(row) {
+  const image = {
+    id: row.id,
+    storageKey: row.storageKey,
+    fileName: row.fileName,
+    fileUrl: row.fileUrl,
+    width: row.width,
+    height: row.height,
+    syncStatus: row.syncStatus,
+    note: row.note ?? null,
+  };
+
+  if (Number.isInteger(Number(row.categoryId)) && Number(row.categoryId) > 0) {
+    image.category = {
+      id: Number(row.categoryId),
+      name: row.categoryName,
+      directorySlug: row.categoryDirectorySlug,
+      sortOrder: Number(row.categorySortOrder ?? 0),
+    };
+  }
+
+  return image;
 }
 
 async function getImageTagRows(database, imageIds) {
@@ -128,6 +191,18 @@ async function getTagById(database, tagId) {
   );
 }
 
+async function getCategoryById(database, categoryId) {
+  return await first(
+    database,
+    `
+      SELECT id, name, directory_slug, sort_order
+      FROM categories
+      WHERE id = ?
+    `,
+    [categoryId],
+  );
+}
+
 async function getExistingTagIds(database, tagIds) {
   if (tagIds.length === 0) {
     return [];
@@ -158,7 +233,30 @@ async function listTagsOrdered(database) {
   );
 }
 
+async function listCategoriesOrdered(database) {
+  return await all(
+    database,
+    `
+      SELECT id, name, directory_slug, sort_order
+      FROM categories
+      ORDER BY sort_order ASC, name ASC, id ASC
+    `,
+  );
+}
+
 function clampTagPosition(sortOrder, maxPosition, fallbackPosition = maxPosition) {
+  const boundedMax = Math.max(1, maxPosition);
+  const normalizedFallback = Math.min(Math.max(fallbackPosition, 1), boundedMax);
+  const numeric = Number(sortOrder);
+
+  if (!Number.isInteger(numeric) || numeric <= 0) {
+    return normalizedFallback;
+  }
+
+  return Math.min(Math.max(numeric, 1), boundedMax);
+}
+
+function clampCategoryPosition(sortOrder, maxPosition, fallbackPosition = maxPosition) {
   const boundedMax = Math.max(1, maxPosition);
   const normalizedFallback = Math.min(Math.max(fallbackPosition, 1), boundedMax);
   const numeric = Number(sortOrder);
@@ -193,8 +291,68 @@ async function applyContiguousTagOrder(database, orderedTags) {
   return orderedTags;
 }
 
+async function applyContiguousCategoryOrder(database, orderedCategories) {
+  for (let index = 0; index < orderedCategories.length; index += 1) {
+    const category = orderedCategories[index];
+    const nextSortOrder = index + 1;
+
+    if (Number(category.sort_order) !== nextSortOrder) {
+      await run(
+        database,
+        `
+          UPDATE categories
+          SET sort_order = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `,
+        [nextSortOrder, category.id],
+      );
+    }
+
+    category.sort_order = nextSortOrder;
+  }
+
+  return orderedCategories;
+}
+
 async function normalizeTagSortOrders(database) {
   return await applyContiguousTagOrder(database, await listTagsOrdered(database));
+}
+
+async function normalizeCategorySortOrders(database) {
+  return await applyContiguousCategoryOrder(database, await listCategoriesOrdered(database));
+}
+
+function normalizeCategoryName(name) {
+  return String(name ?? "").trim();
+}
+
+function normalizeCategoryDirectorySlug(value) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[_\s]+/g, "-")
+    .replace(/[^a-z0-9-]/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+async function seedDefaultCategories(database) {
+  const countRow = await first(database, `SELECT COUNT(*) AS count FROM categories`);
+  const count = Number(countRow?.count ?? 0);
+  if (count > 0) {
+    return;
+  }
+
+  for (const category of DEFAULT_CATEGORIES) {
+    await run(
+      database,
+      `
+        INSERT INTO categories (name, directory_slug, sort_order)
+        VALUES (?, ?, ?)
+      `,
+      [category.name, category.directorySlug, category.sortOrder],
+    );
+  }
 }
 
 export function createGalleryRepository(database) {
@@ -206,6 +364,19 @@ export function createGalleryRepository(database) {
         for (const statement of SCHEMA_STATEMENTS) {
           await run(database, statement);
         }
+
+        for (const statement of MIGRATION_STATEMENTS) {
+          try {
+            await run(database, statement);
+          } catch (error) {
+            const message = String(error?.message ?? "").toLowerCase();
+            if (!message.includes("duplicate column name")) {
+              throw error;
+            }
+          }
+        }
+
+        await seedDefaultCategories(database);
       })();
     }
 
@@ -250,7 +421,6 @@ export function createGalleryRepository(database) {
       await ensureSchema();
 
       const current = await getTagById(database, tagId);
-
       if (!current) {
         return null;
       }
@@ -258,19 +428,12 @@ export function createGalleryRepository(database) {
       const orderedTags = await normalizeTagSortOrders(database);
       const currentIndex = orderedTags.findIndex((tag) => Number(tag.id) === Number(tagId));
       const currentPosition = currentIndex === -1 ? Number(current.sort_order) || 1 : currentIndex + 1;
-      const normalizedName =
-        changes.name === undefined ? current.name : normalizeTagName(changes.name);
+      const normalizedName = changes.name === undefined ? current.name : normalizeTagName(changes.name);
       const slug = changes.name === undefined ? current.slug : slugifyTagName(normalizedName);
-      const targetPosition =
-        changes.sortOrder === undefined
-          ? currentPosition
-          : clampTagPosition(changes.sortOrder, orderedTags.length, currentPosition);
-      const isVisible =
-        changes.isVisible === undefined
-          ? Number(current.is_visible)
-          : changes.isVisible
-            ? 1
-            : 0;
+      const targetPosition = changes.sortOrder === undefined
+        ? currentPosition
+        : clampTagPosition(changes.sortOrder, orderedTags.length, currentPosition);
+      const isVisible = changes.isVisible === undefined ? Number(current.is_visible) : changes.isVisible ? 1 : 0;
 
       await run(
         database,
@@ -294,7 +457,6 @@ export function createGalleryRepository(database) {
       await ensureSchema();
 
       const current = await getTagById(database, tagId);
-
       if (!current) {
         return false;
       }
@@ -309,7 +471,6 @@ export function createGalleryRepository(database) {
     async listTags() {
       await ensureSchema();
       await normalizeTagSortOrders(database);
-
       return await listTagsOrdered(database);
     },
 
@@ -333,14 +494,92 @@ export function createGalleryRepository(database) {
       return await getExistingTagIds(database, tagIds);
     },
 
-    async upsertImage({ storageKey, fileName, fileUrl, width, height, syncStatus, note = null }) {
+    async listCategories() {
+      await ensureSchema();
+      await normalizeCategorySortOrders(database);
+      return await listCategoriesOrdered(database);
+    },
+
+    async getCategoryById(categoryId) {
+      await ensureSchema();
+      return await getCategoryById(database, categoryId);
+    },
+
+    async createCategory({ name, directorySlug, sortOrder = 0 }) {
+      await ensureSchema();
+
+      const normalizedName = normalizeCategoryName(name);
+      const normalizedDirectorySlug = normalizeCategoryDirectorySlug(directorySlug);
+      const orderedCategories = await normalizeCategorySortOrders(database);
+      const targetPosition = clampCategoryPosition(sortOrder, orderedCategories.length + 1, orderedCategories.length + 1);
+
+      await run(
+        database,
+        `
+          INSERT INTO categories (name, directory_slug, sort_order)
+          VALUES (?, ?, ?)
+        `,
+        [normalizedName, normalizedDirectorySlug, targetPosition],
+      );
+
+      const created = await first(
+        database,
+        `
+          SELECT id, name, directory_slug, sort_order
+          FROM categories
+          WHERE directory_slug = ?
+        `,
+        [normalizedDirectorySlug],
+      );
+
+      orderedCategories.splice(targetPosition - 1, 0, created);
+      await applyContiguousCategoryOrder(database, orderedCategories);
+
+      return await getCategoryById(database, created.id);
+    },
+
+    async updateCategory(categoryId, changes) {
+      await ensureSchema();
+
+      const current = await getCategoryById(database, categoryId);
+      if (!current) {
+        return null;
+      }
+
+      const orderedCategories = await normalizeCategorySortOrders(database);
+      const currentIndex = orderedCategories.findIndex((category) => Number(category.id) === Number(categoryId));
+      const currentPosition = currentIndex === -1 ? Number(current.sort_order) || 1 : currentIndex + 1;
+      const normalizedName = changes.name === undefined ? current.name : normalizeCategoryName(changes.name);
+      const targetPosition = changes.sortOrder === undefined
+        ? currentPosition
+        : clampCategoryPosition(changes.sortOrder, orderedCategories.length, currentPosition);
+
+      await run(
+        database,
+        `
+          UPDATE categories
+          SET name = ?, sort_order = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `,
+        [normalizedName, currentPosition, categoryId],
+      );
+
+      const updated = await getCategoryById(database, categoryId);
+      const reorderedCategories = orderedCategories.filter((category) => Number(category.id) !== Number(categoryId));
+      reorderedCategories.splice(targetPosition - 1, 0, updated);
+      await applyContiguousCategoryOrder(database, reorderedCategories);
+
+      return await getCategoryById(database, categoryId);
+    },
+
+    async upsertImage({ storageKey, fileName, fileUrl, width, height, syncStatus, note = null, categoryId = null }) {
       await ensureSchema();
 
       await run(
         database,
         `
-          INSERT INTO images (storage_key, file_name, file_url, width, height, sync_status, note)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO images (storage_key, file_name, file_url, width, height, sync_status, note, category_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(storage_key) DO UPDATE SET
             file_name = excluded.file_name,
             file_url = excluded.file_url,
@@ -348,21 +587,22 @@ export function createGalleryRepository(database) {
             height = excluded.height,
             sync_status = excluded.sync_status,
             note = excluded.note,
+            category_id = excluded.category_id,
             updated_at = CURRENT_TIMESTAMP
         `,
-        [storageKey, fileName, fileUrl, width ?? null, height ?? null, syncStatus ?? "ok", note],
+        [storageKey, fileName, fileUrl, width ?? null, height ?? null, syncStatus ?? "ok", note, categoryId ?? null],
       );
 
       return await first(
         database,
         `
-          SELECT id, storage_key AS storageKey, file_name AS fileName, file_url AS fileUrl,
-                 width, height, sync_status AS syncStatus, note
+          SELECT ${SELECT_IMAGE_COLUMNS}
           FROM images
-          WHERE storage_key = ?
+          LEFT JOIN categories ON categories.id = images.category_id
+          WHERE images.storage_key = ?
         `,
         [storageKey],
-      );
+      ).then((row) => (row ? mapImageRow(row) : null));
     },
 
     async getImageById(imageId) {
@@ -371,10 +611,10 @@ export function createGalleryRepository(database) {
       const image = await first(
         database,
         `
-          SELECT id, storage_key AS storageKey, file_name AS fileName, file_url AS fileUrl,
-                 width, height, sync_status AS syncStatus, note
+          SELECT ${SELECT_IMAGE_COLUMNS}
           FROM images
-          WHERE id = ?
+          LEFT JOIN categories ON categories.id = images.category_id
+          WHERE images.id = ?
         `,
         [imageId],
       );
@@ -383,22 +623,23 @@ export function createGalleryRepository(database) {
         return null;
       }
 
-      return attachTagNames([image], await getImageTagRows(database, [image.id]))[0];
+      return attachTagNames([mapImageRow(image)], await getImageTagRows(database, [image.id]))[0];
     },
 
     async listImages() {
       await ensureSchema();
 
-      const images = await all(
+      const imageRows = await all(
         database,
         `
-          SELECT id, storage_key AS storageKey, file_name AS fileName, file_url AS fileUrl,
-                 width, height, sync_status AS syncStatus, note
+          SELECT ${SELECT_IMAGE_COLUMNS}
           FROM images
-          ORDER BY created_at DESC, id DESC
+          LEFT JOIN categories ON categories.id = images.category_id
+          ORDER BY images.created_at DESC, images.id DESC
         `,
       );
 
+      const images = imageRows.map(mapImageRow);
       return attachTagNames(images, await getImageTagRows(database, images.map((image) => image.id)));
     },
 
@@ -421,6 +662,7 @@ export function createGalleryRepository(database) {
               height = ?,
               sync_status = ?,
               note = ?,
+              category_id = ?,
               updated_at = CURRENT_TIMESTAMP
           WHERE id = ?
         `,
@@ -432,6 +674,7 @@ export function createGalleryRepository(database) {
           changes.height ?? current.height ?? null,
           changes.syncStatus ?? current.syncStatus ?? "ok",
           changes.note === undefined ? current.note ?? null : changes.note,
+          changes.categoryId === undefined ? current.category?.id ?? null : changes.categoryId,
           imageId,
         ],
       );
@@ -484,18 +727,12 @@ export function createGalleryRepository(database) {
     async listImagesByTagSlug(tagSlug) {
       await ensureSchema();
 
-      const images = await all(
+      const imageRows = await all(
         database,
         `
-          SELECT DISTINCT images.id,
-                 images.storage_key AS storageKey,
-                 images.file_name AS fileName,
-                 images.file_url AS fileUrl,
-                 images.width,
-                 images.height,
-                 images.sync_status AS syncStatus,
-                 images.note
+          SELECT DISTINCT ${SELECT_IMAGE_COLUMNS}
           FROM images
+          LEFT JOIN categories ON categories.id = images.category_id
           INNER JOIN image_tags ON image_tags.image_id = images.id
           INNER JOIN tags ON tags.id = image_tags.tag_id
           WHERE tags.slug = ?
@@ -504,6 +741,7 @@ export function createGalleryRepository(database) {
         [tagSlug],
       );
 
+      const images = imageRows.map(mapImageRow);
       return attachTagNames(images, await getImageTagRows(database, images.map((image) => image.id)));
     },
   };
