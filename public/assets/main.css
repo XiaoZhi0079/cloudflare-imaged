@@ -1416,6 +1416,9 @@ body:has(.admin-shell) {
 }
 
 .admin-tag-manager-form {
+  width: 100%;
+  max-width: min(100%, 320px);
+  margin-inline: auto;
   margin-bottom: 8px;
 }
 
@@ -1428,7 +1431,11 @@ body:has(.admin-shell) {
 
 .admin-tag-manager-panel .admin-inline-form > * {
   width: 100%;
-  max-width: min(100%, 320px);
+}
+
+.admin-tag-manager-panel .admin-inline-form .field input {
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .admin-tag-manager-panel .admin-inline-form button {
