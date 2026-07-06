@@ -1426,9 +1426,9 @@ body:has(.admin-shell) {
   justify-items: center;
 }
 
-.admin-tag-manager-panel .admin-inline-form .field {
+.admin-tag-manager-panel .admin-inline-form > * {
   width: 100%;
-  max-width: min(100%, 260px);
+  max-width: min(100%, 320px);
 }
 
 .admin-tag-manager-panel .admin-inline-form button {

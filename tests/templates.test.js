@@ -251,7 +251,7 @@ test("admin stylesheet defines a scoped dashboard design system", () => {
   assert.match(css, /\.admin-workbench-head-content/);
   assert.match(css, /\.admin-library-header/);
   assert.match(css, /\.admin-tag-manager-panel \.admin-inline-form\s*\{[\s\S]*justify-items:\s*center/);
-  assert.match(css, /\.admin-tag-manager-panel \.admin-inline-form \.field\s*\{[\s\S]*max-width:\s*min\(100%,\s*260px\)/);
+  assert.match(css, /\.admin-tag-manager-panel \.admin-inline-form > \*\s*\{[\s\S]*max-width:\s*min\(100%,\s*320px\)/);
   assert.match(css, /\.admin-empty-state/);
   assert.match(css, /\.admin-auth-strip\[data-state="connected"\]/);
   assert.match(css, /\.admin-bulk-toolbar/);
