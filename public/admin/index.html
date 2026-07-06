@@ -30,7 +30,10 @@
               <input id="admin-key" type="password" />
             </label>
             <button id="admin-connect" class="button-primary" type="button">进入后台</button>
-            <p class="admin-note admin-auth-note">验证后该区域会自动收起。</p>
+            <p class="admin-note admin-auth-note">
+              <span class="admin-auth-note-label">当前状态</span>
+              <span id="admin-auth-note-text">请输入管理密钥，验证后将直接启用下方工具与内容区域。</span>
+            </p>
           </div>
         </section>
 
@@ -175,3 +178,4 @@
     <script type="module" src="/assets/admin.js"></script>
   </body>
 </html>
+

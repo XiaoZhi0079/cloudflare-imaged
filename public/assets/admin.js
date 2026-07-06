@@ -6,6 +6,7 @@ const $ = (selector) => document.querySelector(selector);
 const authPanel = $("#admin-auth");
 const keyInput = $("#admin-key");
 const connectButton = $("#admin-connect");
+const authNoteText = $("#admin-auth-note-text");
 const createTagButton = $("#create-tag");
 const newTagInput = $("#new-tag-name");
 const uploadFilesInput = $("#upload-files");
@@ -56,7 +57,9 @@ const message = {
   imagesReady: "\u5df2\u8fdb\u5165\u56fe\u7247\u7ba1\u7406\u9875\u3002",
   libraryReady: "\u5df2\u8fdb\u5165\u56fe\u7247\u5de5\u4f5c\u53f0\u3002",
   authFailed: "\u9a8c\u8bc1\u5931\u8d25\uff0c\u8bf7\u68c0\u67e5\u7ba1\u7406\u5bc6\u94a5\u540e\u91cd\u8bd5\u3002",
-  disconnected: "\u8bf7\u5148\u8f93\u5165\u7ba1\u7406\u5bc6\u94a5\u3002",
+  disconnected: "请先输入管理密钥。",
+  disconnectedNote: "请输入管理密钥，验证后将直接启用下方工具与内容区域。",
+  connectedNote: "已完成验证，可直接继续管理内容；如需更换密钥，可在此重新验证。",
 };
 
 let adminKey = sessionStorage.getItem("gallery-admin-key") ?? "";
@@ -104,8 +107,15 @@ function setDisabled(element, disabled) {
 
 function setConnected(connected) {
   isConnected = connected;
+
   if (authPanel) {
-    authPanel.hidden = connected;
+    authPanel.dataset.state = connected ? "connected" : "disconnected";
+  }
+
+  document.body.dataset.adminConnected = connected ? "true" : "false";
+
+  if (authNoteText) {
+    authNoteText.textContent = connected ? message.connectedNote : message.disconnectedNote;
   }
 
   setDisabled(createTagButton, !connected);
@@ -131,12 +141,17 @@ function setConnected(connected) {
   setTagManagerExpanded(connected && wantsTagManagerExpanded, false);
 
   if (connectButton) {
-    connectButton.textContent = connected ? "\u91cd\u65b0\u9a8c\u8bc1" : "\u8fdb\u5165\u540e\u53f0";
+    connectButton.textContent = connected ? "重新验证" : "进入后台";
   }
 }
 
-function emptyState(text) {
-  return `<div class="list-item admin-empty">${escapeHtml(text)}</div>`;
+function emptyState(text, variant = "default") {
+  const className = variant === "default" ? "admin-empty-state" : `admin-empty-state is-${variant}`;
+  return `
+    <div class="${className}">
+      <p class="admin-empty-copy">${escapeHtml(text)}</p>
+    </div>
+  `;
 }
 
 function renderDisconnectedState(text = message.disconnected) {
@@ -149,7 +164,7 @@ function renderDisconnectedState(text = message.disconnected) {
   }
 
   if (tagFilterList) {
-    tagFilterList.innerHTML = emptyState(text);
+    tagFilterList.innerHTML = emptyState(text, "compact");
   }
 
   if (imageList) {
@@ -157,11 +172,11 @@ function renderDisconnectedState(text = message.disconnected) {
   }
 
   if (uploadTagOptions) {
-    uploadTagOptions.innerHTML = emptyState(text);
+    uploadTagOptions.innerHTML = emptyState(text, "compact");
   }
 
   if (uploadSummary) {
-    uploadSummary.innerHTML = escapeHtml(text);
+    uploadSummary.innerHTML = emptyState(text, "inline");
   }
 }
 
@@ -458,7 +473,7 @@ function openTagAssignmentDialog(image) {
           `,
         )
         .join("")
-    : `<div class="admin-empty">\u5c1a\u672a\u521b\u5efa\u6807\u7b7e\u3002</div>`;
+    : emptyState("\u5c1a\u672a\u521b\u5efa\u6807\u7b7e\u3002", "compact");
 
   return openBaseDialog({
     title: "\u8bbe\u7f6e\u56fe\u7247\u6807\u7b7e",
@@ -578,7 +593,7 @@ function renderUploadTagOptions() {
   syncSelectedUploadTagIds();
 
   if (!tags.length) {
-    uploadTagOptions.innerHTML = emptyState("\u8bf7\u5148\u65b0\u589e\u6807\u7b7e\uff0c\u518d\u4e0a\u4f20\u56fe\u7247\u3002");
+    uploadTagOptions.innerHTML = emptyState("\u8bf7\u5148\u65b0\u589e\u6807\u7b7e\uff0c\u518d\u4e0a\u4f20\u56fe\u7247\u3002", "compact");
     return;
   }
 
@@ -638,7 +653,7 @@ function renderUploadSummary(files = Array.from(uploadFilesInput?.files ?? []), 
   }
 
   if (!files.length) {
-    uploadSummary.innerHTML = "尚未选择图片。";
+    uploadSummary.innerHTML = emptyState("尚未选择图片。", "inline");
     return;
   }
 
@@ -968,7 +983,7 @@ function renderTagFilterOptions() {
   selectedTagFilters = new Set([...selectedTagFilters].filter((tagName) => tags.some((tag) => tag.name === tagName)));
 
   if (!tags.length) {
-    tagFilterList.innerHTML = '<div class="admin-filter-empty">还没有任何标签。</div>';
+    tagFilterList.innerHTML = emptyState("还没有任何标签。", "compact");
     return;
   }
 
@@ -1020,7 +1035,7 @@ function renderDetailTagOptions(image = getImageById(activeImageId)) {
   }
 
   if (!tags.length) {
-    detailTagOptions.innerHTML = emptyState("\u8fd8\u6ca1\u6709\u4efb\u4f55\u6807\u7b7e\u3002");
+    detailTagOptions.innerHTML = emptyState("\u8fd8\u6ca1\u6709\u4efb\u4f55\u6807\u7b7e\u3002", "compact");
     return;
   }
 
@@ -1056,7 +1071,7 @@ function openImageDetailDrawer(imageId) {
   if (detailPreview) {
     detailPreview.innerHTML = current.fileUrl
       ? `<img src="${escapeHtml(current.fileUrl)}" alt="${escapeHtml(current.fileName)}" />`
-      : `<div class="admin-empty">IMG</div>`;
+      : emptyState("暂无预览", "compact");
   }
   if (detailFileNameInput) {
     detailFileNameInput.value = current.fileName ?? "";
@@ -1204,7 +1219,7 @@ function openBulkTagAssignmentDialog() {
           `,
         )
         .join("")
-    : `<div class="admin-empty">\u5c1a\u672a\u521b\u5efa\u6807\u7b7e\u3002</div>`;
+    : emptyState("\u5c1a\u672a\u521b\u5efa\u6807\u7b7e\u3002", "compact");
 
   return openBaseDialog({
     title: "\u6279\u91cf\u8bbe\u7f6e\u6807\u7b7e",
@@ -1653,5 +1668,4 @@ function boot() {
 }
 
 boot();
-
 

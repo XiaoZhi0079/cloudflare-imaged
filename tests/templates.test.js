@@ -70,6 +70,7 @@ test("admin index is an image library workbench", () => {
   assert.match(html, /class="admin-workbench-head-content"/);
   assert.match(html, /class="admin-workbench-head-status"/);
   assert.match(html, /class="admin-auth-row"/);
+  assert.match(html, /id="admin-auth-note-text"/);
   assert.match(html, /class="admin-toolbar-top-row"/);
   assert.match(html, /class="admin-toolbar-actions"/);
   assert.match(html, /class="admin-library-header"/);
@@ -100,7 +101,7 @@ test("admin index is an image library workbench", () => {
   assert.doesNotMatch(html, /href="\/admin\/images\.html"/);
 });
 
-test("admin authentication is an inline gate that hides after verification", () => {
+test("admin authentication keeps a fixed structure while state content changes", () => {
   const pages = [
     "../public/admin/index.html",
     "../public/admin/upload.html",
@@ -119,7 +120,9 @@ test("admin authentication is an inline gate that hides after verification", () 
 
   const js = readFileSync(new URL("../public/assets/admin.js", import.meta.url), "utf8");
   assert.ok(js.includes('const authPanel = $("#admin-auth");'));
-  assert.match(js, /authPanel\.hidden = connected/);
+  assert.match(js, /authPanel\.dataset\.state = connected \? "connected" : "disconnected"/);
+  assert.match(js, /document\.body\.dataset\.adminConnected = connected \? "true" : "false"/);
+  assert.doesNotMatch(js, /authPanel\.hidden = connected/);
   assert.match(js, /keyInput\?\.addEventListener\("keydown", \(event\) => \{/);
   assert.match(js, /if \(event\.key === "Enter"\)/);
   assert.match(js, /connectButton\?\.click\(\)/);
@@ -244,6 +247,8 @@ test("admin stylesheet defines a scoped dashboard design system", () => {
   assert.match(css, /\.admin-auth-row/);
   assert.match(css, /\.admin-workbench-head-content/);
   assert.match(css, /\.admin-library-header/);
+  assert.match(css, /\.admin-empty-state/);
+  assert.match(css, /\.admin-auth-strip\[data-state="connected"\]/);
   assert.match(css, /\.admin-bulk-toolbar/);
   assert.match(css, /\.admin-tags-sidebar/);
   assert.ok(css.includes("grid-template-columns: minmax(320px, var(--admin-sidebar-width)) minmax(0, 1fr);"));
@@ -317,5 +322,4 @@ test("runtime templates stay aligned with shared templates", () => {
 
   assert.equal(runtime, shared);
 });
-
 

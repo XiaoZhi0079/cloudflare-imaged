@@ -2071,3 +2071,70 @@ body:has(.admin-shell) {
     min-height: auto;
   }
 }
+
+/* Admin auth and empty states stabilization */
+.admin-auth-strip {
+  transition: border-color 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
+}
+
+.admin-auth-strip[data-state="connected"] {
+  border-color: rgba(180, 78, 39, 0.28);
+  background: rgba(255, 252, 245, 0.98);
+}
+
+.admin-auth-note {
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  min-height: var(--admin-control-height);
+}
+
+.admin-auth-note-label {
+  color: var(--admin-accent);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+#admin-auth-note-text {
+  color: var(--admin-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.admin-empty-state {
+  width: 100%;
+  min-height: 120px;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  border: 1px dashed rgba(31, 28, 24, 0.14);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.62);
+  text-align: center;
+}
+
+.admin-empty-state.is-compact {
+  min-height: 58px;
+  padding: 12px 14px;
+}
+
+.admin-empty-state.is-inline {
+  min-height: 72px;
+  padding: 14px 16px;
+}
+
+.admin-empty-copy {
+  margin: 0;
+  color: var(--admin-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.admin-tag-filter-list .admin-empty-state,
+.check-grid .admin-empty-state,
+#detail-preview .admin-empty-state {
+  min-height: 100%;
+}
+
