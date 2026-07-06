@@ -5,7 +5,7 @@ pages_build_output_dir = "./public"
 [[d1_databases]]
 binding = "GALLERY_DB"
 database_name = "gallery"
-database_id = "0c0700b3-6f89-4b06-bf5d-91902a0155d5"
+database_id = "b5c8d5a9-a710-4ac7-8341-a619f852ef27"
 
 [[r2_buckets]]
 binding = "GALLERY_BUCKET"
