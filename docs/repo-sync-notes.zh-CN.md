@@ -6,7 +6,7 @@
 
 - `D:\GoodTry\Image Gallery\gallery` 是独立仓库
 - 当前分支是 `main`
-- 最新提交是 `64114f6 docs: add deployment runbook and ci`
+- 最新提交已经进入独立 `gallery` 仓库
 
 远端：
 
@@ -30,6 +30,20 @@
 ```powershell
 git push -u origin main --force
 ```
+
+或者直接运行仓库根目录里的辅助脚本：
+
+```powershell
+.\sync-github.cmd
+```
+
+这个脚本会先检查：
+
+- 当前是不是 Git 仓库
+- 当前分支是不是 `main`
+- 工作区是不是干净
+
+然后才会要求你输入 `YES` 确认强推。
 
 ## 为什么这里推荐 force push
 

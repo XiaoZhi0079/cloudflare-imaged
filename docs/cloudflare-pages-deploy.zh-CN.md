@@ -63,6 +63,14 @@ git push -u origin main
 git push -u origin main --force
 ```
 
+如果你不想手敲命令，也可以直接运行：
+
+```powershell
+.\sync-github.cmd
+```
+
+这个脚本会先做本地检查，再要求你输入 `YES` 后才会真正执行强推。
+
 注意：
 
 - `--force` 会用当前独立 `gallery` 仓库替换远端现有主分支内容
