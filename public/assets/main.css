@@ -1443,6 +1443,11 @@ body:has(.admin-shell) {
   box-sizing: border-box;
 }
 
+.admin-tag-manager-panel .admin-inline-form .field input:focus-visible {
+  outline: 0;
+  box-shadow: inset 0 0 0 2px var(--admin-accent);
+}
+
 .admin-tag-manager-panel .admin-inline-form button {
   width: 100%;
 }
