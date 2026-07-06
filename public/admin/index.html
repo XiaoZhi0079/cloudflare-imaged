@@ -10,43 +10,47 @@
     <div class="app-shell admin-shell admin-workbench">
       <main class="admin-workbench-main" id="library-workbench">
         <section class="admin-workbench-head" aria-label="工作台状态">
-          <div>
+          <div class="admin-workbench-head-content">
             <p class="admin-section-label">Library</p>
             <h2>管理已上传图片、标签和基本文件信息。</h2>
           </div>
-          <div id="admin-status" class="status-banner" data-state="info" aria-live="polite">???????????</div>
+          <div class="admin-workbench-head-status">
+            <div id="admin-status" class="status-banner" data-state="info" aria-live="polite">正在等待身份验证。</div>
+          </div>
         </section>
 
         <section id="admin-auth" class="panel admin-panel admin-auth-strip">
-          <div class="panel-header compact-header">
-            <div>
-              <p class="admin-section-label">Access</p>
-              <h2>身份验证</h2>
-            </div>
+          <div class="admin-auth-intro">
+            <p class="admin-section-label">Access</p>
+            <h2>身份验证</h2>
           </div>
-          <label class="field admin-auth-field">
-            <span>管理密钥</span>
-            <input id="admin-key" type="password" />
-          </label>
-          <button id="admin-connect" class="button-primary" type="button">进入后台</button>
-          <div class="admin-note">验证后该区域会自动收起。</div>
+          <div class="admin-auth-row">
+            <label class="field admin-auth-field">
+              <span>管理密钥</span>
+              <input id="admin-key" type="password" />
+            </label>
+            <button id="admin-connect" class="button-primary" type="button">进入后台</button>
+            <p class="admin-note admin-auth-note">验证后该区域会自动收起。</p>
+          </div>
         </section>
 
         <section class="admin-toolbar" aria-label="图片筛选和操作">
-          <div class="admin-toolbar-fields">
+          <div class="admin-toolbar-top-row">
             <label class="field admin-toolbar-search">
               <span>搜索图片</span>
               <input id="admin-search" type="search" placeholder="Search filename" disabled />
             </label>
-            <div class="field admin-toolbar-filter-block">
-              <div class="admin-toolbar-filter-head">
-                <span>按标签筛选</span>
-                <span class="admin-toolbar-filter-note">可多选，全部匹配</span>
-              </div>
-              <div id="admin-tag-filter-list" class="admin-tag-filter-list" aria-live="polite"></div>
+            <div class="admin-toolbar-actions">
+              <button id="admin-upload-open-toolbar" class="button-primary" type="button" disabled>上传图片</button>
             </div>
           </div>
-          <button id="admin-upload-open-toolbar" class="button-primary" type="button" disabled>上传图片</button>
+          <div class="field admin-toolbar-filter-block">
+            <div class="admin-toolbar-filter-head">
+              <span>按标签筛选</span>
+              <span class="admin-toolbar-filter-note">可多选，全部匹配</span>
+            </div>
+            <div id="admin-tag-filter-list" class="admin-tag-filter-list" aria-live="polite"></div>
+          </div>
         </section>
 
         <div id="admin-bulk-toolbar" class="admin-bulk-toolbar" hidden>
@@ -82,9 +86,15 @@
           </section>
 
           <section class="admin-library-panel" aria-label="图片列表">
-            <div class="admin-library-meta">
-              <strong>图片</strong>
-              <span id="admin-visible-count">0</span>
+            <div class="admin-library-header">
+              <div class="admin-library-heading">
+                <p class="admin-section-label">Images</p>
+                <h2>图片列表</h2>
+              </div>
+              <div class="admin-library-meta">
+                <strong>图片</strong>
+                <span id="admin-visible-count" class="admin-count-badge">0</span>
+              </div>
             </div>
             <div id="image-list" class="admin-image-grid admin-list-stack"></div>
             <div class="admin-library-footer">
@@ -165,4 +175,3 @@
     <script type="module" src="/assets/admin.js"></script>
   </body>
 </html>
-

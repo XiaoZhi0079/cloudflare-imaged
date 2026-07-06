@@ -67,6 +67,14 @@ test("admin index is an image library workbench", () => {
   assert.match(html, /id="tag-manager-toggle"/);
   assert.match(html, /id="tag-manager-list"/);
   assert.match(html, /id="admin-status"/);
+  assert.match(html, /class="admin-workbench-head-content"/);
+  assert.match(html, /class="admin-workbench-head-status"/);
+  assert.match(html, /class="admin-auth-row"/);
+  assert.match(html, /class="admin-toolbar-top-row"/);
+  assert.match(html, /class="admin-toolbar-actions"/);
+  assert.match(html, /class="admin-library-header"/);
+  assert.match(html, /class="admin-library-heading"/);
+  assert.match(html, /id="admin-visible-count"[^>]*class="admin-count-badge"|class="admin-count-badge"[^>]*id="admin-visible-count"/);
   assert.doesNotMatch(html, /class="admin-side-nav"/);
   assert.doesNotMatch(html, /class="admin-gallery-link"/);
   assert.doesNotMatch(html, /id="admin-upload-open"/);
@@ -227,11 +235,18 @@ test("admin stylesheet defines a scoped dashboard design system", () => {
   assert.match(css, /\.admin-layout/);
   assert.match(css, /\.admin-auth-strip/);
   assert.match(css, /\.admin-workbench/);
+  assert.match(css, /--admin-control-height:/);
+  assert.match(css, /--admin-panel-padding:/);
+  assert.match(css, /--admin-sidebar-width:/);
   assert.doesNotMatch(css, /\.admin-side-nav\s*\{/);
   assert.match(css, /\.admin-toolbar/);
+  assert.match(css, /\.admin-toolbar-top-row/);
+  assert.match(css, /\.admin-auth-row/);
+  assert.match(css, /\.admin-workbench-head-content/);
+  assert.match(css, /\.admin-library-header/);
   assert.match(css, /\.admin-bulk-toolbar/);
   assert.match(css, /\.admin-tags-sidebar/);
-  assert.ok(css.includes("grid-template-columns: minmax(340px, 380px) minmax(0, 1fr);"));
+  assert.ok(css.includes("grid-template-columns: minmax(320px, var(--admin-sidebar-width)) minmax(0, 1fr);"));
   assert.match(css, /\.admin-tag-filter-list/);
   assert.match(css, /\.admin-tag-filter-chip/);
   assert.match(css, /\.admin-tag-manager-panel/);
@@ -302,4 +317,5 @@ test("runtime templates stay aligned with shared templates", () => {
 
   assert.equal(runtime, shared);
 });
+
 
