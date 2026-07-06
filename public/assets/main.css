@@ -1415,10 +1415,12 @@ body:has(.admin-shell) {
   pointer-events: none;
 }
 
+.admin-tag-manager-panel {
+  --admin-tag-manager-control-width: min(100%, 320px);
+}
+
 .admin-tag-manager-form {
   width: 100%;
-  max-width: min(100%, 320px);
-  margin-inline: auto;
   margin-bottom: 8px;
 }
 
@@ -1429,12 +1431,15 @@ body:has(.admin-shell) {
   justify-items: center;
 }
 
-.admin-tag-manager-panel .admin-inline-form > * {
-  width: 100%;
+.admin-tag-manager-panel .admin-inline-form .field,
+.admin-tag-manager-panel .admin-inline-form button {
+  inline-size: var(--admin-tag-manager-control-width);
+  max-inline-size: 100%;
 }
 
 .admin-tag-manager-panel .admin-inline-form .field input {
-  width: 100%;
+  inline-size: 100%;
+  display: block;
   box-sizing: border-box;
 }
 

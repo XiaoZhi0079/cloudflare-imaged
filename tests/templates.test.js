@@ -251,8 +251,9 @@ test("admin stylesheet defines a scoped dashboard design system", () => {
   assert.match(css, /\.admin-workbench-head-content/);
   assert.match(css, /\.admin-library-header/);
   assert.match(css, /\.admin-tag-manager-panel \.admin-inline-form\s*\{[\s\S]*justify-items:\s*center/);
-  assert.match(css, /\.admin-tag-manager-form\s*\{[\s\S]*max-width:\s*min\(100%,\s*320px\)[\s\S]*margin-inline:\s*auto/);
-  assert.match(css, /\.admin-tag-manager-panel \.admin-inline-form \.field input\s*\{[\s\S]*width:\s*100%[\s\S]*box-sizing:\s*border-box/);
+  assert.match(css, /\.admin-tag-manager-panel\s*\{[\s\S]*--admin-tag-manager-control-width:\s*min\(100%,\s*320px\)/);
+  assert.match(css, /\.admin-tag-manager-panel \.admin-inline-form \.field,\s*\.admin-tag-manager-panel \.admin-inline-form button\s*\{[\s\S]*inline-size:\s*var\(--admin-tag-manager-control-width\)/);
+  assert.match(css, /\.admin-tag-manager-panel \.admin-inline-form \.field input\s*\{[\s\S]*inline-size:\s*100%[\s\S]*display:\s*block[\s\S]*box-sizing:\s*border-box/);
   assert.match(css, /\.admin-empty-state/);
   assert.match(css, /\.admin-auth-strip\[data-state="connected"\]/);
   assert.match(css, /\.admin-bulk-toolbar/);
