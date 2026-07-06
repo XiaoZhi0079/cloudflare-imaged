@@ -1423,6 +1423,12 @@ body:has(.admin-shell) {
   grid-template-columns: 1fr;
   gap: 12px;
   align-items: stretch;
+  justify-items: center;
+}
+
+.admin-tag-manager-panel .admin-inline-form .field {
+  width: 100%;
+  max-width: min(100%, 260px);
 }
 
 .admin-tag-manager-panel .admin-inline-form button {
@@ -1917,7 +1923,7 @@ body:has(.admin-shell) {
 
 .admin-toolbar-top-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, min(520px, 100%));
   gap: 12px;
   align-items: end;
 }
@@ -1925,16 +1931,6 @@ body:has(.admin-shell) {
 .admin-toolbar-search,
 .admin-toolbar-filter-block {
   min-width: 0;
-}
-
-.admin-toolbar-actions {
-  display: flex;
-  align-items: end;
-  justify-content: flex-end;
-}
-
-.admin-toolbar-actions .button-primary {
-  min-width: 132px;
 }
 
 .admin-toolbar-filter-block {
@@ -1991,6 +1987,18 @@ body:has(.admin-shell) {
   min-width: 0;
 }
 
+.admin-library-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  min-width: 0;
+}
+
+.admin-library-actions .button-primary {
+  min-width: 132px;
+}
+
 .admin-library-meta {
   display: inline-flex;
   align-items: center;
@@ -2043,10 +2051,6 @@ body:has(.admin-shell) {
     grid-template-columns: 1fr;
   }
 
-  .admin-toolbar-actions {
-    justify-content: flex-start;
-  }
-
   .admin-tags-sidebar {
     position: static;
   }
@@ -2063,8 +2067,13 @@ body:has(.admin-shell) {
     flex-direction: column;
   }
 
+  .admin-library-actions,
   .admin-library-meta {
     justify-content: flex-start;
+  }
+
+  .admin-library-actions {
+    flex-wrap: wrap;
   }
 
   .admin-auth-note {
@@ -2137,4 +2146,5 @@ body:has(.admin-shell) {
 #detail-preview .admin-empty-state {
   min-height: 100%;
 }
+
 

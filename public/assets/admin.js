@@ -1022,6 +1022,12 @@ function setDrawerOpen(drawer, open) {
 
 function openUploadDrawer() {
   requireConnection();
+  selectedUploadTagIds = new Set(
+    [...selectedTagFilters]
+      .map((tagName) => tags.find((tag) => tag.name === tagName)?.id)
+      .filter((tagId) => Number.isInteger(tagId))
+  );
+  renderUploadTagOptions();
   setDrawerOpen(uploadDrawer, true);
 }
 
@@ -1668,4 +1674,5 @@ function boot() {
 }
 
 boot();
+
 

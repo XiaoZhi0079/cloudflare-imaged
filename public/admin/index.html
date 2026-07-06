@@ -43,9 +43,6 @@
               <span>搜索图片</span>
               <input id="admin-search" type="search" placeholder="Search filename" disabled />
             </label>
-            <div class="admin-toolbar-actions">
-              <button id="admin-upload-open-toolbar" class="button-primary" type="button" disabled>上传图片</button>
-            </div>
           </div>
           <div class="field admin-toolbar-filter-block">
             <div class="admin-toolbar-filter-head">
@@ -94,9 +91,12 @@
                 <p class="admin-section-label">Images</p>
                 <h2>图片列表</h2>
               </div>
-              <div class="admin-library-meta">
-                <strong>图片</strong>
-                <span id="admin-visible-count" class="admin-count-badge">0</span>
+              <div class="admin-library-actions">
+                <button id="admin-upload-open-toolbar" class="button-primary" type="button" disabled>上传图片</button>
+                <div class="admin-library-meta">
+                  <strong>图片</strong>
+                  <span id="admin-visible-count" class="admin-count-badge">0</span>
+                </div>
               </div>
             </div>
             <div id="image-list" class="admin-image-grid admin-list-stack"></div>
@@ -178,4 +178,5 @@
     <script type="module" src="/assets/admin.js"></script>
   </body>
 </html>
+
 
