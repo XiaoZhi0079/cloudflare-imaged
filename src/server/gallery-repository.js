@@ -54,16 +54,19 @@ const SCHEMA_STATEMENTS = [
       FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
     )
   `,
+];
+
+const MIGRATION_STATEMENTS = [
+  `ALTER TABLE images ADD COLUMN category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL`,
+];
+
+const INDEX_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_tags_visible_order ON tags(is_visible, sort_order, name)`,
   `CREATE INDEX IF NOT EXISTS idx_categories_order ON categories(sort_order, name)`,
   `CREATE INDEX IF NOT EXISTS idx_images_file_id ON images(storage_key)`,
   `CREATE INDEX IF NOT EXISTS idx_images_category_id ON images(category_id)`,
   `CREATE INDEX IF NOT EXISTS idx_image_tags_image_id ON image_tags(image_id)`,
   `CREATE INDEX IF NOT EXISTS idx_image_tags_tag_id ON image_tags(tag_id)`,
-];
-
-const MIGRATION_STATEMENTS = [
-  `ALTER TABLE images ADD COLUMN category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL`,
 ];
 
 const SELECT_IMAGE_COLUMNS = `
@@ -374,6 +377,10 @@ export function createGalleryRepository(database) {
               throw error;
             }
           }
+        }
+
+        for (const statement of INDEX_STATEMENTS) {
+          await run(database, statement);
         }
 
         await seedDefaultCategories(database);
@@ -746,3 +753,4 @@ export function createGalleryRepository(database) {
     },
   };
 }
+

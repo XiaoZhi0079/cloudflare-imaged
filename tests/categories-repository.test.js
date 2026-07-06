@@ -34,6 +34,35 @@ test("listCategories bootstraps default upload categories when the database is e
   );
 });
 
+test("listCategories migrates a legacy images table before creating category indexes", async () => {
+  const database = new DatabaseSync(":memory:");
+  database.exec(`
+    CREATE TABLE images (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      storage_key TEXT NOT NULL UNIQUE,
+      file_name TEXT NOT NULL,
+      file_url TEXT NOT NULL,
+      width INTEGER,
+      height INTEGER,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      sync_status TEXT NOT NULL DEFAULT 'ok',
+      note TEXT
+    );
+  `);
+
+  const repository = createGalleryRepository(database);
+  const categories = await repository.listCategories();
+  const imageColumns = database.prepare("PRAGMA table_info(images)").all();
+
+  assert.equal(imageColumns.some((column) => column.name === "category_id"), true);
+  assert.deepEqual(categories.map((category) => category.directory_slug), [
+    "sexy-beauty",
+    "elegant-beauty",
+    "scenery",
+  ]);
+});
+
 test("createCategory persists a custom category", async () => {
   const database = createTestDb();
   const repository = createGalleryRepository(database);
