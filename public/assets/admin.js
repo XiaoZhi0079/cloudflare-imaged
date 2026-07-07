@@ -46,6 +46,9 @@ const loadMoreImagesButton = $("#admin-load-more");
 const tagManagerPanel = $("#tag-manager-panel");
 const tagManagerToggleButton = $("#tag-manager-toggle");
 const tagManagerList = $("#tag-manager-list");
+const tagCreateOpenButton = $("#tag-create-open");
+const tagCreateForm = $("#tag-create-form");
+const tagCreateCancelButton = $("#tag-create-cancel");
 
 const message = {
   enterKey: "\u8bf7\u8f93\u5165\u7ba1\u7406\u5bc6\u94a5\u540e\u7ee7\u7eed\u3002",
@@ -76,6 +79,7 @@ let activeDialog = null;
 let visibleImageRenderCount = 120;
 const tagManagerPreferenceKey = "gallery-tag-manager-expanded";
 let wantsTagManagerExpanded = sessionStorage.getItem(tagManagerPreferenceKey) === "true";
+let isTagCreateFormOpen = !tagCreateOpenButton;
 const DIRECT_UPLOAD_BATCH_SIZE = 12;
 const MAX_UPLOAD_SUMMARY_ITEMS = 60;
 const INITIAL_ADMIN_IMAGE_RENDER_COUNT = 120;
@@ -104,6 +108,26 @@ function setDisabled(element, disabled) {
     element.disabled = disabled;
   }
 }
+function setTagCreateFormOpen(open, shouldFocus = false) {
+  const usesDeferredCreateForm = Boolean(tagCreateOpenButton && tagCreateForm);
+  isTagCreateFormOpen = usesDeferredCreateForm ? open : true;
+
+  if (usesDeferredCreateForm) {
+    tagCreateForm.hidden = !open;
+    tagCreateOpenButton.hidden = open;
+  }
+
+  setDisabled(tagCreateOpenButton, !isConnected);
+
+  const formDisabled = !isConnected || !isTagCreateFormOpen;
+  setDisabled(newTagInput, formDisabled);
+  setDisabled(createTagButton, formDisabled);
+  setDisabled(tagCreateCancelButton, formDisabled);
+
+  if (shouldFocus && isTagCreateFormOpen && newTagInput) {
+    requestAnimationFrame(() => newTagInput.focus());
+  }
+}
 
 function setConnected(connected) {
   isConnected = connected;
@@ -118,8 +142,7 @@ function setConnected(connected) {
     authNoteText.textContent = connected ? message.connectedNote : message.disconnectedNote;
   }
 
-  setDisabled(createTagButton, !connected);
-  setDisabled(newTagInput, !connected);
+  setTagCreateFormOpen(connected && isTagCreateFormOpen, false);
   setDisabled(uploadFilesInput, !connected);
   setDisabled(uploadSubmitButton, !connected);
   setDisabled(uploadOpenButton, !connected);
@@ -1595,6 +1618,22 @@ function initUploadPage() {
 }
 
 function initTagsPage() {
+  tagCreateOpenButton?.addEventListener("click", () => {
+    if (!isConnected) {
+      return;
+    }
+
+    setTagCreateFormOpen(true, true);
+  });
+
+  tagCreateCancelButton?.addEventListener("click", () => {
+    if (newTagInput) {
+      newTagInput.value = "";
+    }
+    setTagCreateFormOpen(false);
+    tagCreateOpenButton?.focus();
+  });
+
   createTagButton?.addEventListener("click", () => {
     runButtonAction(createTagButton, async () => {
       requireConnection();
@@ -1617,6 +1656,7 @@ function initTagsPage() {
 
       newTagInput.value = "";
       setTagsState([...tags, payload.tag]);
+      setTagCreateFormOpen(false);
       setStatus(`已新增标签：${name}（${durationMs} ms）`, "success");
     }).catch(() => {});
   });

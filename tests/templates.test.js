@@ -65,6 +65,9 @@ test("admin index is an image library workbench", () => {
   assert.match(html, /id="tag-workbench"[^>]*class="admin-tags-sidebar"/);
   assert.match(html, /id="tag-manager-panel"/);
   assert.match(html, /id="tag-manager-toggle"/);
+  assert.match(html, /id="tag-create-open"[\s\S]*新增标签/);
+  assert.match(html, /id="tag-create-form"[^>]*hidden/);
+  assert.match(html, /id="tag-create-cancel"/);
   assert.match(html, /id="tag-manager-list"/);
   assert.match(html, /id="admin-status"/);
   assert.match(html, /class="admin-workbench-head-content"/);
@@ -196,6 +199,10 @@ test("admin script uses in-page dialogs instead of browser prompts", () => {
   assert.match(js, /const tagManagerToggleButton = \$\("#tag-manager-toggle"\);/);
   assert.match(js, /function setTagManagerExpanded/);
   assert.match(js, /sessionStorage\.setItem\("gallery-tag-manager-expanded"/);
+  assert.match(js, /function setTagCreateFormOpen\(open, shouldFocus = false\)/);
+  assert.match(js, /tagCreateOpenButton\?\.addEventListener\("click"/);
+  assert.match(js, /tagCreateCancelButton\?\.addEventListener\("click"/);
+  assert.match(js, /setTagCreateFormOpen\(false\)/);
   assert.match(js, /const tagFilterList = \$\("#admin-tag-filter-list"\);/);
   assert.match(js, /let selectedTagFilters = new Set\(\);/);
   assert.match(js, /const loadMoreImagesButton = \$\("#admin-load-more"\);/);
@@ -255,6 +262,7 @@ test("admin stylesheet defines a scoped dashboard design system", () => {
   assert.match(css, /\.admin-tag-manager-panel \.admin-inline-form \.field,\s*\.admin-tag-manager-panel \.admin-inline-form button\s*\{[\s\S]*inline-size:\s*var\(--admin-tag-manager-control-width\)/);
   assert.match(css, /\.admin-tag-manager-panel \.admin-inline-form \.field input\s*\{[\s\S]*inline-size:\s*100%[\s\S]*display:\s*block[\s\S]*box-sizing:\s*border-box/);
   assert.match(css, /\.admin-tag-manager-panel \.admin-inline-form \.field input:focus-visible\s*\{[\s\S]*outline:\s*0[\s\S]*box-shadow:\s*inset 0 0 0 2px var\(--admin-accent\)/);
+  assert.match(css, /\.admin-tag-create-open\s*\{[\s\S]*inline-size:\s*var\(--admin-tag-manager-control-width\)[\s\S]*justify-self:\s*center/);
   assert.match(css, /\.admin-empty-state/);
   assert.match(css, /\.admin-auth-strip\[data-state="connected"\]/);
   assert.match(css, /\.admin-bulk-toolbar/);

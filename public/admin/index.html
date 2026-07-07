@@ -73,12 +73,14 @@
                 <button id="tag-manager-toggle" class="button-secondary" type="button" disabled aria-expanded="false">展开</button>
               </div>
               <div class="admin-tag-manager-body">
-                <div class="admin-inline-form admin-tag-manager-form">
+                <button id="tag-create-open" class="button-secondary admin-tag-create-open" type="button" disabled>新增标签</button>
+                <div id="tag-create-form" class="admin-inline-form admin-tag-manager-form" hidden>
                   <label class="field">
                     <span>新标签</span>
                     <input id="new-tag-name" type="text" disabled />
                   </label>
-                  <button id="create-tag" class="button-secondary" type="button" disabled>新增</button>
+                  <button id="create-tag" class="button-secondary" type="button" disabled>确认新增</button>
+                  <button id="tag-create-cancel" class="button-ghost" type="button" disabled>取消</button>
                 </div>
                 <div id="tag-manager-list" class="list-stack admin-list-stack"></div>
               </div>

@@ -1423,6 +1423,11 @@ body:has(.admin-shell) {
   width: 100%;
   margin-bottom: 8px;
 }
+.admin-tag-create-open {
+  inline-size: var(--admin-tag-manager-control-width);
+  max-inline-size: 100%;
+  justify-self: center;
+}
 
 .admin-tag-manager-panel .admin-inline-form {
   grid-template-columns: 1fr;
