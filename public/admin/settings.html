@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gallery 内容设置</title>
+    <link rel="stylesheet" href="/assets/admin/admin.css" />
+    <link rel="stylesheet" href="/assets/admin/settings.css" />
+  </head>
+  <body class="admin-body" data-admin-page="settings">
+    <section id="admin-auth-view" class="admin-auth-view">
+      <form id="admin-login-form" class="admin-login-panel" novalidate>
+        <p class="admin-eyebrow">Gallery Admin</p><h1>进入管理台</h1><p class="admin-muted">输入管理密钥后继续，此浏览器会记住登录状态。</p>
+        <label class="admin-field" for="admin-key"><span>管理密钥</span><span class="admin-password-control"><input id="admin-key" type="password" autocomplete="current-password" required /><button type="button" data-toggle-password aria-label="显示管理密钥" title="显示管理密钥">显示</button></span></label>
+        <p id="admin-login-error" class="admin-field-error" aria-live="polite"></p><button id="admin-login" class="admin-button-primary" type="submit">验证并进入</button>
+      </form>
+    </section>
+    <div id="admin-app" hidden>
+      <header class="admin-topbar"><a class="admin-brand" href="/admin/">Gallery 管理</a><nav class="admin-nav" aria-label="管理页面"><a href="/admin/">图片库</a><a class="is-active" href="/admin/settings.html">内容设置</a></nav><div class="admin-top-actions"><a href="/">查看前台</a><button type="button" data-admin-logout>退出</button></div></header>
+      <main class="settings-page"><header class="settings-heading"><div><p class="admin-eyebrow">Taxonomy</p><h1>内容设置</h1></div><button id="taxonomy-create" class="admin-button-primary" type="button">新增标签</button></header><div class="admin-segments" role="tablist"><button class="is-active" type="button" data-settings-tab="tags" role="tab">标签 <span id="tag-count">0</span></button><button type="button" data-settings-tab="categories" role="tab">主分类 <span id="category-count">0</span></button></div><section class="settings-panel"><div class="settings-tools"><input id="taxonomy-search" type="search" placeholder="搜索名称" /><div><button id="taxonomy-reset-order" type="button" disabled>取消排序</button><button id="taxonomy-save-order" class="admin-button-primary" type="button" disabled>保存排序</button></div></div><p id="taxonomy-status" class="settings-status" aria-live="polite"></p><div id="taxonomy-list" class="taxonomy-list"></div></section></main>
+      <div id="admin-dialog-host"></div><div id="admin-toast-host" class="admin-toast-host" aria-live="polite"></div>
+    </div>
+    <script type="module" src="/assets/admin/settings-page.js"></script>
+  </body>
+</html>
