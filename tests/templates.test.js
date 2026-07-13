@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 import { renderGalleryCards, renderTagChips } from "../src/shared/templates.js";
 
@@ -52,4 +52,23 @@ test("runtime public templates stay aligned with shared templates", () => {
   const runtime = readFileSync(new URL("../public/assets/templates.js", import.meta.url), "utf8");
   const shared = readFileSync(new URL("../src/shared/templates.js", import.meta.url), "utf8");
   assert.equal(runtime, shared);
+});
+
+test("legacy admin pages and scripts are removed", () => {
+  for (const path of [
+    "../public/admin/upload.html", "../public/admin/images.html", "../public/admin/tags.html",
+    "../public/assets/admin.js", "../public/assets/admin-categories.js",
+  ]) {
+    assert.equal(existsSync(new URL(path, import.meta.url)), false, path);
+  }
+});
+
+test("public assets contain only public gallery concerns", () => {
+  const css = readFileSync(new URL("../public/assets/main.css", import.meta.url), "utf8");
+  const runtime = readFileSync(new URL("../public/assets/templates.js", import.meta.url), "utf8");
+  const shared = readFileSync(new URL("../src/shared/templates.js", import.meta.url), "utf8");
+  assert.doesNotMatch(css, /\.admin-/);
+  for (const source of [runtime, shared]) {
+    assert.deepEqual([...source.matchAll(/export function (\w+)/g)].map((match) => match[1]), ["renderTagChips", "renderGalleryCards"]);
+  }
 });
