@@ -35,6 +35,19 @@ test("admin pages load page-specific modules and styles", () => {
   assert.match(settings, /\/assets\/admin\/settings-page\.js/);
 });
 
+test("image workbench exposes filtering details upload and bulk controls", () => {
+  const html = readFileSync(new URL("../public/admin/index.html", import.meta.url), "utf8");
+  for (const id of [
+    "admin-search", "admin-sort", "admin-density", "category-filter-list", "tag-filter-list",
+    "image-list", "admin-load-more", "admin-upload-open", "admin-upload-dialog",
+    "admin-detail-drawer", "admin-bulk-toolbar", "bulk-assign-tags",
+    "bulk-assign-category", "bulk-delete", "admin-dialog-host", "admin-toast-host",
+  ]) {
+    assert.match(html, new RegExp(`id="${id}"`));
+  }
+  assert.doesNotMatch(html, /admin-tag-manager/);
+});
+
 test("runtime public templates stay aligned with shared templates", () => {
   const runtime = readFileSync(new URL("../public/assets/templates.js", import.meta.url), "utf8");
   const shared = readFileSync(new URL("../src/shared/templates.js", import.meta.url), "utf8");

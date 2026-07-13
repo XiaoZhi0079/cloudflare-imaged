@@ -1,0 +1,458 @@
+import { createAdminApiClient, AdminUnauthorizedError } from "./api-client.js";
+import { createAdminKeyStore, verifyAdminKey } from "./auth.js";
+import { createDialogHost } from "./dialogs.js";
+import { createLibraryState } from "./library-state.js";
+import { createNotifier } from "./notifications.js";
+import { renderImageCard } from "./renderers/image-card.js";
+
+const elements = {
+  authView: document.querySelector("#admin-auth-view"),
+  app: document.querySelector("#admin-app"),
+  loginForm: document.querySelector("#admin-login-form"),
+  loginButton: document.querySelector("#admin-login"),
+  loginError: document.querySelector("#admin-login-error"),
+  keyInput: document.querySelector("#admin-key"),
+  passwordToggle: document.querySelector("[data-toggle-password]"),
+  logout: document.querySelector("[data-admin-logout]"),
+  visibleCount: document.querySelector("#admin-visible-count"),
+  search: document.querySelector("#admin-search"),
+  sort: document.querySelector("#admin-sort"),
+  density: document.querySelector("#admin-density"),
+  clearFilters: document.querySelector("#admin-clear-filters"),
+  categoryFilters: document.querySelector("#category-filter-list"),
+  tagFilterSearch: document.querySelector("#tag-filter-search"),
+  tagFilters: document.querySelector("#tag-filter-list"),
+  imageList: document.querySelector("#image-list"),
+  loadMore: document.querySelector("#admin-load-more"),
+  uploadOpen: document.querySelector("#admin-upload-open"),
+  detailDrawer: document.querySelector("#admin-detail-drawer"),
+  bulkToolbar: document.querySelector("#admin-bulk-toolbar"),
+  bulkCount: document.querySelector("#bulk-selected-count"),
+  bulkTags: document.querySelector("#bulk-assign-tags"),
+  bulkCategory: document.querySelector("#bulk-assign-category"),
+  bulkDelete: document.querySelector("#bulk-delete"),
+  bulkClear: document.querySelector("#bulk-clear-selection"),
+  dialogHost: document.querySelector("#admin-dialog-host"),
+};
+
+const keyStore = createAdminKeyStore();
+const dialogs = createDialogHost(elements.dialogHost);
+const notifier = createNotifier(document.querySelector("#admin-toast-host"));
+let state = createLibraryState();
+let searchTimer = null;
+let compact = false;
+let detailImageId = null;
+let detailOpener = null;
+
+function showAuth(message = "") {
+  state = createLibraryState();
+  closeDetail({ restoreFocus: false });
+  elements.app.hidden = true;
+  elements.authView.hidden = false;
+  elements.loginError.textContent = message;
+  elements.keyInput.value = keyStore.get();
+  requestAnimationFrame(() => elements.keyInput.focus());
+}
+
+function showApp() {
+  elements.authView.hidden = true;
+  elements.app.hidden = false;
+}
+
+const client = createAdminApiClient({
+  getKey: () => keyStore.get(),
+  onUnauthorized: () => {
+    keyStore.clear();
+    showAuth("登录状态已失效，请重新输入管理密钥。");
+  },
+});
+
+function errorMessage(error) {
+  return error?.message || "操作失败，请稍后重试。";
+}
+
+function createElement(tag, attributes = {}, text = "") {
+  const element = document.createElement(tag);
+  for (const [name, value] of Object.entries(attributes)) {
+    if (name === "className") element.className = value;
+    else if (name === "checked") element.checked = Boolean(value);
+    else if (name === "value") element.value = value;
+    else element.setAttribute(name, value);
+  }
+  if (text) element.textContent = text;
+  return element;
+}
+
+function selectedImages() {
+  const ids = state.getSelectedIds();
+  return state.getImages().filter((image) => ids.has(Number(image.id)));
+}
+
+function replaceImages(updates) {
+  const replacements = new Map(updates.map((image) => [Number(image.id), image]));
+  state.syncImages(state.getImages().map((image) => replacements.get(Number(image.id)) ?? image));
+}
+
+function renderFilters() {
+  const { categoryId, tagNames } = state.getFilters();
+  elements.categoryFilters.replaceChildren();
+  const categoryCounts = new Map();
+  for (const image of state.getImages()) {
+    if (image.category?.id) categoryCounts.set(Number(image.category.id), (categoryCounts.get(Number(image.category.id)) ?? 0) + 1);
+  }
+  const categoryOptions = [{ id: null, name: "全部图片", count: state.getImages().length }, ...state.getCategories().map((category) => ({
+    ...category,
+    count: categoryCounts.get(Number(category.id)) ?? 0,
+  }))];
+  for (const category of categoryOptions) {
+    const label = createElement("label", { className: "filter-option" });
+    const input = createElement("input", { type: "radio", name: "category-filter", value: category.id ?? "", checked: categoryId === category.id });
+    input.addEventListener("change", () => { state.setCategory(category.id); renderLibrary(); });
+    label.append(input, createElement("span", {}, category.name), createElement("small", {}, category.count));
+    elements.categoryFilters.append(label);
+  }
+
+  const tagQuery = elements.tagFilterSearch.value.trim().toLocaleLowerCase("zh-CN");
+  elements.tagFilters.replaceChildren();
+  for (const tag of state.getTags().filter((item) => !tagQuery || item.name.toLocaleLowerCase("zh-CN").includes(tagQuery))) {
+    const count = state.getImages().filter((image) => (image.tags ?? []).includes(tag.name)).length;
+    const label = createElement("label", { className: "filter-option" });
+    const input = createElement("input", { type: "checkbox", value: tag.name, checked: tagNames.has(tag.name) });
+    input.addEventListener("change", () => {
+      const next = state.getFilters().tagNames;
+      if (input.checked) next.add(tag.name); else next.delete(tag.name);
+      state.setTagsFilter(next);
+      renderLibrary();
+    });
+    label.append(input, createElement("span", {}, tag.name), createElement("small", {}, count));
+    elements.tagFilters.append(label);
+  }
+}
+
+function renderLibrary() {
+  const visible = state.visibleImages();
+  const rendered = state.renderedImages();
+  const selectedIds = state.getSelectedIds();
+  elements.visibleCount.textContent = visible.length === state.getImages().length
+    ? String(visible.length)
+    : `${visible.length} / ${state.getImages().length}`;
+  elements.imageList.classList.toggle("is-compact", compact);
+  elements.imageList.innerHTML = rendered.length
+    ? rendered.map((image) => renderImageCard(image, { selected: selectedIds.has(Number(image.id)) })).join("")
+    : `<div class="admin-empty">${state.getImages().length ? "没有符合当前筛选的图片" : "图片库为空"}</div>`;
+  elements.loadMore.hidden = !state.hasMore();
+  elements.bulkToolbar.hidden = selectedIds.size === 0;
+  elements.bulkCount.textContent = `已选择 ${selectedIds.size} 张`;
+}
+
+function renderAll() {
+  renderFilters();
+  renderLibrary();
+}
+
+function renderLoading() {
+  elements.imageList.innerHTML = `<div class="admin-skeleton">正在加载图片库...</div>`;
+  elements.visibleCount.textContent = "...";
+}
+
+async function loadLibrary(tags) {
+  showApp();
+  renderLoading();
+  const [{ images = [] }, { categories = [] }] = await Promise.all([
+    client.request("/api/admin/images"),
+    client.request("/api/admin/categories"),
+  ]);
+  state = createLibraryState();
+  state.setTags(tags);
+  state.setCategories(categories);
+  state.setImages(images);
+  renderAll();
+}
+
+async function authenticate(key) {
+  keyStore.set(key);
+  const tags = await verifyAdminKey(client);
+  await loadLibrary(tags);
+}
+
+async function submitLogin(event) {
+  event.preventDefault();
+  const key = elements.keyInput.value.trim();
+  if (!key) {
+    elements.loginError.textContent = "请输入管理密钥。";
+    return;
+  }
+  elements.loginButton.disabled = true;
+  elements.loginError.textContent = "";
+  try {
+    await authenticate(key);
+  } catch (error) {
+    keyStore.clear();
+    if (!(error instanceof AdminUnauthorizedError)) showAuth(errorMessage(error));
+  } finally {
+    elements.loginButton.disabled = false;
+  }
+}
+
+function closeDetail({ restoreFocus = true } = {}) {
+  elements.detailDrawer.hidden = true;
+  elements.detailDrawer.replaceChildren();
+  detailImageId = null;
+  if (restoreFocus) detailOpener?.focus();
+  detailOpener = null;
+}
+
+function checkboxField(tag, checked) {
+  const label = createElement("label", { className: "detail-check" });
+  label.append(createElement("input", { type: "checkbox", value: tag.id, checked }), createElement("span", {}, tag.name));
+  return label;
+}
+
+function openDetail(image, opener) {
+  detailImageId = Number(image.id);
+  detailOpener = opener;
+  const header = createElement("header");
+  const heading = createElement("h2", { id: "detail-title" }, "图片详情");
+  const close = createElement("button", { type: "button", "aria-label": "关闭详情", title: "关闭" }, "×");
+  close.addEventListener("click", () => closeDetail());
+  header.append(heading, close);
+
+  const preview = image.fileUrl
+    ? createElement("img", { className: "detail-preview", src: image.fileUrl, alt: image.fileName })
+    : createElement("div", { className: "detail-preview image-preview-fallback" }, "预览不可用");
+  const form = createElement("form", { className: "detail-form" });
+  const nameLabel = createElement("label", { className: "admin-field" });
+  const fileName = createElement("input", { name: "fileName", value: image.fileName, required: "" });
+  nameLabel.append(createElement("span", {}, "文件名"), fileName);
+  const categoryLabel = createElement("label", { className: "admin-field" });
+  const category = createElement("select", { name: "categoryId" });
+  for (const item of state.getCategories()) {
+    const option = createElement("option", { value: item.id }, `${item.name} /${item.directorySlug}`);
+    option.selected = Number(item.id) === Number(image.category?.id);
+    category.append(option);
+  }
+  categoryLabel.append(createElement("span", {}, "主分类"), category);
+  const tags = createElement("fieldset", { className: "detail-tags" });
+  tags.append(createElement("legend", {}, "标签"));
+  for (const tag of state.getTags()) tags.append(checkboxField(tag, (image.tags ?? []).includes(tag.name)));
+  const error = createElement("p", { className: "admin-field-error", "aria-live": "polite" });
+  const save = createElement("button", { type: "submit", className: "admin-button-primary" }, "保存修改");
+  form.append(nameLabel, categoryLabel, tags, error, save);
+  form.addEventListener("submit", (event) => saveDetail(event, { fileName, category, tags, error, save }));
+  elements.detailDrawer.replaceChildren(header, preview, form);
+  elements.detailDrawer.hidden = false;
+  requestAnimationFrame(() => fileName.focus());
+}
+
+async function saveDetail(event, controls) {
+  event.preventDefault();
+  let current = state.getImages().find((image) => Number(image.id) === detailImageId);
+  if (!current) return;
+  const nextName = controls.fileName.value.trim();
+  if (!nextName) {
+    controls.error.textContent = "文件名不能为空。";
+    return;
+  }
+  controls.save.disabled = true;
+  controls.error.textContent = "";
+  try {
+    if (nextName !== current.fileName) {
+      const payload = await client.request("/api/admin/images", {
+        method: "PATCH",
+        body: JSON.stringify({ imageId: current.id, fileName: nextName }),
+      });
+      current = payload.image;
+      replaceImages([current]);
+      renderLibrary();
+    }
+    if (Number(controls.category.value) !== Number(current.category?.id)) {
+      const payload = await client.request("/api/admin/images/category-assignments/bulk", {
+        method: "POST",
+        body: JSON.stringify({ imageIds: [current.id], categoryId: Number(controls.category.value) }),
+      });
+      if (payload.failed?.length) throw new Error(payload.failed[0].error);
+      current = payload.images[0];
+      replaceImages([current]);
+      renderAll();
+    }
+    const tagIds = [...controls.tags.querySelectorAll("input:checked")].map((input) => Number(input.value));
+    const currentTagIds = state.getTags().filter((tag) => (current.tags ?? []).includes(tag.name)).map((tag) => Number(tag.id));
+    if (tagIds.length !== currentTagIds.length || tagIds.some((id) => !currentTagIds.includes(id))) {
+      await client.request("/api/admin/images/tag-assignments", {
+        method: "POST",
+        body: JSON.stringify({ imageId: current.id, tagIds }),
+      });
+      const selected = new Set(tagIds);
+      current = { ...current, tags: state.getTags().filter((tag) => selected.has(Number(tag.id))).map((tag) => tag.name) };
+      replaceImages([current]);
+      renderAll();
+    }
+    closeDetail();
+    notifier.success("图片信息已保存");
+  } catch (error) {
+    if (!(error instanceof AdminUnauthorizedError)) controls.error.textContent = errorMessage(error);
+  } finally {
+    controls.save.disabled = false;
+  }
+}
+
+function openChoiceDialog({ title, options, selected = new Set(), single = false, confirmLabel = "保存" }) {
+  const opener = document.activeElement;
+  return new Promise((resolve) => {
+    const backdrop = createElement("div", { className: "admin-dialog-backdrop" });
+    const panel = createElement("section", { className: "admin-dialog", role: "dialog", "aria-modal": "true", "aria-label": title });
+    const header = createElement("header");
+    const close = createElement("button", { type: "button", "aria-label": "关闭", title: "关闭" }, "×");
+    header.append(createElement("h2", {}, title), close);
+    const body = createElement("div", { className: "admin-dialog-body choice-list" });
+    for (const option of options) {
+      const label = createElement("label", { className: "filter-option" });
+      label.append(
+        createElement("input", { type: single ? "radio" : "checkbox", name: "dialog-choice", value: option.id, checked: selected.has(Number(option.id)) }),
+        createElement("span", {}, option.name),
+      );
+      body.append(label);
+    }
+    const footer = createElement("footer");
+    const cancel = createElement("button", { type: "button" }, "取消");
+    const confirm = createElement("button", { type: "button", className: "admin-button-primary" }, confirmLabel);
+    footer.append(cancel, confirm);
+    panel.append(header, body, footer);
+    backdrop.append(panel);
+    elements.dialogHost.replaceChildren(backdrop);
+    const finish = (value) => {
+      document.removeEventListener("keydown", onKeyDown);
+      elements.dialogHost.replaceChildren();
+      opener?.focus();
+      resolve(value);
+    };
+    const onKeyDown = (event) => { if (event.key === "Escape") finish(null); };
+    document.addEventListener("keydown", onKeyDown);
+    close.addEventListener("click", () => finish(null));
+    cancel.addEventListener("click", () => finish(null));
+    backdrop.addEventListener("click", (event) => { if (event.target === backdrop) finish(null); });
+    confirm.addEventListener("click", () => {
+      const values = [...body.querySelectorAll("input:checked")].map((input) => Number(input.value));
+      if (single && !values.length) return;
+      finish(single ? values[0] : values);
+    });
+    requestAnimationFrame(() => body.querySelector("input")?.focus());
+  });
+}
+
+async function bulkAssignTags() {
+  const imageIds = [...state.getSelectedIds()];
+  const tagIds = await openChoiceDialog({ title: "批量设置标签", options: state.getTags(), confirmLabel: "应用标签" });
+  if (tagIds === null) return;
+  try {
+    await client.request("/api/admin/images/tag-assignments/bulk", {
+      method: "POST",
+      body: JSON.stringify({ imageIds, tagIds }),
+    });
+    const selected = new Set(tagIds);
+    const names = state.getTags().filter((tag) => selected.has(Number(tag.id))).map((tag) => tag.name);
+    replaceImages(state.getImages().filter((image) => imageIds.includes(Number(image.id))).map((image) => ({ ...image, tags: names })));
+    state.clearSelection();
+    renderAll();
+    notifier.success(`已更新 ${imageIds.length} 张图片的标签`);
+  } catch (error) {
+    if (!(error instanceof AdminUnauthorizedError)) notifier.error(errorMessage(error));
+  }
+}
+
+async function bulkAssignCategory() {
+  const imageIds = [...state.getSelectedIds()];
+  const categoryId = await openChoiceDialog({ title: "批量移动主分类", options: state.getCategories(), single: true, confirmLabel: "移动" });
+  if (categoryId === null) return;
+  try {
+    const payload = await client.request("/api/admin/images/category-assignments/bulk", {
+      method: "POST",
+      body: JSON.stringify({ imageIds, categoryId }),
+    });
+    const failures = new Set((payload.failed ?? []).map((item) => Number(item.imageId)));
+    const failedUpdates = state.getImages().filter((image) => failures.has(Number(image.id))).map((image) => ({ ...image, syncStatus: "move_failed", note: "批量移动分类时底层文件移动失败。" }));
+    replaceImages([...(payload.images ?? []), ...failedUpdates]);
+    state.selectImages(failures);
+    renderAll();
+    if (failures.size) notifier.error(`${payload.images.length} 张移动成功，${failures.size} 张失败并保持选中。`);
+    else notifier.success(`已移动 ${payload.images.length} 张图片`);
+  } catch (error) {
+    if (!(error instanceof AdminUnauthorizedError)) notifier.error(errorMessage(error));
+  }
+}
+
+async function bulkDelete() {
+  const imageIds = [...state.getSelectedIds()];
+  const confirmed = await dialogs.confirm({ title: "批量删除图片", message: `确定永久删除选中的 ${imageIds.length} 张图片吗？`, confirmLabel: "删除", danger: true });
+  if (!confirmed) return;
+  try {
+    await client.request("/api/admin/images/bulk-delete", {
+      method: "POST",
+      body: JSON.stringify({ imageIds }),
+    });
+    state.syncImages(state.getImages().filter((image) => !imageIds.includes(Number(image.id))));
+    renderAll();
+    notifier.success(`已删除 ${imageIds.length} 张图片`);
+  } catch (error) {
+    const failedId = Number(error?.payload?.imageId);
+    if (failedId) replaceImages(state.getImages().filter((image) => Number(image.id) === failedId).map((image) => ({ ...image, syncStatus: "delete_failed", note: errorMessage(error) })));
+    if (!(error instanceof AdminUnauthorizedError)) notifier.error(errorMessage(error));
+    renderLibrary();
+  }
+}
+
+elements.loginForm.addEventListener("submit", submitLogin);
+elements.passwordToggle.addEventListener("click", () => {
+  const visible = elements.keyInput.type === "text";
+  elements.keyInput.type = visible ? "password" : "text";
+  elements.passwordToggle.textContent = visible ? "显示" : "隐藏";
+  elements.passwordToggle.setAttribute("aria-label", visible ? "显示管理密钥" : "隐藏管理密钥");
+});
+elements.logout.addEventListener("click", () => { keyStore.clear(); showAuth(); });
+elements.search.addEventListener("input", () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { state.setQuery(elements.search.value); renderLibrary(); }, 150);
+});
+elements.sort.addEventListener("change", () => { state.setSort(elements.sort.value); renderLibrary(); });
+elements.density.addEventListener("click", () => {
+  compact = !compact;
+  elements.density.textContent = compact ? "舒适视图" : "紧凑视图";
+  elements.density.setAttribute("aria-pressed", String(compact));
+  renderLibrary();
+});
+elements.clearFilters.addEventListener("click", () => {
+  state.resetFilters();
+  elements.search.value = "";
+  elements.tagFilterSearch.value = "";
+  renderAll();
+});
+elements.tagFilterSearch.addEventListener("input", renderFilters);
+elements.loadMore.addEventListener("click", () => { state.showMore(); renderLibrary(); });
+elements.imageList.addEventListener("click", (event) => {
+  const action = event.target.closest("[data-action]")?.dataset.action;
+  const card = event.target.closest("[data-image-id]");
+  if (!action || !card) return;
+  const image = state.getImages().find((item) => String(item.id) === card.dataset.imageId);
+  if (!image) return;
+  if (action === "toggle-selection") { state.toggleSelection(image.id); renderLibrary(); }
+  if (action === "open-detail") openDetail(image, event.target);
+});
+elements.imageList.addEventListener("error", (event) => {
+  if (!event.target.matches("[data-preview-image]")) return;
+  event.target.hidden = true;
+  event.target.nextElementSibling.hidden = false;
+}, true);
+elements.bulkClear.addEventListener("click", () => { state.clearSelection(); renderLibrary(); });
+elements.bulkTags.addEventListener("click", bulkAssignTags);
+elements.bulkCategory.addEventListener("click", bulkAssignCategory);
+elements.bulkDelete.addEventListener("click", bulkDelete);
+elements.uploadOpen.addEventListener("click", () => elements.uploadOpen.dispatchEvent(new CustomEvent("admin:upload-requested", { bubbles: true })));
+document.addEventListener("keydown", (event) => { if (event.key === "Escape" && detailImageId !== null) closeDetail(); });
+
+if (keyStore.get()) {
+  authenticate(keyStore.get()).catch((error) => {
+    if (!(error instanceof AdminUnauthorizedError)) showAuth(errorMessage(error));
+  });
+} else {
+  showAuth();
+}

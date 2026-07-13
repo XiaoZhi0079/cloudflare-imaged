@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import {
   createLibraryState,
@@ -67,4 +68,13 @@ test("image card includes a fallback when no preview URL exists", () => {
   const html = renderImageCard({ id: 9, fileName: "missing.webp", fileUrl: "", tags: [] });
   assert.doesNotMatch(html, /<img/);
   assert.match(html, /image-preview-fallback/);
+});
+
+test("library controller connects detail and bulk API operations", () => {
+  const source = readFileSync(new URL("../public/assets/admin/library-page.js", import.meta.url), "utf8");
+  assert.match(source, /\/api\/admin\/images"/);
+  assert.match(source, /\/api\/admin\/images\/tag-assignments"/);
+  assert.match(source, /\/api\/admin\/images\/tag-assignments\/bulk/);
+  assert.match(source, /\/api\/admin\/images\/category-assignments\/bulk/);
+  assert.match(source, /\/api\/admin\/images\/bulk-delete/);
 });
