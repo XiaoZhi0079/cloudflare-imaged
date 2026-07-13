@@ -3,3 +3,4 @@
 .wrangler-config/
 .xdg/
 node_modules/
+.worktrees/
