@@ -20,6 +20,34 @@ export async function allRows(database, sql, params = []) {
   return Array.isArray(result?.results) ? result.results : result;
 }
 
+export function parseCompleteOrder(value) {
+  if (!Array.isArray(value) || value.length === 0) {
+    return { error: "排序内容不能为空。" };
+  }
+
+  const items = value.map((item) => ({
+    id: Number(item?.id),
+    sortOrder: Number(item?.sortOrder),
+  }));
+  const ids = new Set(items.map((item) => item.id));
+  const orders = items.map((item) => item.sortOrder).sort((left, right) => left - right);
+  const valid = items.every(
+    (item) => Number.isInteger(item.id)
+      && item.id > 0
+      && Number.isInteger(item.sortOrder)
+      && item.sortOrder > 0,
+  );
+  const contiguous = orders.every((order, index) => order === index + 1);
+
+  if (!valid || ids.size !== items.length || !contiguous) {
+    return { error: "排序内容无效。" };
+  }
+
+  return {
+    items: [...items].sort((left, right) => left.sortOrder - right.sortOrder),
+  };
+}
+
 export function requireAdminKey(request, env) {
   const requestKey = request.headers.get("x-gallery-admin-key");
 

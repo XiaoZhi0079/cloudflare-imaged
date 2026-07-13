@@ -102,6 +102,30 @@ async function run(database, sql, params = []) {
   return await bindStatement(database, sql, params).run();
 }
 
+async function runBatch(database, entries) {
+  const statements = entries.map(({ sql, params }) => bindStatement(database, sql, params));
+  if (typeof database.batch === "function") {
+    return await database.batch(statements);
+  }
+
+  if (typeof database.exec !== "function") {
+    throw new Error("Database does not support atomic batches");
+  }
+
+  database.exec("BEGIN");
+  try {
+    const results = [];
+    for (const statement of statements) {
+      results.push(await statement.run());
+    }
+    database.exec("COMMIT");
+    return results;
+  } catch (error) {
+    database.exec("ROLLBACK");
+    throw error;
+  }
+}
+
 function toPlainRecord(row) {
   return row && typeof row === "object" ? { ...row } : row;
 }
@@ -325,6 +349,41 @@ async function normalizeCategorySortOrders(database) {
   return await applyContiguousCategoryOrder(database, await listCategoriesOrdered(database));
 }
 
+function recordsInSubmittedOrder(records, orderedIds) {
+  const recordsById = new Map(records.map((record) => [Number(record.id), record]));
+  const submittedIds = orderedIds.map(Number);
+  const uniqueIds = new Set(submittedIds);
+
+  if (
+    submittedIds.length !== records.length
+    || uniqueIds.size !== records.length
+    || submittedIds.some((id) => !recordsById.has(id))
+  ) {
+    throw new RangeError("incomplete order");
+  }
+
+  return submittedIds.map((id) => recordsById.get(id));
+}
+
+async function applyExactOrder(database, table, records) {
+  await runBatch(
+    database,
+    records.map((record, index) => ({
+      sql: `
+        UPDATE ${table}
+        SET sort_order = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `,
+      params: [index + 1, record.id],
+    })),
+  );
+
+  return records.map((record, index) => ({
+    ...record,
+    sort_order: index + 1,
+  }));
+}
+
 function normalizeCategoryName(name) {
   return String(name ?? "").trim();
 }
@@ -481,6 +540,13 @@ export function createGalleryRepository(database) {
       return await listTagsOrdered(database);
     },
 
+    async reorderTags(orderedIds) {
+      await ensureSchema();
+      const records = recordsInSubmittedOrder(await listTagsOrdered(database), orderedIds);
+      await applyExactOrder(database, "tags", records);
+      return await listTagsOrdered(database);
+    },
+
     async listVisibleTags() {
       await ensureSchema();
       await normalizeTagSortOrders(database);
@@ -504,6 +570,13 @@ export function createGalleryRepository(database) {
     async listCategories() {
       await ensureSchema();
       await normalizeCategorySortOrders(database);
+      return await listCategoriesOrdered(database);
+    },
+
+    async reorderCategories(orderedIds) {
+      await ensureSchema();
+      const records = recordsInSubmittedOrder(await listCategoriesOrdered(database), orderedIds);
+      await applyExactOrder(database, "categories", records);
       return await listCategoriesOrdered(database);
     },
 
