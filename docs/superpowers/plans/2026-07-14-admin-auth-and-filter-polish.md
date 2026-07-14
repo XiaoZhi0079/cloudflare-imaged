@@ -172,3 +172,105 @@ Expected: `0` failures.
 git add public/admin/index.html public/assets/admin/library-page.js public/assets/admin/workbench.css tests/admin-library.test.js tests/templates.test.js
 git commit -m "完善图片库多标签筛选反馈"
 ```
+
+### Task 3: 将 R2 目录移出内容筛选
+
+**Files:**
+- Modify: `public/admin/index.html`
+- Modify: `public/assets/admin/library-state.js`
+- Modify: `public/assets/admin/library-page.js`
+- Modify: `public/assets/admin/workbench.css`
+- Modify: `tests/admin-library.test.js`
+- Modify: `tests/templates.test.js`
+
+- [ ] **Step 1: 写职责边界失败测试**
+
+更新状态测试，使筛选只接收查询和标签，并断言状态不再暴露分类筛选方法：
+
+```js
+assert.deepEqual(
+  filterImages(images, { query: "", tagNames: new Set(["人像", "自然光"]) }),
+  [images[0]],
+);
+const state = createLibraryState();
+assert.equal(state.setCategory, undefined);
+assert.equal("categoryId" in state.getFilters(), false);
+```
+
+更新模板测试，要求左侧没有主分类筛选，但管理端卡片仍输出目录标识：
+
+```js
+assert.doesNotMatch(html, /id="category-filter-list"/);
+assert.doesNotMatch(html, /<h3>主分类<\/h3>/);
+assert.match(renderImageCard(image), /Portrait/);
+assert.doesNotMatch(renderGalleryCards([image]), /Portrait/);
+```
+
+- [ ] **Step 2: 运行测试确认失败**
+
+Run: `node --test tests/admin-library.test.js tests/templates.test.js`
+
+Expected: FAIL，因为状态和页面仍保留分类筛选。
+
+- [ ] **Step 3: 从状态层移除分类筛选**
+
+将 `filterImages` 参数缩减为查询与标签：
+
+```js
+export function filterImages(images, { query = "", tagNames = new Set() } = {}) {
+  return images.filter((image) => {
+    // 保留查询和全部标签匹配，不判断 image.category。
+  });
+}
+```
+
+从 `createLibraryState` 删除 `categoryId`、`setCategory()`，并从 `getFilters()`、`resetFilters()` 与 `visibleImages()` 中移除分类过滤数据。`categories`、`setCategories()` 和 `getCategories()` 保留给管理操作。
+
+- [ ] **Step 4: 删除左侧主分类区块与控制器代码**
+
+模板筛选栏只保留标签区：
+
+```html
+<aside id="admin-filters" class="filter-rail">
+  <div class="filter-head">...</div>
+  <section><!-- 标签多选 --></section>
+</aside>
+```
+
+从 `library-page.js` 删除 `categoryFilters` 元素引用、分类计数和分类单选框渲染。上传对话框仍使用 `state.getCategories()`，但不再从已删除的筛选状态预选目录：
+
+```js
+category.append(createElement("option", { value: "" }, "选择主分类"));
+for (const item of state.getCategories()) {
+  category.append(createElement("option", { value: item.id }, `${item.name} /${item.directorySlug}`));
+}
+```
+
+- [ ] **Step 5: 清理样式并运行测试**
+
+将筛选列表选择器从：
+
+```css
+#category-filter-list,#tag-filter-list
+```
+
+改为：
+
+```css
+#tag-filter-list
+```
+
+Run: `node --test tests/admin-library.test.js tests/templates.test.js`
+
+Run: `npm test`
+
+Expected: all tests pass.
+
+- [ ] **Step 6: 浏览器验证并提交**
+
+在 `/admin/` 确认左侧没有主分类区块；两个标签可同时选中；管理端图片卡片仍显示目录；上传、详情与批量移动的目录选择仍存在。
+
+```powershell
+git add public/admin/index.html public/assets/admin/library-state.js public/assets/admin/library-page.js public/assets/admin/workbench.css tests/admin-library.test.js tests/templates.test.js
+git commit -m "移除图片库主分类筛选"
+```
