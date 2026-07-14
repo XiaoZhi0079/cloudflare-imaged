@@ -22,7 +22,6 @@ const elements = {
   filterRail: document.querySelector("#admin-filters"),
   density: document.querySelector("#admin-density"),
   clearFilters: document.querySelector("#admin-clear-filters"),
-  categoryFilters: document.querySelector("#category-filter-list"),
   tagFilterSearch: document.querySelector("#tag-filter-search"),
   selectedTagCount: document.querySelector("#tag-filter-selected-count"),
   tagFilters: document.querySelector("#tag-filter-list"),
@@ -115,24 +114,7 @@ function replaceImages(updates) {
 }
 
 function renderFilters() {
-  const { categoryId, tagNames } = state.getFilters();
-  elements.categoryFilters.replaceChildren();
-  const categoryCounts = new Map();
-  for (const image of state.getImages()) {
-    if (image.category?.id) categoryCounts.set(Number(image.category.id), (categoryCounts.get(Number(image.category.id)) ?? 0) + 1);
-  }
-  const categoryOptions = state.getCategories().map((category) => ({
-    ...category,
-    count: categoryCounts.get(Number(category.id)) ?? 0,
-  }));
-  for (const category of categoryOptions) {
-    const label = createElement("label", { className: "filter-option" });
-    const input = createElement("input", { type: "radio", name: "category-filter", value: category.id ?? "", checked: categoryId === category.id });
-    input.addEventListener("change", () => { state.setCategory(category.id); renderLibrary(); });
-    label.append(input, createElement("span", {}, category.name), createElement("small", {}, category.count));
-    elements.categoryFilters.append(label);
-  }
-
+  const { tagNames } = state.getFilters();
   const tagQuery = elements.tagFilterSearch.value.trim().toLocaleLowerCase("zh-CN");
   elements.selectedTagCount.textContent = `已选 ${tagNames.size}`;
   elements.tagFilters.replaceChildren();
@@ -540,11 +522,9 @@ function openUploadDialog() {
   filesLabel.append(createElement("span", {}, "图片文件"), files);
   const categoryLabel = createElement("label", { className: "admin-field" });
   const category = createElement("select");
-  const activeCategoryId = state.getFilters().categoryId;
   category.append(createElement("option", { value: "" }, "选择主分类"));
   for (const item of state.getCategories()) {
     const option = createElement("option", { value: item.id }, `${item.name} /${item.directorySlug}`);
-    option.selected = Number(item.id) === Number(activeCategoryId);
     category.append(option);
   }
   categoryLabel.append(createElement("span", {}, "主分类"), category);

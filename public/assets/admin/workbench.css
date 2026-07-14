@@ -15,7 +15,7 @@
 .filter-section-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; }
 #tag-filter-selected-count { color:var(--admin-accent); font-weight:800; }
 .filter-rail input[type="search"] { width:100%; min-height:40px; padding:0 10px; border:1px solid var(--admin-line); border-radius:6px; background:var(--admin-surface); }
-#category-filter-list,#tag-filter-list { display:grid; gap:4px; margin-top:8px; }
+#tag-filter-list { display:grid; gap:4px; margin-top:8px; }
 .filter-option { min-height:40px; display:grid; grid-template-columns:20px minmax(0,1fr) auto; align-items:center; gap:8px; padding:0 8px; border-radius:6px; cursor:pointer; font-size:13px; }
 .filter-option:hover { background:rgba(180,78,39,.08); }
 .filter-tag-option { border:1px solid transparent; }

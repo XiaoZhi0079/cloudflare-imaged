@@ -6,10 +6,11 @@ import { renderGalleryCards, renderTagChips } from "../src/shared/templates.js";
 
 test("public renderers keep gallery behavior", () => {
   const chips = renderTagChips([{ name: "人像", slug: "portrait" }], "portrait");
-  const cards = renderGalleryCards([{ id: 1, fileName: "a.webp", fileUrl: "/file/a.webp", tags: ["人像"] }]);
+  const cards = renderGalleryCards([{ id: 1, fileName: "a.webp", fileUrl: "/file/a.webp", tags: ["人像"], category: { name: "Portrait" } }]);
   assert.match(chips, /tag-chip active/);
   assert.match(cards, /loading="lazy"/);
   assert.match(cards, /gallery-hover-meta/);
+  assert.doesNotMatch(cards, /Portrait/);
 });
 
 test("both admin pages use the shared authentication gate", () => {
@@ -38,7 +39,7 @@ test("admin pages load page-specific modules and styles", () => {
 test("image workbench exposes filtering details upload and bulk controls", () => {
   const html = readFileSync(new URL("../public/admin/index.html", import.meta.url), "utf8");
   for (const id of [
-    "admin-search", "admin-sort", "admin-density", "category-filter-list", "tag-filter-list",
+    "admin-search", "admin-sort", "admin-density", "tag-filter-list",
     "image-list", "admin-load-more", "admin-upload-open", "admin-upload-dialog",
     "admin-detail-drawer", "admin-bulk-toolbar", "bulk-assign-tags",
     "bulk-assign-category", "bulk-delete", "admin-dialog-host", "admin-toast-host",
@@ -46,6 +47,8 @@ test("image workbench exposes filtering details upload and bulk controls", () =>
     assert.match(html, new RegExp(`id="${id}"`));
   }
   assert.doesNotMatch(html, /admin-tag-manager/);
+  assert.doesNotMatch(html, /id="category-filter-list"/);
+  assert.doesNotMatch(html, /<h3>主分类<\/h3>/);
 });
 
 test("image workbench renders only real filters with visible multi-select state", () => {
@@ -55,6 +58,7 @@ test("image workbench renders only real filters with visible multi-select state"
   assert.doesNotMatch(controller, /name: "全部图片"/);
   assert.match(controller, /filter-tag-option/);
   assert.match(controller, /is-selected/);
+  assert.doesNotMatch(controller, /categoryFilters/);
 });
 
 test("runtime public templates stay aligned with shared templates", () => {

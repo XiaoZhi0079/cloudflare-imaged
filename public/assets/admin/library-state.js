@@ -6,18 +6,16 @@ function tagName(tag) {
   return typeof tag === "string" ? tag : tag?.name;
 }
 
-export function filterImages(images, { query = "", tagNames = new Set(), categoryId = null } = {}) {
+export function filterImages(images, { query = "", tagNames = new Set() } = {}) {
   const needle = normalizedText(query);
   const requiredTags = [...tagNames].map(normalizedText).filter(Boolean);
-  const selectedCategoryId = categoryId === null || categoryId === "" ? null : Number(categoryId);
 
   return images.filter((image) => {
     const imageTags = (image.tags ?? []).map((tag) => normalizedText(tagName(tag)));
     const searchable = [normalizedText(image.fileName), ...imageTags];
     const matchesQuery = !needle || searchable.some((value) => value.includes(needle));
     const matchesTags = requiredTags.every((required) => imageTags.includes(required));
-    const matchesCategory = selectedCategoryId === null || Number(image.category?.id) === selectedCategoryId;
-    return matchesQuery && matchesTags && matchesCategory;
+    return matchesQuery && matchesTags;
   });
 }
 
@@ -34,7 +32,6 @@ export function createLibraryState({ initialRenderLimit = 120, renderIncrement =
   let tags = [];
   let categories = [];
   let query = "";
-  let categoryId = null;
   let selectedTagNames = new Set();
   let selectedIds = new Set();
   let sort = "newest";
@@ -54,7 +51,7 @@ export function createLibraryState({ initialRenderLimit = 120, renderIncrement =
     getTags: () => tags,
     getCategories: () => categories,
     getSelectedIds: () => new Set(selectedIds),
-    getFilters: () => ({ query, categoryId, tagNames: new Set(selectedTagNames), sort }),
+    getFilters: () => ({ query, tagNames: new Set(selectedTagNames), sort }),
     setImages(next) {
       images = Array.isArray(next) ? [...next] : [];
       syncSelection();
@@ -73,10 +70,6 @@ export function createLibraryState({ initialRenderLimit = 120, renderIncrement =
       query = String(next ?? "");
       resetRenderLimit();
     },
-    setCategory(next) {
-      categoryId = next === null || next === "" ? null : Number(next);
-      resetRenderLimit();
-    },
     setTagsFilter(next) {
       selectedTagNames = new Set(next ?? []);
       resetRenderLimit();
@@ -87,7 +80,6 @@ export function createLibraryState({ initialRenderLimit = 120, renderIncrement =
     },
     resetFilters() {
       query = "";
-      categoryId = null;
       selectedTagNames = new Set();
       resetRenderLimit();
     },
@@ -106,7 +98,7 @@ export function createLibraryState({ initialRenderLimit = 120, renderIncrement =
       selectedIds.clear();
     },
     visibleImages() {
-      return sortImages(filterImages(images, { query, categoryId, tagNames: selectedTagNames }), sort);
+      return sortImages(filterImages(images, { query, tagNames: selectedTagNames }), sort);
     },
     renderedImages() {
       return state.visibleImages().slice(0, renderLimit);

@@ -14,13 +14,13 @@ const images = [
   { id: 3, fileName: "nature.webp", tags: ["自然光"], category: { id: 3, name: "人像" } },
 ];
 
-test("library filters require every tag and the selected category", () => {
+test("library filters require every selected tag", () => {
   assert.deepEqual(
-    filterImages(images, { query: "", tagNames: new Set(["人像", "自然光"]), categoryId: 3 }),
+    filterImages(images, { query: "", tagNames: new Set(["人像", "自然光"]) }),
     [images[0]],
   );
   assert.deepEqual(
-    filterImages(images, { query: "NATURE", tagNames: new Set(), categoryId: null }),
+    filterImages(images, { query: "NATURE", tagNames: new Set() }),
     [images[2]],
   );
 });
@@ -29,7 +29,7 @@ test("library selection survives filtering and drops removed image ids", () => {
   const state = createLibraryState();
   state.setImages(images);
   state.toggleSelection(2);
-  state.setCategory(3);
+  state.setTagsFilter(new Set(["自然光"]));
   assert.deepEqual([...state.getSelectedIds()], [2]);
   assert.deepEqual(state.visibleImages().map((image) => image.id), [3, 1]);
   state.syncImages(images.filter((image) => image.id !== 2));
@@ -42,6 +42,8 @@ test("empty filters show every image and multiple tags use intersection", () => 
   assert.deepEqual(state.visibleImages().map((image) => image.id), [3, 2, 1]);
   state.setTagsFilter(new Set(["人像", "自然光"]));
   assert.deepEqual(state.visibleImages().map((image) => image.id), [1]);
+  assert.equal(state.setCategory, undefined);
+  assert.equal("categoryId" in state.getFilters(), false);
 });
 
 test("library renders images in bounded increments", () => {
@@ -69,6 +71,7 @@ test("image card escapes values and exposes selection and detail actions", () =>
   assert.match(html, /data-action="toggle-selection"/);
   assert.match(html, /data-action="open-detail"/);
   assert.match(html, /aria-pressed="true"/);
+  assert.match(html, /人像/);
   assert.doesNotMatch(html, />三</);
 });
 
