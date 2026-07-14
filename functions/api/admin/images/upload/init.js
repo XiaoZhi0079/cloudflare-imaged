@@ -55,7 +55,7 @@ async function resolveSelectedCategory(repository, env, payload) {
   return { error: "请选择一个主分类。" };
 }
 
-export async function onRequest({ env, request }) {
+async function handleRequest({ env, request }) {
   const authFailure = requireAdminKey(request, env);
   if (authFailure) {
     return authFailure;
@@ -143,4 +143,14 @@ export async function onRequest({ env, request }) {
   return jsonResponse({
     uploads,
   });
+}
+
+export async function onRequest(context) {
+  try {
+    return await handleRequest(context);
+  } catch (error) {
+    const name = String(error?.name || "Error").slice(0, 80);
+    const message = String(error?.message || "未知运行时错误").replace(/\s+/g, " ").slice(0, 240);
+    return jsonResponse({ error: `初始化上传失败：${name}: ${message}` }, 500);
+  }
 }

@@ -119,6 +119,25 @@ test("direct upload signing converts runtime failures into a safe diagnostic", a
   });
 });
 
+test("admin upload init handler converts unexpected runtime errors into JSON", async () => {
+  const env = createTestEnv();
+  const response = await adminUploadInitHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/images/upload/init", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-gallery-admin-key": "gallery-secret",
+      },
+      body: "{invalid-json",
+    }),
+  });
+
+  assert.equal(response.status, 500);
+  const payload = await response.json();
+  assert.match(payload.error, /^初始化上传失败：SyntaxError:/);
+});
+
 test("admin upload complete handler stores image records after direct upload succeeds", async () => {
   const env = createTestEnv();
   const repository = createGalleryRepository(env.GALLERY_DB);
