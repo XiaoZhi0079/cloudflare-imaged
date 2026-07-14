@@ -14,7 +14,7 @@ export class AdminUnauthorizedError extends AdminApiError {
   }
 }
 
-function parseResponseText(text) {
+function parseResponseText(text, response) {
   if (!text) {
     return {};
   }
@@ -22,6 +22,17 @@ function parseResponseText(text) {
   try {
     return JSON.parse(text);
   } catch {
+    const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+    const title = text.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]
+      ?.replace(/\s+/g, " ")
+      .trim();
+    if (title || contentType.includes("html") || text.trimStart().startsWith("<!DOCTYPE html")) {
+      const details = [`HTTP ${response.status}`];
+      if (title) details.push(title);
+      const rayId = response.headers.get("cf-ray");
+      if (rayId) details.push(`Ray ID ${rayId}`);
+      return { error: `请求失败（${details.join("，")}）` };
+    }
     return { error: text };
   }
 }
@@ -52,7 +63,7 @@ export function createAdminApiClient({
           headers,
           signal: controller.signal,
         });
-        const payload = parseResponseText(await response.text());
+        const payload = parseResponseText(await response.text(), response);
 
         if (response.status === 401) {
           onUnauthorized();

@@ -1,5 +1,35 @@
 const ACTIVE_STATES = new Set(["signing", "uploading", "completing"]);
 
+function responseMessage(body, contentType, statusText) {
+  const title = body.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]
+    ?.replace(/\s+/g, " ")
+    .trim();
+  if (title) return title;
+
+  const xmlCode = body.match(/<Code>([\s\S]*?)<\/Code>/i)?.[1]?.trim();
+  const xmlMessage = body.match(/<Message>([\s\S]*?)<\/Message>/i)?.[1]?.trim();
+  if (xmlCode || xmlMessage) return [xmlCode, xmlMessage].filter(Boolean).join(": ");
+
+  if (!contentType.includes("html") && !body.trimStart().startsWith("<")) {
+    return body.replace(/\s+/g, " ").trim().slice(0, 240);
+  }
+  return statusText || "Cloudflare 返回了无法解析的错误页面";
+}
+
+export async function describeUploadFailure(response, fileName) {
+  const body = await response.text();
+  const message = responseMessage(
+    body,
+    response.headers.get("content-type")?.toLowerCase() ?? "",
+    response.statusText,
+  );
+  const details = [`HTTP ${response.status}`];
+  if (message) details.push(message);
+  const rayId = response.headers.get("cf-ray");
+  if (rayId) details.push(`Ray ID ${rayId}`);
+  return `图片直传失败：${fileName}（${details.join("，")}）`;
+}
+
 export async function measureImageFile(file, {
   createBitmap = globalThis.createImageBitmap,
   ImageCtor = globalThis.Image,

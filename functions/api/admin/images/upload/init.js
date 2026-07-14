@@ -10,6 +10,16 @@ import { buildStorageKey, createStoredFileName, toImageRecord } from "../../../.
 import { createPresignedPutUrl, resolveR2DirectUploadConfig } from "../../../../../src/server/r2-direct-upload.js";
 import { jsonResponse } from "../../../../../src/shared/http.js";
 
+export async function signDirectUpload(options, signer = createPresignedPutUrl) {
+  try {
+    return { uploadUrl: await signer(options) };
+  } catch (error) {
+    const name = String(error?.name || "Error").slice(0, 80);
+    const message = String(error?.message || "未知运行时错误").replace(/\s+/g, " ").slice(0, 240);
+    return { error: `生成 R2 直传地址失败：${name}: ${message}` };
+  }
+}
+
 function normalizeFileDrafts(value) {
   if (!Array.isArray(value)) {
     return [];
@@ -100,11 +110,14 @@ export async function onRequest({ env, request }) {
       height: file.height,
     });
     const contentType = file.type || "application/octet-stream";
-    const uploadUrl = await createPresignedPutUrl({
+    const signedUpload = await signDirectUpload({
       ...directUploadConfig,
       key: storageKey,
       contentType,
     });
+    if (signedUpload.error) {
+      return jsonResponse({ error: signedUpload.error }, 500);
+    }
 
     uploads.push({
       ...imageRecord,
@@ -123,7 +136,7 @@ export async function onRequest({ env, request }) {
       headers: {
         "content-type": contentType,
       },
-      uploadUrl,
+      uploadUrl: signedUpload.uploadUrl,
     });
   }
 

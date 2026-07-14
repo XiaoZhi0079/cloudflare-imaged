@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { createUploadRunner, measureImageFile } from "../public/assets/admin/upload.js";
+import { createUploadRunner, describeUploadFailure, measureImageFile } from "../public/assets/admin/upload.js";
 
 function file(name) {
   return { name, type: "image/webp", size: 10 };
@@ -66,4 +66,21 @@ test("image measurement falls back without blocking when decoding fails", async 
     URLImpl: null,
   });
   assert.deepEqual(dimensions, { width: null, height: null });
+});
+
+test("upload failures summarize Cloudflare HTML responses instead of exposing the page source", async () => {
+  const response = new Response(`<!DOCTYPE html>
+    <html><head><title>storage.example | 524: A timeout occurred</title></head>
+    <body>Cloudflare Ray ID: abc123</body></html>`, {
+    status: 524,
+    headers: {
+      "content-type": "text/html; charset=UTF-8",
+      "cf-ray": "abc123-HKG",
+    },
+  });
+
+  assert.equal(
+    await describeUploadFailure(response, "photo.webp"),
+    "图片直传失败：photo.webp（HTTP 524，storage.example | 524: A timeout occurred，Ray ID abc123-HKG）",
+  );
 });

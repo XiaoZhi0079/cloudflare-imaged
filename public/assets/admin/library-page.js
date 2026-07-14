@@ -4,7 +4,7 @@ import { createDialogHost } from "./dialogs.js";
 import { createLibraryState } from "./library-state.js";
 import { createNotifier } from "./notifications.js";
 import { renderImageCard } from "./renderers/image-card.js";
-import { createUploadRunner, measureImageFile } from "./upload.js";
+import { createUploadRunner, describeUploadFailure, measureImageFile } from "./upload.js";
 
 const elements = {
   authView: document.querySelector("#admin-auth-view"),
@@ -436,7 +436,7 @@ async function uploadToSignedUrl(file, upload) {
     body: file,
   });
   if (!response.ok) {
-    throw new Error((await response.text()) || `图片直传失败：${file.name}`);
+    throw new Error(await describeUploadFailure(response, file.name));
   }
 }
 

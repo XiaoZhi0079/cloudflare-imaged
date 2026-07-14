@@ -4,7 +4,10 @@ import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 
 import { createGalleryRepository } from "../src/server/gallery-repository.js";
-import { onRequest as adminUploadInitHandler } from "../functions/api/admin/images/upload/init.js";
+import {
+  onRequest as adminUploadInitHandler,
+  signDirectUpload,
+} from "../functions/api/admin/images/upload/init.js";
 import { onRequest as adminUploadCompleteHandler } from "../functions/api/admin/images/upload/complete.js";
 
 function createMockBucket() {
@@ -103,6 +106,17 @@ test("admin upload init handler returns direct-upload descriptors for each selec
     payload.uploads[0].uploadUrl,
     /^https:\/\/gallery\.account-123\.r2\.cloudflarestorage\.com\/gallery\/campus-01\.webp\?/,
   );
+});
+
+test("direct upload signing converts runtime failures into a safe diagnostic", async () => {
+  const result = await signDirectUpload(
+    { key: "gallery/photo.webp" },
+    async () => { throw new TypeError("crypto provider unavailable"); },
+  );
+
+  assert.deepEqual(result, {
+    error: "生成 R2 直传地址失败：TypeError: crypto provider unavailable",
+  });
 });
 
 test("admin upload complete handler stores image records after direct upload succeeds", async () => {

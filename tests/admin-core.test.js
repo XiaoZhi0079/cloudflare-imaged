@@ -71,6 +71,27 @@ test("api client surfaces non-JSON error text", async () => {
   );
 });
 
+test("api client summarizes Cloudflare HTML error pages", async () => {
+  const client = createAdminApiClient({
+    getKey: () => "secret",
+    fetchImpl: async () => new Response(`<!DOCTYPE html>
+      <html><head><title>cloudflare-imaged.pages.dev | 502: Bad gateway</title></head></html>`, {
+      status: 502,
+      headers: {
+        "content-type": "text/html; charset=UTF-8",
+        "cf-ray": "ray-502-HKG",
+      },
+    }),
+  });
+
+  await assert.rejects(
+    () => client.request("/api/admin/images/upload/init"),
+    (error) => error instanceof AdminApiError
+      && error.status === 502
+      && error.message === "请求失败（HTTP 502，cloudflare-imaged.pages.dev | 502: Bad gateway，Ray ID ray-502-HKG）",
+  );
+});
+
 test("verifyAdminKey reuses returned tags", async () => {
   const calls = [];
   const tags = [{ id: 1, name: "人像" }];
