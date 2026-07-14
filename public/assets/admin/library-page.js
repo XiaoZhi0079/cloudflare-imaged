@@ -4,7 +4,7 @@ import { createDialogHost } from "./dialogs.js";
 import { createLibraryState } from "./library-state.js";
 import { createNotifier } from "./notifications.js";
 import { renderImageCard } from "./renderers/image-card.js";
-import { createUploadRunner } from "./upload.js";
+import { createUploadRunner, measureImageFile } from "./upload.js";
 
 const elements = {
   authView: document.querySelector("#admin-auth-view"),
@@ -18,6 +18,8 @@ const elements = {
   visibleCount: document.querySelector("#admin-visible-count"),
   search: document.querySelector("#admin-search"),
   sort: document.querySelector("#admin-sort"),
+  filterToggle: document.querySelector("#admin-filter-toggle"),
+  filterRail: document.querySelector("#admin-filters"),
   density: document.querySelector("#admin-density"),
   clearFilters: document.querySelector("#admin-clear-filters"),
   categoryFilters: document.querySelector("#category-filter-list"),
@@ -85,6 +87,20 @@ function createElement(tag, attributes = {}, text = "") {
   }
   if (text) element.textContent = text;
   return element;
+}
+
+function focusableElements(root) {
+  return [...root.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])')];
+}
+
+function trapFocus(event, root) {
+  if (event.key !== "Tab") return;
+  const focusable = focusableElements(root);
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable.at(-1);
+  if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+  if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
 }
 
 function selectedImages() {
@@ -159,13 +175,31 @@ function renderLoading() {
   elements.visibleCount.textContent = "...";
 }
 
+function renderLoadError(tags, error) {
+  elements.visibleCount.textContent = "-";
+  const box = createElement("div", { className: "admin-error" });
+  box.append(createElement("span", {}, errorMessage(error)));
+  const retry = createElement("button", { type: "button" }, "重新加载");
+  retry.addEventListener("click", () => loadLibrary(tags));
+  box.append(retry);
+  elements.imageList.replaceChildren(box);
+}
+
 async function loadLibrary(tags) {
   showApp();
   renderLoading();
-  const [{ images = [] }, { categories = [] }] = await Promise.all([
-    client.request("/api/admin/images"),
-    client.request("/api/admin/categories"),
-  ]);
+  let payloads;
+  try {
+    payloads = await Promise.all([
+      client.request("/api/admin/images"),
+      client.request("/api/admin/categories"),
+    ]);
+  } catch (error) {
+    if (error instanceof AdminUnauthorizedError) throw error;
+    renderLoadError(tags, error);
+    return;
+  }
+  const [{ images = [] }, { categories = [] }] = payloads;
   state = createLibraryState();
   state.setTags(tags);
   state.setCategories(categories);
@@ -330,7 +364,10 @@ function openChoiceDialog({ title, options, selected = new Set(), single = false
       opener?.focus();
       resolve(value);
     };
-    const onKeyDown = (event) => { if (event.key === "Escape") finish(null); };
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") finish(null);
+      else trapFocus(event, panel);
+    };
     document.addEventListener("keydown", onKeyDown);
     close.addEventListener("click", () => finish(null));
     cancel.addEventListener("click", () => finish(null));
@@ -403,28 +440,6 @@ async function bulkDelete() {
     if (!(error instanceof AdminUnauthorizedError)) notifier.error(errorMessage(error));
     renderLibrary();
   }
-}
-
-async function measureImage(file) {
-  if (typeof createImageBitmap === "function") {
-    const bitmap = await createImageBitmap(file);
-    const dimensions = { width: bitmap.width, height: bitmap.height };
-    bitmap.close();
-    return dimensions;
-  }
-  return await new Promise((resolve) => {
-    const url = URL.createObjectURL(file);
-    const image = new Image();
-    image.onload = () => {
-      resolve({ width: image.naturalWidth, height: image.naturalHeight });
-      URL.revokeObjectURL(url);
-    };
-    image.onerror = () => {
-      resolve({ width: null, height: null });
-      URL.revokeObjectURL(url);
-    };
-    image.src = url;
-  });
 }
 
 async function uploadToSignedUrl(file, upload) {
@@ -580,20 +595,21 @@ function openUploadDialog() {
     },
     onChange: () => renderUploadTasks(runner, controls),
   });
-  uploadSession = { runner, opener };
+  uploadSession = { runner, opener, panel };
   renderUploadTasks(runner, controls);
 
   files.addEventListener("change", async () => {
     start.disabled = true;
     error.textContent = "正在读取图片尺寸...";
     const selected = [...files.files];
-    const dimensions = await Promise.all(selected.map(measureImage));
+    const dimensions = await Promise.all(selected.map((file) => measureImageFile(file)));
     if (!uploadSession || uploadSession.runner !== runner) return;
     runner.setFiles(selected, dimensions);
     error.textContent = "";
   });
   close.addEventListener("click", () => closeUpload());
   cancel.addEventListener("click", () => closeUpload());
+  elements.uploadDialog.onclick = (event) => { if (event.target === elements.uploadDialog) closeUpload(); };
   start.addEventListener("click", () => runUpload(runner, controls));
   retry.addEventListener("click", () => runUpload(runner, controls, true));
   requestAnimationFrame(() => files.focus());
@@ -617,6 +633,10 @@ elements.density.addEventListener("click", () => {
   elements.density.textContent = compact ? "舒适视图" : "紧凑视图";
   elements.density.setAttribute("aria-pressed", String(compact));
   renderLibrary();
+});
+elements.filterToggle.addEventListener("click", () => {
+  const open = elements.filterRail.classList.toggle("is-open");
+  elements.filterToggle.setAttribute("aria-expanded", String(open));
 });
 elements.clearFilters.addEventListener("click", () => {
   state.resetFilters();
@@ -646,9 +666,15 @@ elements.bulkCategory.addEventListener("click", bulkAssignCategory);
 elements.bulkDelete.addEventListener("click", bulkDelete);
 elements.uploadOpen.addEventListener("click", openUploadDialog);
 document.addEventListener("keydown", (event) => {
-  if (event.key !== "Escape") return;
-  if (uploadSession) closeUpload();
-  else if (detailImageId !== null) closeDetail();
+  if (event.key === "Tab") {
+    if (uploadSession) trapFocus(event, uploadSession.panel);
+    else if (detailImageId !== null) trapFocus(event, elements.detailDrawer);
+    return;
+  }
+  if (event.key === "Escape") {
+    if (uploadSession) closeUpload();
+    else if (detailImageId !== null) closeDetail();
+  }
 });
 
 if (keyStore.get()) {

@@ -1,5 +1,44 @@
 const ACTIVE_STATES = new Set(["signing", "uploading", "completing"]);
 
+export async function measureImageFile(file, {
+  createBitmap = globalThis.createImageBitmap,
+  ImageCtor = globalThis.Image,
+  URLImpl = globalThis.URL,
+} = {}) {
+  if (typeof createBitmap === "function") {
+    try {
+      const bitmap = await createBitmap(file);
+      const dimensions = { width: bitmap.width, height: bitmap.height };
+      bitmap.close?.();
+      return dimensions;
+    } catch {
+      // Fall through to the image element decoder.
+    }
+  }
+
+  if (typeof ImageCtor !== "function" || typeof URLImpl?.createObjectURL !== "function") {
+    return { width: null, height: null };
+  }
+
+  return await new Promise((resolve) => {
+    let url;
+    try {
+      url = URLImpl.createObjectURL(file);
+    } catch {
+      resolve({ width: null, height: null });
+      return;
+    }
+    const image = new ImageCtor();
+    const finish = (dimensions) => {
+      URLImpl.revokeObjectURL?.(url);
+      resolve(dimensions);
+    };
+    image.onload = () => finish({ width: image.naturalWidth, height: image.naturalHeight });
+    image.onerror = () => finish({ width: null, height: null });
+    image.src = url;
+  });
+}
+
 function errorText(error) {
   return error?.message || String(error || "上传失败");
 }

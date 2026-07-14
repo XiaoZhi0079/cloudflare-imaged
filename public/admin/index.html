@@ -27,15 +27,15 @@
       </header>
       <main class="workbench">
         <header class="workbench-heading"><div><p class="admin-eyebrow">Library</p><h1>图片库 <span id="admin-visible-count">0</span></h1></div><button id="admin-upload-open" class="admin-button-primary" type="button">上传图片</button></header>
-        <section class="workbench-command" aria-label="搜索和排序"><label class="admin-field"><span>搜索图片</span><input id="admin-search" type="search" placeholder="文件名或标签" /></label><label class="admin-field"><span>排序</span><select id="admin-sort"><option value="newest">最新上传</option><option value="name">文件名</option></select></label><button id="admin-density" type="button">紧凑视图</button></section>
+        <section class="workbench-command" aria-label="搜索和排序"><label class="admin-field"><span>搜索图片</span><input id="admin-search" type="search" placeholder="文件名或标签" /></label><label class="admin-field"><span>排序</span><select id="admin-sort"><option value="newest">最新上传</option><option value="name">文件名</option></select></label><button id="admin-filter-toggle" type="button" aria-expanded="false" aria-controls="admin-filters">筛选</button><button id="admin-density" type="button" aria-pressed="false">紧凑视图</button></section>
         <div class="workbench-layout">
-          <aside id="admin-filters" class="filter-rail"><div class="filter-head"><h2>筛选</h2><button id="admin-clear-filters" type="button">清空</button></div><section><h3>主分类</h3><div id="category-filter-list"></div></section><section><h3>标签（全部匹配）</h3><input id="tag-filter-search" type="search" placeholder="搜索标签" /><div id="tag-filter-list"></div></section></aside>
+          <aside id="admin-filters" class="filter-rail"><div class="filter-head"><h2>筛选</h2><button id="admin-clear-filters" type="button">清空</button></div><section><h3>主分类</h3><div id="category-filter-list"></div></section><section><h3>标签（全部匹配）</h3><input id="tag-filter-search" type="search" aria-label="搜索标签" placeholder="搜索标签" /><div id="tag-filter-list"></div></section></aside>
           <section class="image-library"><div id="image-list" class="admin-image-grid" aria-live="polite"></div><button id="admin-load-more" type="button" hidden>继续显示</button></section>
         </div>
       </main>
       <section id="admin-bulk-toolbar" class="admin-bulk-toolbar" hidden><strong id="bulk-selected-count">已选择 0 张</strong><div><button id="bulk-assign-tags" type="button">设置标签</button><button id="bulk-assign-category" type="button">移动分类</button><button id="bulk-delete" class="admin-button-danger" type="button">删除</button><button id="bulk-clear-selection" type="button">取消选择</button></div></section>
       <section id="admin-upload-dialog" class="admin-overlay" hidden aria-label="上传图片"></section>
-      <section id="admin-detail-drawer" class="admin-drawer" hidden aria-label="图片详情"></section>
+      <section id="admin-detail-drawer" class="admin-drawer" hidden role="dialog" aria-modal="true" aria-labelledby="detail-title"></section>
       <div id="admin-dialog-host"></div><div id="admin-toast-host" class="admin-toast-host" aria-live="polite"></div>
     </div>
     <script type="module" src="/assets/admin/library-page.js"></script>

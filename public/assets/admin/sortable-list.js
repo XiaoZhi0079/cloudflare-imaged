@@ -45,6 +45,7 @@ export function createSortableList({
     container.style.height = `${Math.max(rowHeight, rects.at(-1)?.bottom - containerRect.top)}px`;
     container.classList.add("is-sorting");
     rows.forEach((row, index) => {
+      row.style.transition = "none";
       row.style.position = "absolute";
       row.style.inset = "auto";
       row.style.top = "0";
@@ -53,6 +54,8 @@ export function createSortableList({
       row.style.transform = `translate3d(0, ${index * step}px, 0)`;
       row.style.willChange = "transform";
     });
+    void container.offsetHeight;
+    rows.forEach((row) => { row.style.transition = ""; });
 
     return { containerRect, rowHeight, step };
   }
@@ -121,6 +124,7 @@ export function createSortableList({
       row.style.left = "";
       row.style.width = "";
       row.style.transform = "";
+      row.style.transition = "";
       row.style.willChange = "";
     }
     container.style.height = "";

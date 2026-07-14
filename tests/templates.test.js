@@ -72,3 +72,19 @@ test("public assets contain only public gallery concerns", () => {
     assert.deepEqual([...source.matchAll(/export function (\w+)/g)].map((match) => match[1]), ["renderTagChips", "renderGalleryCards"]);
   }
 });
+
+test("admin controls expose static accessibility contracts", () => {
+  const library = readFileSync(new URL("../public/admin/index.html", import.meta.url), "utf8");
+  const settings = readFileSync(new URL("../public/admin/settings.html", import.meta.url), "utf8");
+  const dialogs = readFileSync(new URL("../public/assets/admin/dialogs.js", import.meta.url), "utf8");
+  const controller = readFileSync(new URL("../public/assets/admin/library-page.js", import.meta.url), "utf8");
+  for (const html of [library, settings]) {
+    assert.match(html, /data-toggle-password[^>]*aria-label="[^"]+"[^>]*title="[^"]+"/);
+    assert.match(html, /admin-toast-host[^>]*aria-live="polite"/);
+  }
+  assert.match(library, /admin-detail-drawer[^>]*role="dialog"[^>]*aria-modal="true"/);
+  assert.match(dialogs, /role="dialog"/);
+  assert.match(dialogs, /aria-modal="true"/);
+  assert.match(controller, /createElement\("label"[^\n]*admin-field/);
+  assert.match(controller, /type: "file"/);
+});

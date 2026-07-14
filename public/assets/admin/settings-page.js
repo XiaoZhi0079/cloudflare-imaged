@@ -97,10 +97,13 @@ function render() {
   elements.search.placeholder = activeType === "tags" ? "搜索标签名称" : "搜索分类名称";
   elements.list.classList.toggle("is-filtering", filtering);
   elements.list.innerHTML = items.length
-    ? items.map((item) => renderTaxonomyItem({
-      ...item,
-      sortOrder: allItems.findIndex((current) => current.id === item.id) + 1,
-    }, activeType)).join("")
+    ? items.map((item) => {
+      const index = allItems.findIndex((current) => current.id === item.id);
+      return renderTaxonomyItem({ ...item, sortOrder: index + 1 }, activeType, {
+        canMoveUp: !filtering && index > 0,
+        canMoveDown: !filtering && index < allItems.length - 1,
+      });
+    }).join("")
     : `<div class="admin-empty">${elements.search.value ? "没有匹配结果" : "暂无内容"}</div>`;
   if (filtering) {
     elements.list.querySelectorAll("[data-sort-handle]").forEach((handle) => {
@@ -299,6 +302,17 @@ elements.list.addEventListener("click", (event) => {
   if (!action || !row) return;
   const item = state.getItems(activeType).find((candidate) => String(candidate.id) === row.dataset.sortId);
   if (!item) return;
+  if (action === "move-up" || action === "move-down") {
+    const items = [...state.getItems(activeType)];
+    const index = items.findIndex((candidate) => candidate.id === item.id);
+    const target = index + (action === "move-up" ? -1 : 1);
+    if (target < 0 || target >= items.length) return;
+    [items[index], items[target]] = [items[target], items[index]];
+    state.setDraft(activeType, items);
+    render();
+    requestAnimationFrame(() => elements.list.querySelector(`[data-sort-id="${item.id}"] [data-action="${action}"]`)?.focus());
+    return;
+  }
   if (action === "rename") renameItem(item);
   if (action === "toggle-visibility") toggleVisibility(item);
   if (action === "delete") deleteTag(item);

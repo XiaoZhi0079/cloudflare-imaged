@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { createUploadRunner } from "../public/assets/admin/upload.js";
+import { createUploadRunner, measureImageFile } from "../public/assets/admin/upload.js";
 
 function file(name) {
   return { name, type: "image/webp", size: 10 };
@@ -57,4 +57,13 @@ test("upload runner batches signing and preserves metadata drafts", async () => 
   assert.deepEqual(signedBatches[0].metadata, { categoryId: 4, tagIds: [2, 3] });
   assert.deepEqual(runner.tasks()[0].draft, { name: "a", type: "image/webp", size: 10, width: 800, height: 600 });
   assert.deepEqual(runner.counts(), { total: 3, queued: 0, active: 0, success: 3, error: 0 });
+});
+
+test("image measurement falls back without blocking when decoding fails", async () => {
+  const dimensions = await measureImageFile(file("broken"), {
+    createBitmap: async () => { throw new Error("decode failed"); },
+    ImageCtor: null,
+    URLImpl: null,
+  });
+  assert.deepEqual(dimensions, { width: null, height: null });
 });

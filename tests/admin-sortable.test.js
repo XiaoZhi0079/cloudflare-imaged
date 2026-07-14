@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import {
   getTargetIndex,
@@ -35,4 +36,11 @@ test("order helpers compare ids and serialize contiguous positions", () => {
     { id: 4, sortOrder: 1 },
     { id: 9, sortOrder: 2 },
   ]);
+});
+
+test("sortable establishes fixed slots before enabling transform animation", () => {
+  const source = readFileSync(new URL("../public/assets/admin/sortable-list.js", import.meta.url), "utf8");
+  assert.match(source, /row\.style\.transition = "none"/);
+  assert.match(source, /container\.offsetHeight/);
+  assert.match(source, /row\.style\.transition = ""/);
 });

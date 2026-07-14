@@ -23,6 +23,7 @@
 .taxonomy-visibility.is-hidden::before { background:var(--admin-muted); }
 .taxonomy-actions { display:flex; gap:6px; }
 .taxonomy-actions button { min-height:38px; font-size:12px; }
+.taxonomy-actions .taxonomy-order-action { width:38px; padding:0; font-size:17px; }
 .taxonomy-actions .taxonomy-delete { border-color:#d5a293; color:var(--admin-danger); }
 .taxonomy-list.is-sorting { display:block; }
 .taxonomy-list.is-sorting .taxonomy-item:not(.is-dragging) { transition:transform 110ms ease; }

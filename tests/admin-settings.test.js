@@ -28,6 +28,8 @@ test("taxonomy renderer escapes text and limits category actions", () => {
   assert.doesNotMatch(tag, /<script>/);
   assert.match(tag, /data-action="toggle-visibility"/);
   assert.match(tag, /data-action="delete"/);
+  assert.match(tag, /data-action="move-up"[^>]*aria-label="上移/);
+  assert.match(tag, /data-action="move-down"[^>]*aria-label="下移/);
   assert.match(category, /scenery/);
   assert.doesNotMatch(category, /data-action="delete"/);
 });
