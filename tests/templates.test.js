@@ -88,3 +88,9 @@ test("admin controls expose static accessibility contracts", () => {
   assert.match(controller, /createElement\("label"[^\n]*admin-field/);
   assert.match(controller, /type: "file"/);
 });
+
+test("filter rail preserves the search focus outline", () => {
+  const css = readFileSync(new URL("../public/assets/admin/workbench.css", import.meta.url), "utf8");
+  assert.match(css, /\.filter-rail \{[^}]*padding:4px 14px 4px 4px/);
+  assert.match(css, /@media \(max-width:1099px\)[\s\S]*?\.filter-rail \{[^}]*overflow:visible/);
+});
