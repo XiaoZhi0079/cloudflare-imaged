@@ -24,6 +24,7 @@ const elements = {
   clearFilters: document.querySelector("#admin-clear-filters"),
   categoryFilters: document.querySelector("#category-filter-list"),
   tagFilterSearch: document.querySelector("#tag-filter-search"),
+  selectedTagCount: document.querySelector("#tag-filter-selected-count"),
   tagFilters: document.querySelector("#tag-filter-list"),
   imageList: document.querySelector("#image-list"),
   loadMore: document.querySelector("#admin-load-more"),
@@ -120,10 +121,10 @@ function renderFilters() {
   for (const image of state.getImages()) {
     if (image.category?.id) categoryCounts.set(Number(image.category.id), (categoryCounts.get(Number(image.category.id)) ?? 0) + 1);
   }
-  const categoryOptions = [{ id: null, name: "全部图片", count: state.getImages().length }, ...state.getCategories().map((category) => ({
+  const categoryOptions = state.getCategories().map((category) => ({
     ...category,
     count: categoryCounts.get(Number(category.id)) ?? 0,
-  }))];
+  }));
   for (const category of categoryOptions) {
     const label = createElement("label", { className: "filter-option" });
     const input = createElement("input", { type: "radio", name: "category-filter", value: category.id ?? "", checked: categoryId === category.id });
@@ -133,15 +134,19 @@ function renderFilters() {
   }
 
   const tagQuery = elements.tagFilterSearch.value.trim().toLocaleLowerCase("zh-CN");
+  elements.selectedTagCount.textContent = `已选 ${tagNames.size}`;
   elements.tagFilters.replaceChildren();
   for (const tag of state.getTags().filter((item) => !tagQuery || item.name.toLocaleLowerCase("zh-CN").includes(tagQuery))) {
     const count = state.getImages().filter((image) => (image.tags ?? []).includes(tag.name)).length;
-    const label = createElement("label", { className: "filter-option" });
-    const input = createElement("input", { type: "checkbox", value: tag.name, checked: tagNames.has(tag.name) });
+    const selected = tagNames.has(tag.name);
+    const label = createElement("label", { className: `filter-option filter-tag-option${selected ? " is-selected" : ""}` });
+    const input = createElement("input", { type: "checkbox", value: tag.name, checked: selected });
     input.addEventListener("change", () => {
       const next = state.getFilters().tagNames;
       if (input.checked) next.add(tag.name); else next.delete(tag.name);
       state.setTagsFilter(next);
+      label.classList.toggle("is-selected", input.checked);
+      elements.selectedTagCount.textContent = `已选 ${next.size}`;
       renderLibrary();
     });
     label.append(input, createElement("span", {}, tag.name), createElement("small", {}, count));

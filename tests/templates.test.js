@@ -48,6 +48,15 @@ test("image workbench exposes filtering details upload and bulk controls", () =>
   assert.doesNotMatch(html, /admin-tag-manager/);
 });
 
+test("image workbench renders only real filters with visible multi-select state", () => {
+  const html = readFileSync(new URL("../public/admin/index.html", import.meta.url), "utf8");
+  const controller = readFileSync(new URL("../public/assets/admin/library-page.js", import.meta.url), "utf8");
+  assert.match(html, /id="tag-filter-selected-count"/);
+  assert.doesNotMatch(controller, /name: "全部图片"/);
+  assert.match(controller, /filter-tag-option/);
+  assert.match(controller, /is-selected/);
+});
+
 test("runtime public templates stay aligned with shared templates", () => {
   const runtime = readFileSync(new URL("../public/assets/templates.js", import.meta.url), "utf8");
   const shared = readFileSync(new URL("../src/shared/templates.js", import.meta.url), "utf8");

@@ -36,6 +36,14 @@ test("library selection survives filtering and drops removed image ids", () => {
   assert.deepEqual([...state.getSelectedIds()], []);
 });
 
+test("empty filters show every image and multiple tags use intersection", () => {
+  const state = createLibraryState();
+  state.setImages(images);
+  assert.deepEqual(state.visibleImages().map((image) => image.id), [3, 2, 1]);
+  state.setTagsFilter(new Set(["人像", "自然光"]));
+  assert.deepEqual(state.visibleImages().map((image) => image.id), [1]);
+});
+
 test("library renders images in bounded increments", () => {
   const state = createLibraryState({ initialRenderLimit: 2, renderIncrement: 1 });
   state.setImages(images);
