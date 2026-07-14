@@ -15,7 +15,7 @@ test("public renderers keep gallery behavior", () => {
 test("both admin pages use the shared authentication gate", () => {
   for (const path of ["../public/admin/index.html", "../public/admin/settings.html"]) {
     const html = readFileSync(new URL(path, import.meta.url), "utf8");
-    assert.match(html, /id="admin-auth-view"/);
+    assert.match(html, /id="admin-auth-view"[^>]*hidden/);
     assert.match(html, /id="admin-app"[^>]*hidden/);
     assert.match(html, /id="admin-key"/);
     assert.match(html, /id="admin-login"/);
