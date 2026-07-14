@@ -21,7 +21,7 @@ export async function onRequest({ env, request }) {
 
   const body = await parseRequestJson(request);
   const repository = getRepository(env);
-  const storage = getGalleryStorage(env);
+  const storage = getGalleryStorage(env, request);
   const imageIds = normalizeImageIds(body.imageIds ?? []);
 
   if (!imageIds.length) {

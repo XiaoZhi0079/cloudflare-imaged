@@ -1,5 +1,5 @@
 import { createGalleryRepository } from "../../../src/server/gallery-repository.js";
-import { createGalleryStorage } from "../../../src/server/gallery-storage.js";
+import { createGalleryStorage, resolvePublicBaseUrl } from "../../../src/server/gallery-storage.js";
 import { jsonResponse } from "../../../src/shared/http.js";
 
 function bindStatement(database, sql, params) {
@@ -62,10 +62,10 @@ export function getRepository(env) {
   return createGalleryRepository(env.GALLERY_DB);
 }
 
-export function getGalleryStorage(env) {
+export function getGalleryStorage(env, request) {
   return createGalleryStorage({
     bucket: env.GALLERY_BUCKET,
-    publicBaseUrl: env.GALLERY_PUBLIC_BASE_URL,
+    publicBaseUrl: resolvePublicBaseUrl(env.GALLERY_PUBLIC_BASE_URL, request?.url),
   });
 }
 

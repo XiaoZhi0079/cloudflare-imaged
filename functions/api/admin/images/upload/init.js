@@ -6,7 +6,12 @@ import {
   normalizeTagIds,
   resolveUploadPolicy,
 } from "../../../../../src/server/gallery-upload.js";
-import { buildStorageKey, createStoredFileName, toImageRecord } from "../../../../../src/server/gallery-storage.js";
+import {
+  buildStorageKey,
+  createStoredFileName,
+  resolvePublicBaseUrl,
+  toImageRecord,
+} from "../../../../../src/server/gallery-storage.js";
 import { createPresignedPutUrl, resolveR2DirectUploadConfig } from "../../../../../src/server/r2-direct-upload.js";
 import { jsonResponse } from "../../../../../src/shared/http.js";
 
@@ -76,6 +81,7 @@ async function handleRequest({ env, request }) {
   }
 
   const payload = await request.json();
+  const publicBaseUrl = resolvePublicBaseUrl(env.GALLERY_PUBLIC_BASE_URL, request.url);
   const files = normalizeFileDrafts(payload?.files);
   if (files.length === 0) {
     return jsonResponse({ error: "请至少选择一张图片。" }, 400);
@@ -105,7 +111,7 @@ async function handleRequest({ env, request }) {
   for (const file of files) {
     const storedFileName = createStoredFileName({ name: file.name }, uploadPolicy.uploadNameType);
     const storageKey = buildStorageKey(selectedCategory.uploadFolder, storedFileName);
-    const imageRecord = toImageRecord(storageKey, env.GALLERY_PUBLIC_BASE_URL, {
+    const imageRecord = toImageRecord(storageKey, publicBaseUrl, {
       width: file.width,
       height: file.height,
     });

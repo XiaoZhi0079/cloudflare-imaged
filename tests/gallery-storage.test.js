@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { createGalleryStorage } from "../src/server/gallery-storage.js";
+import { createGalleryStorage, resolvePublicBaseUrl } from "../src/server/gallery-storage.js";
 
 function createMockBucket() {
   const objects = new Map();
@@ -39,6 +39,17 @@ function createMockBucket() {
     },
   };
 }
+
+test("public base URL uses explicit configuration or falls back to the request origin", () => {
+  assert.equal(
+    resolvePublicBaseUrl("https://cdn.example.com/file/", "https://gallery.example.com/admin/"),
+    "https://cdn.example.com/file",
+  );
+  assert.equal(
+    resolvePublicBaseUrl("", "https://gallery.example.com/api/admin/images/upload/init"),
+    "https://gallery.example.com/file",
+  );
+});
 
 test("uploadImage stores the file in the gallery bucket and returns a gallery record", async () => {
   const bucket = createMockBucket();

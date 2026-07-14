@@ -66,6 +66,7 @@ function createTestEnv() {
 
 test("admin upload init handler returns direct-upload descriptors for each selected image", async () => {
   const env = createTestEnv();
+  delete env.GALLERY_PUBLIC_BASE_URL;
   const repository = createGalleryRepository(env.GALLERY_DB);
   const campus = await repository.createTag({ name: "校园风情", sortOrder: 1, isVisible: true });
 
@@ -140,6 +141,7 @@ test("admin upload init handler converts unexpected runtime errors into JSON", a
 
 test("admin upload complete handler stores image records after direct upload succeeds", async () => {
   const env = createTestEnv();
+  delete env.GALLERY_PUBLIC_BASE_URL;
   const repository = createGalleryRepository(env.GALLERY_DB);
   const campus = await repository.createTag({ name: "校园风情", sortOrder: 1, isVisible: true });
 

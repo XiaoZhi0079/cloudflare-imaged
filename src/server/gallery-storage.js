@@ -34,6 +34,16 @@ export function buildStorageKey(uploadFolder, fileName) {
   return folder ? `${folder}/${fileName}` : fileName;
 }
 
+export function resolvePublicBaseUrl(configuredBaseUrl, requestUrl) {
+  const configured = String(configuredBaseUrl ?? "").trim().replace(/\/+$/, "");
+  if (configured) return configured;
+
+  if (requestUrl) {
+    return `${new URL(requestUrl).origin}/file`;
+  }
+  throw new Error("GALLERY_PUBLIC_BASE_URL is required");
+}
+
 export function buildPublicUrl(publicBaseUrl, fileId) {
   const origin = String(publicBaseUrl ?? "").trim().replace(/\/+$/, "");
   if (!origin) {

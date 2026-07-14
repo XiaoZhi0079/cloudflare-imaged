@@ -4,7 +4,7 @@ import {
   normalizeImageDimension,
   normalizeTagIds,
 } from "../../../../../src/server/gallery-upload.js";
-import { buildPublicUrl } from "../../../../../src/server/gallery-storage.js";
+import { buildPublicUrl, resolvePublicBaseUrl } from "../../../../../src/server/gallery-storage.js";
 import { jsonResponse } from "../../../../../src/shared/http.js";
 
 function normalizeCompletedFiles(value) {
@@ -33,6 +33,7 @@ export async function onRequest({ env, request }) {
   }
 
   const payload = await request.json();
+  const publicBaseUrl = resolvePublicBaseUrl(env.GALLERY_PUBLIC_BASE_URL, request.url);
   const files = normalizeCompletedFiles(payload?.files);
   if (files.length === 0) {
     return jsonResponse({ error: "请至少选择一张图片。" }, 400);
@@ -75,7 +76,7 @@ export async function onRequest({ env, request }) {
     const image = await repository.upsertImage({
       storageKey: file.storageKey,
       fileName: file.fileName,
-      fileUrl: buildPublicUrl(env.GALLERY_PUBLIC_BASE_URL, file.storageKey),
+      fileUrl: buildPublicUrl(publicBaseUrl, file.storageKey),
       width: file.width,
       height: file.height,
       syncStatus: "ok",

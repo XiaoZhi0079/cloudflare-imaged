@@ -48,7 +48,7 @@ export async function onRequest({ env, request }) {
     return jsonResponse({ error: "存在无效图片，无法完成批量分类。" }, 400);
   }
 
-  const storage = getGalleryStorage(env);
+  const storage = getGalleryStorage(env, request);
   const succeeded = [];
   const failed = [];
 

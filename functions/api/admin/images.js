@@ -36,7 +36,7 @@ export async function onRequest({ env, request }) {
       return jsonResponse({ error: "Image not found" }, 404);
     }
 
-    const storage = getGalleryStorage(env);
+    const storage = getGalleryStorage(env, request);
 
     if (nextDirectory) {
       try {
@@ -103,7 +103,7 @@ export async function onRequest({ env, request }) {
       return jsonResponse({ error: "Image not found" }, 404);
     }
 
-    const storage = getGalleryStorage(env);
+    const storage = getGalleryStorage(env, request);
 
     try {
       await storage.deleteImage(image.storageKey);
