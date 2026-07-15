@@ -1,7 +1,7 @@
 # D1 运行时初始化移除与标签切换性能设计
 
 日期：2026-07-15
-状态：已确认
+状态：已实施并完成本地验收，待合并与生产发布
 
 ## 背景与诊断证据
 
@@ -75,9 +75,10 @@
 
 在第一次应用基线前，使用只读 D1 命令检查：
 
-- `images` 已包含 `category_id`、`width`、`height`、`sync_status` 和 `note`；
-- 6 张业务表和 7 个索引存在；
-- 当前 schema 没有与基线冲突的对象定义；
+- 6 张业务表的完整列定义与 `schema.sql` 一致；
+- 6 张表的全部外键目标和删除行为一致；
+- 7 个业务索引的名称与完整 SQL 一致；
+- 标签和分类的数量、`sort_order` 去重数、最小值、最大值及空值数没有异常，且不输出名称；
 - `wrangler d1 migrations list GALLERY_DB --remote` 的待执行列表符合预期。
 
 检查只输出表、列、索引和 migration 状态，不读取图片 URL、标签文本、文案或其他业务内容。
@@ -133,6 +134,7 @@ npx wrangler d1 migrations apply GALLERY_DB --remote
 
 - `package.json` 增加 `db:migrate:local`。
 - `start-local.cmd` 在启动 `wrangler pages dev` 前应用本地 migrations；迁移失败时停止启动。
+- `pages dev` 不使用 CLI `--d1 GALLERY_DB` 覆盖；D1 身份统一从 `wrangler.toml` 读取，确保 migration 与 Pages 共用同一份本地 SQLite。
 - `.wrangler/state` 继续保存本地 D1 状态。
 - 本地 seed 脚本在 migration 完成后运行，不负责建表。
 
@@ -153,6 +155,7 @@ npx wrangler d1 migrations apply GALLERY_DB --remote
 - `/api/public/tags` 只读且不再规范化写入；
 - `/api/public/site` 只读；
 - migration 可在全新本地数据库成功执行，也可安全重复检查已准备的 schema；
+- 从 `schema.sql` 准备的已有数据库在重复应用 baseline 后，哨兵图片、标签、关联、精选顺序和自定义站点设置保持原值；
 - 现有 Repository、API、管理端和公开页面测试全部通过。
 
 ## 发布流程
@@ -161,10 +164,11 @@ npx wrangler d1 migrations apply GALLERY_DB --remote
 2. 对新的 migration 和 SQL 边界测试完成 RED/GREEN。
 3. 运行完整测试、语法检查和 `git diff --check`。
 4. 独立检查范围、migration 安全、隐私与生产查询边界。
-5. 对生产 D1 执行只读 schema/migration 前置检查。
-6. 应用 `0001_baseline.sql` 到生产 D1，确认没有待执行 migration。
-7. 正常推送 GitHub `main`，等待 CI 和 Cloudflare Pages 部署。
-8. 通过 HTTP 时序和阻断图片的浏览器脚本验收，不截图、不读取图片内容。
+5. 本地合并到 `main`，确认最终 SHA、工作区干净及 `wrangler.toml` 绑定。
+6. 对生产 D1 执行完整只读 schema/migration 前置检查。
+7. 应用 `0001_baseline.sql` 到生产 D1，确认没有待执行 migration。
+8. 再次确认 HEAD 等于已审查 SHA，正常推送同一个 GitHub `main` 提交。
+9. 等待 CI 和 Cloudflare Pages 部署后，通过 HTTP 时序和阻断图片的浏览器脚本验收，不截图、不读取图片内容。
 
 本次不把 migration 自动放进 Pages 构建命令或 GitHub CI。当前项目规模下，生产 migration 作为显式发布步骤更安全；未来若需要自动化，应使用受保护的 GitHub Environment 和最小权限 Cloudflare API Token 单独设计。
 
@@ -200,3 +204,13 @@ npx wrangler d1 migrations apply GALLERY_DB --remote
 - 管理端修改后，前台下一次请求立即读取最新数据。
 - 本地开发、测试和首次部署均有明确、可重复的数据库准备步骤。
 - GitHub、Cloudflare Pages、D1 和 R2 的现有绑定与域名保持不变。
+
+## 实施与本地验收证据（2026-07-16）
+
+- `npm test`：170 项全部通过，0 失败。
+- 对相对基线变更的 26 个 JavaScript 文件执行 `node --check`，全部退出 0；`bash -n start-local.sh` 退出 0。
+- `git diff --check cada320` 退出 0；两份实施计划文件的 EOF 多余空行已清除。
+- `npm run db:migrate:local` 返回“无待执行 migration”。真实 `npm run dev` 输出 D1 绑定为 `env.GALLERY_DB (gallery)`，不再出现 `local-GALLERY_DB`；公共 tags/site API 均返回 200。
+- 新增启动契约测试，禁止 `package.json`、Windows/Shell 启动器和演示提示再次加入 `pages dev --d1 GALLERY_DB`。
+- 新增 existing-schema 保全测试：基于 `schema.sql` 插入哨兵图片、标签、关联、精选和自定义设置，baseline 连续应用两次后全部保持原值。
+- 本轮只使用本地空库和合成元数据；未连接或写入生产 D1/R2。生产 preflight、remote migration、推送和部署仍是发布阶段任务。

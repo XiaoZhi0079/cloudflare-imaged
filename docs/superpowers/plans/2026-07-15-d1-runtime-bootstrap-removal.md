@@ -229,7 +229,7 @@ Expected: FAIL，当前入口没有 migration 步骤。
 
 ```json
 "db:migrate:local": "wrangler d1 migrations apply GALLERY_DB --local --persist-to ./.wrangler/state",
-"dev": "npm run db:migrate:local && wrangler pages dev ./public --d1 GALLERY_DB --compatibility-date 2026-03-02 --ip 127.0.0.1 --port 8788 --persist-to ./.wrangler/state"
+"dev": "npm run db:migrate:local && wrangler pages dev ./public --compatibility-date 2026-03-02 --ip 127.0.0.1 --port 8788 --persist-to ./.wrangler/state"
 ```
 
 `start-local.cmd` 在 `pages dev` 前调用 `npx.cmd wrangler d1 migrations apply...` 并检查 `errorlevel`；`start-local.sh` 在 `exec npx wrangler pages dev...` 前执行相同 migration。
@@ -294,4 +294,3 @@ Expected: 全部退出 0、测试 0 失败。
 git add README.md docs/cloudflare-pages-deploy.zh-CN.md docs/superpowers/specs/2026-07-15-d1-runtime-bootstrap-removal-design.md
 git commit -m "docs: document D1 migration release flow"
 ```
-

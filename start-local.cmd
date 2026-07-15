@@ -19,7 +19,6 @@ call npx.cmd wrangler d1 migrations apply GALLERY_DB --local --persist-to ./.wra
 if errorlevel 1 exit /b 1
 
 call npx.cmd wrangler pages dev ./public ^
-  --d1 GALLERY_DB ^
   --r2 GALLERY_BUCKET ^
   --binding "GALLERY_ADMIN_KEY=%GALLERY_ADMIN_KEY%" ^
   --binding "GALLERY_PUBLIC_BASE_URL=%GALLERY_PUBLIC_BASE_URL%" ^

@@ -6,7 +6,7 @@
   "scripts": {
     "test": "node --test tests/*.test.js",
     "db:migrate:local": "npx wrangler d1 migrations apply GALLERY_DB --local --persist-to ./.wrangler/state",
-    "dev": "npm run db:migrate:local && npx wrangler pages dev ./public --d1 GALLERY_DB --compatibility-date 2026-03-02 --ip 127.0.0.1 --port 8788 --persist-to ./.wrangler/state",
+    "dev": "npm run db:migrate:local && npx wrangler pages dev ./public --compatibility-date 2026-03-02 --ip 127.0.0.1 --port 8788 --persist-to ./.wrangler/state",
     "seed:demo": "node scripts/seed-local-demo.mjs"
   }
 }

@@ -34,7 +34,7 @@ function findLocalD1Path() {
       "未找到本地 D1 数据库。请先启动一次本地服务：\n" +
       "  bash start-local.sh\n" +
       "或：\n" +
-      "  npx wrangler pages dev ./public --d1 GALLERY_DB --r2 GALLERY_BUCKET --compatibility-date 2026-03-02 --ip 127.0.0.1 --port 8788 --persist-to ./.wrangler/state",
+      "  npm run dev",
     );
   }
 

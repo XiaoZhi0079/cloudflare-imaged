@@ -12,36 +12,88 @@
 - Cloudflare R2 作为图片文件存储
 - GitHub Actions 只做 CI，不负责部署
 
-## 第一步：确认 GitHub 仓库状态
+## 第一步：形成最终待发布的 `main` 提交
 
-核对日期：2026-07-15。
+先完成代码审查、自动化测试和隐私安全的页面验收，再把已审查的功能分支本地合并到 `main`。生产 D1 preflight 只能针对最终待推送提交执行，不能在功能仍未提交或仍会变更时提前迁移。
 
-- 当前本地与远端差异必须以 `git status --short --branch` 和 `git log origin/main..main` 的实时输出为准。
-- Cloudflare Pages 只部署已经普通推送到 GitHub `main` 的提交；本地提交不会自动上线。
-- 发布前先确认工作区干净、测试通过，并使用普通快进推送；不得用文档中的历史 SHA 判断当前发布状态。
+进入正确仓库并确认最终状态：
 
-正确顺序是：本地验证 → 生产 D1 只读检查 → 应用待执行 migration → 精选暂存 → 提交 → 普通推送 → Cloudflare 部署检查。
+```powershell
+cd "D:\GoodTry\Image-Gallery"
+git switch main
+git status --short --branch
+git remote -v
+npm test
+git diff --check
+Get-Content .\wrangler.toml
+if (git status --porcelain) { throw "发布前工作区必须干净" }
+if ((git branch --show-current) -ne "main") { throw "生产发布只能从 main 执行" }
+$releaseSha = git rev-parse HEAD
+$releaseSha
+```
 
-## 第二步：只读检查并迁移生产 D1
+确认 `wrangler.toml` 中 `GALLERY_DB` 的 `database_name`、`database_id` 和当前 Cloudflare 账户一致；R2 绑定仍为 `GALLERY_BUCKET`。记录 `$releaseSha` 后不得再修改或提交代码。
+
+正确顺序是：功能分支验证与审查 → 本地合并到 `main` → 固定最终 SHA 和配置 → 生产 D1 只读 preflight → 应用 migration → 确认 SHA 未变 → 普通推送同一 SHA → 等待 GitHub CI 与 Cloudflare Pages。
+
+## 第二步：执行完整的生产 D1 只读 preflight
 
 Repository 的在线请求不会自动建表、建索引或 seed。首次部署当前版本前，必须显式应用 `migrations/` 中的版本化 migration。
 
-先确认登录状态和待执行列表：
+先确认登录身份和待执行列表：
 
 ```powershell
 npx wrangler whoami
 npx wrangler d1 migrations list GALLERY_DB --remote
 ```
 
-再执行只读 schema 检查。下面的命令只输出对象、列和索引定义，不读取图片 URL、标签文本、文案或其他业务数据：
+下面的检查只读取 schema、数量与排序数值，不读取图片 URL、文件名、标签名称、分类名称、站点文案或图片内容。
+
+先核对六张业务表及 migration 记录：
 
 ```powershell
 npx wrangler d1 execute GALLERY_DB --remote --command "SELECT type, name FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name"
-npx wrangler d1 execute GALLERY_DB --remote --command "PRAGMA table_info(images)"
-npx wrangler d1 execute GALLERY_DB --remote --command "PRAGMA index_list(images)"
 ```
 
-确认当前六张业务表存在，`images` 包含 `category_id`、`width`、`height`、`sync_status`、`note`，并且待执行列表只有预期文件后，应用 migration：
+逐表核对完整列定义：
+
+```powershell
+npx wrangler d1 execute GALLERY_DB --remote --command "PRAGMA table_info(tags)"
+npx wrangler d1 execute GALLERY_DB --remote --command "PRAGMA table_info(categories)"
+npx wrangler d1 execute GALLERY_DB --remote --command "PRAGMA table_info(images)"
+npx wrangler d1 execute GALLERY_DB --remote --command "PRAGMA table_info(image_tags)"
+npx wrangler d1 execute GALLERY_DB --remote --command "PRAGMA table_info(site_settings)"
+npx wrangler d1 execute GALLERY_DB --remote --command "PRAGMA table_info(featured_images)"
+```
+
+逐表核对全部外键；没有外键的表应返回空结果：
+
+```powershell
+npx wrangler d1 execute GALLERY_DB --remote --command "PRAGMA foreign_key_list(tags)"
+npx wrangler d1 execute GALLERY_DB --remote --command "PRAGMA foreign_key_list(categories)"
+npx wrangler d1 execute GALLERY_DB --remote --command "PRAGMA foreign_key_list(images)"
+npx wrangler d1 execute GALLERY_DB --remote --command "PRAGMA foreign_key_list(image_tags)"
+npx wrangler d1 execute GALLERY_DB --remote --command "PRAGMA foreign_key_list(site_settings)"
+npx wrangler d1 execute GALLERY_DB --remote --command "PRAGMA foreign_key_list(featured_images)"
+```
+
+核对七个业务索引的完整 SQL：
+
+```powershell
+npx wrangler d1 execute GALLERY_DB --remote --command "SELECT name, sql FROM sqlite_schema WHERE type = 'index' AND name IN ('idx_tags_visible_order', 'idx_categories_order', 'idx_images_file_id', 'idx_images_category_id', 'idx_image_tags_image_id', 'idx_image_tags_tag_id', 'idx_featured_images_order') ORDER BY name"
+```
+
+最后只用聚合数值检查标签与分类排序，不输出任何名称：
+
+```powershell
+npx wrangler d1 execute GALLERY_DB --remote --command "SELECT 'tags' AS entity, COUNT(*) AS row_count, COUNT(DISTINCT sort_order) AS distinct_sort_orders, MIN(sort_order) AS min_sort_order, MAX(sort_order) AS max_sort_order, SUM(CASE WHEN sort_order IS NULL THEN 1 ELSE 0 END) AS null_sort_orders FROM tags UNION ALL SELECT 'categories' AS entity, COUNT(*) AS row_count, COUNT(DISTINCT sort_order) AS distinct_sort_orders, MIN(sort_order) AS min_sort_order, MAX(sort_order) AS max_sort_order, SUM(CASE WHEN sort_order IS NULL THEN 1 ELSE 0 END) AS null_sort_orders FROM categories"
+```
+
+必须确认：六张表的列与 `schema.sql` 一致；外键目标和删除行为一致；七个索引名称与 SQL 一致；聚合结果没有异常空排序；待执行列表只有本次审查过的 migration。任何一项不一致都应停止发布，不得尝试用写入命令“顺手修复”。
+
+## 第三步：迁移、推送同一 SHA 并等待部署
+
+只读 preflight 通过后应用 migration，并再次检查待执行列表：
 
 ```powershell
 npx wrangler d1 migrations apply GALLERY_DB --remote
@@ -50,51 +102,15 @@ npx wrangler d1 migrations list GALLERY_DB --remote
 
 `0001_baseline.sql` 只使用 `CREATE ... IF NOT EXISTS` 和 `ON CONFLICT DO NOTHING`，不会删除或覆盖业务数据。migration 失败时停止发布，不推送依赖该结构的新代码。生产 migration 不放入 Pages build 或 GitHub CI。
 
-## 第三步：验证并安全推送
-
-进入当前仓库：
+确认本地仍是完全相同的已审查提交，然后普通推送：
 
 ```powershell
-cd "D:\GoodTry\Image-Gallery"
-```
-
-当前远程已经配置为：
-
-```powershell
-git remote -v
-```
-
-应看到：
-
-```text
-origin  https://github.com/XiaoZhi0079/cloudflare-imaged.git
-origin  https://github.com/XiaoZhi0079/cloudflare-imaged.git
-```
-
-推送前必须先验证并检查暂存内容：
-
-如果本次修改了 `public/assets/main.css` 或 `public/assets/gallery.js`，先同步递增 `public/index.html` 中两个入口 URL 的 `?v` 发布版本，避免浏览器继续使用旧缓存。
-
-```powershell
-npm test
-git diff --check
-git status --short --branch
-git diff --cached
-```
-
-确认提交内容后创建提交，再执行普通推送：
-
-```powershell
+if ((git rev-parse HEAD) -ne $releaseSha) { throw "migration 后 HEAD 发生变化，停止发布" }
+if (git status --porcelain) { throw "migration 后工作区发生变化，停止发布" }
 git push -u origin main
 ```
 
-也可以在工作区干净、提交已经创建后运行：
-
-```powershell
-.\sync-github.cmd
-```
-
-脚本只执行普通推送。如果 Git 提示无法快进，应先获取并审查远端提交，再决定合并或变基；不得自动覆盖远端历史。
+如果 Git 提示无法快进，应停止发布，获取并审查远端提交后重新执行整套验证和 D1 preflight；不得强推。推送成功后等待 GitHub CI 与 Cloudflare Pages 部署同一个 `$releaseSha`，再进行只读 API、DOM 和时序验收。
 
 ## 第四步：在 Cloudflare 中连接 GitHub 仓库
 
