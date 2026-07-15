@@ -211,7 +211,7 @@ test("public entry assets share one cache-busting release version", () => {
   assert.equal(cssVersion[1], scriptVersion[1]);
 });
 
-test("changed admin assets share the featured dimensions cache-busting version", () => {
+test("changed admin assets share the filter separation cache-busting version", () => {
   const libraryHtml = readFileSync(new URL("../public/admin/index.html", import.meta.url), "utf8");
   const libraryEntry = readFileSync(
     new URL("../public/assets/admin/library-page.js", import.meta.url),
@@ -222,7 +222,7 @@ test("changed admin assets share the featured dimensions cache-busting version",
     new URL("../public/assets/admin/settings-page.js", import.meta.url),
     "utf8",
   );
-  const expectedVersion = "20260715-featured-dimensions";
+  const expectedVersion = "20260715-featured-filter-separation";
   const references = [
     [libraryHtml, /href="\/assets\/admin\/workbench\.css\?v=([^"]+)"/, "workbench.css"],
     [libraryHtml, /src="\/assets\/admin\/library-page\.js\?v=([^"]+)"/, "library-page.js"],
