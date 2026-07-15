@@ -89,14 +89,11 @@ test("image workbench exposes filtering details upload and bulk controls", () =>
   assert.doesNotMatch(html, /<h3>主分类<\/h3>/);
 });
 
-test("image workbench exposes mutually exclusive featured eligibility filters", () => {
+test("image workbench keeps carousel eligibility filters out of the library", () => {
   const html = readFileSync(new URL("../public/admin/index.html", import.meta.url), "utf8");
-  const values = [...html.matchAll(/<input[^>]*type="radio"[^>]*name="featured-filter"[^>]*value="([^"]+)"/g)]
-    .map((match) => match[1]);
-  assert.deepEqual(values, ["all", "eligible", "4k"]);
-  assert.match(html, /value="all" checked/);
-  assert.match(html, />轮播可用<\/span>/);
-  assert.match(html, />4K<\/span>/);
+  assert.doesNotMatch(html, /name="featured-filter"/);
+  assert.doesNotMatch(html, /id="featured-filter-heading"/);
+  assert.doesNotMatch(html, />轮播规格</);
 });
 
 test("image workbench renders only real filters with visible multi-select state", () => {

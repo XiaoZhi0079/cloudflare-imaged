@@ -47,14 +47,10 @@ test("library filters require every selected tag", () => {
   );
 });
 
-test("library featured filter trusts nested eligibility and composes with search and tags", () => {
-  assert.deepEqual(
-    filterImages(featuredImages, { featured: "eligible" }).map((image) => image.id),
-    [10, 11],
-  );
+test("library filtering stays driven by search and tags when eligibility metadata exists", () => {
   assert.deepEqual(
     filterImages(featuredImages, { featured: "4k" }).map((image) => image.id),
-    [11],
+    [10, 11, 12, 13],
   );
   assert.deepEqual(
     filterImages(featuredImages, {
@@ -63,10 +59,6 @@ test("library featured filter trusts nested eligibility and composes with search
       featured: "4k",
     }).map((image) => image.id),
     [11],
-  );
-  assert.deepEqual(
-    filterImages(featuredImages, { featured: "eligible" }).includes(featuredImages[3]),
-    false,
   );
 });
 
@@ -91,28 +83,21 @@ test("empty filters show every image and multiple tags use intersection", () => 
   assert.equal("categoryId" in state.getFilters(), false);
 });
 
-test("library state manages featured eligibility alongside other filters and reset", () => {
+test("library state exposes only search tags and sort filters", () => {
   const state = createLibraryState({ initialRenderLimit: 1, renderIncrement: 10 });
   state.setImages(featuredImages);
   state.showMore();
-  state.setFeaturedFilter("eligible");
-  assert.equal(state.getFilters().featured, "eligible");
-  assert.deepEqual(state.visibleImages().map((image) => image.id), [11, 10]);
-  assert.equal(state.renderedImages().length, 1);
+  assert.equal(state.setFeaturedFilter, undefined);
 
   state.setQuery("nature");
   state.setTagsFilter(new Set(["精选"]));
-  state.setFeaturedFilter("4k");
   assert.deepEqual(state.visibleImages().map((image) => image.id), [11]);
 
-  state.setFeaturedFilter("unsupported");
-  assert.equal(state.getFilters().featured, "all");
   state.resetFilters();
   assert.deepEqual(state.getFilters(), {
     query: "",
     tagNames: new Set(),
     sort: "newest",
-    featured: "all",
   });
   assert.equal(state.renderedImages().length, 1);
 });
@@ -152,7 +137,7 @@ test("image card includes a fallback when no preview URL exists", () => {
   assert.match(html, /image-preview-fallback/);
 });
 
-test("image card shows trusted featured dimensions, eligibility, and quality", () => {
+test("image card does not overlay carousel eligibility metadata", () => {
   const html = renderImageCard({
     id: 10,
     fileName: "featured.webp",
@@ -168,13 +153,13 @@ test("image card shows trusted featured dimensions, eligibility, and quality", (
     },
   });
 
-  assert.match(html, /3840×2160/);
-  assert.match(html, /轮播可用/);
-  assert.match(html, />4K</);
-  assert.match(html, /is-4k/);
+  assert.doesNotMatch(html, /3840×2160/);
+  assert.doesNotMatch(html, /轮播可用/);
+  assert.doesNotMatch(html, />4K</);
+  assert.doesNotMatch(html, /image-featured-badge|is-4k/);
 });
 
-test("image card shows ineligible reason and safe unknown fallbacks", () => {
+test("image card does not expose carousel rejection reasons", () => {
   const invalidHtml = renderImageCard({
     id: 12,
     fileName: "invalid.webp",
@@ -188,15 +173,15 @@ test("image card shows ineligible reason and safe unknown fallbacks", () => {
       reason: "分辨率不足",
     },
   });
-  assert.match(invalidHtml, /1600×900/);
-  assert.match(invalidHtml, /分辨率不足/);
-  assert.match(invalidHtml, /is-invalid/);
+  assert.doesNotMatch(invalidHtml, /1600×900/);
+  assert.doesNotMatch(invalidHtml, /分辨率不足/);
+  assert.doesNotMatch(invalidHtml, /is-invalid/);
 
   const unknownHtml = renderImageCard({ id: 13, fileName: "unknown.webp", tags: [] });
-  assert.match(unknownHtml, /尺寸未知/);
+  assert.doesNotMatch(unknownHtml, /尺寸未知/);
 });
 
-test("image card escapes every server-provided featured label", () => {
+test("image card ignores every server-provided featured label", () => {
   const html = renderImageCard({
     id: 14,
     fileName: "unsafe.webp",
@@ -214,9 +199,7 @@ test("image card escapes every server-provided featured label", () => {
   assert.doesNotMatch(html, /<img src=x/);
   assert.doesNotMatch(html, /<b class="bad">/);
   assert.doesNotMatch(html, /<script>/);
-  assert.match(html, /&lt;img src=x onerror=&quot;bad&quot;&gt;/);
-  assert.match(html, /&lt;b class=&quot;bad&quot;&gt;4K&lt;\/b&gt;/);
-  assert.match(html, /&lt;script&gt;bad\(\)&lt;\/script&gt;/);
+  assert.doesNotMatch(html, /onerror|bad\(\)|4K/);
 });
 
 test("library controller connects detail and bulk API operations", () => {
@@ -228,10 +211,12 @@ test("library controller connects detail and bulk API operations", () => {
   assert.match(source, /\/api\/admin\/images\/bulk-delete/);
 });
 
-test("library controller connects featured radios and safe detail dimensions", () => {
+test("library controller has no carousel filter and uses neutral image dimensions", () => {
   const source = readFileSync(new URL("../public/assets/admin/library-page.js", import.meta.url), "utf8");
-  assert.match(source, /featuredFilters/);
-  assert.match(source, /setFeaturedFilter\(input\.value\)/);
+  assert.doesNotMatch(source, /featuredFilters/);
+  assert.doesNotMatch(source, /setFeaturedFilter\(input\.value\)/);
+  assert.doesNotMatch(source, /featuredEligibility/);
   assert.match(source, /detail-dimensions/);
-  assert.match(source, /featuredEligibility/);
+  assert.match(source, /image\.width/);
+  assert.match(source, /image\.height/);
 });
