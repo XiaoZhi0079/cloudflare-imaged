@@ -12,13 +12,13 @@ function createTestDb() {
   return database;
 }
 
-async function createImage(repository, key) {
+async function createImage(repository, key, dimensions = {}) {
   return await repository.upsertImage({
     storageKey: key,
     fileName: `${key}.webp`,
     fileUrl: `https://gallery.test/file/${key}.webp`,
-    width: 800,
-    height: 1200,
+    width: dimensions.width ?? 1920,
+    height: dimensions.height ?? 1080,
     syncStatus: "ok",
   });
 }
@@ -58,6 +58,25 @@ test("setFeaturedImages stores ordered images and listFeaturedImages returns the
   assert.deepEqual(listed.map((image) => image.id), [third.id, first.id, second.id]);
 });
 
+test("setFeaturedImages enforces featured image dimension rules without clearing selection", async () => {
+  const repository = createGalleryRepository(createTestDb());
+  const selected = await createImage(repository, "selected");
+  const ineligible = await createImage(repository, "wrong-ratio", {
+    width: 1920,
+    height: 1200,
+  });
+  await repository.setFeaturedImages([selected.id]);
+
+  await assert.rejects(
+    () => repository.setFeaturedImages([ineligible.id]),
+    /exact 16:9 and at least 1920x1080/,
+  );
+  assert.deepEqual(
+    (await repository.listFeaturedImages()).map((image) => image.id),
+    [selected.id],
+  );
+});
+
 test("setFeaturedImages rejects unknown image ids", async () => {
   const repository = createGalleryRepository(createTestDb());
   const image = await createImage(repository, "only");
@@ -94,6 +113,37 @@ test("updateSiteConfiguration updates settings and featured order together", asy
   assert.equal(updated.issueName, "原子更新");
   assert.equal(updated.heroCopy, "设置与精选同时生效。");
   assert.deepEqual(updated.featuredImages.map((image) => image.id), [second.id, first.id]);
+});
+
+test("updateSiteConfiguration rejects ineligible featured images atomically", async () => {
+  const repository = createGalleryRepository(createTestDb());
+  const selected = await createImage(repository, "atomic-selected");
+  const ineligible = await createImage(repository, "too-small", {
+    width: 1280,
+    height: 720,
+  });
+  await repository.updateSiteSettings({
+    issueName: "原期名",
+    heroCopy: "原文案",
+  });
+  await repository.setFeaturedImages([selected.id]);
+
+  await assert.rejects(
+    () => repository.updateSiteConfiguration({
+      issueName: "不应保存",
+      heroCopy: "也不应保存",
+      featuredImageIds: [ineligible.id],
+    }),
+    /exact 16:9 and at least 1920x1080/,
+  );
+  assert.deepEqual(await repository.getSiteSettings(), {
+    issueName: "原期名",
+    heroCopy: "原文案",
+  });
+  assert.deepEqual(
+    (await repository.listFeaturedImages()).map((image) => image.id),
+    [selected.id],
+  );
 });
 
 test("concurrent repository instances bootstrap defaults idempotently", async () => {

@@ -18,13 +18,13 @@ function createTestEnv() {
   };
 }
 
-async function createImage(repository, key, categoryId = null) {
+async function createImage(repository, key, categoryId = null, dimensions = {}) {
   return await repository.upsertImage({
     storageKey: key,
     fileName: `${key}.webp`,
     fileUrl: `https://gallery.example.com/file/${key}.webp`,
-    width: 900,
-    height: 1200,
+    width: dimensions.width ?? 1920,
+    height: dimensions.height ?? 1080,
     syncStatus: "ok",
     categoryId,
   });
@@ -85,9 +85,9 @@ test("admin can patch site settings and featured order", async () => {
   assert.deepEqual(payload.featuredImageIds, [second.id, first.id]);
   assert.deepEqual(payload.featuredImages.map((image) => image.id), [second.id, first.id]);
   assert.equal(payload.featuredImages[0].category.id, category.id);
-  assert.equal(payload.featuredImages[0].featuredEligibility?.dimensions, "900×1200");
-  assert.equal(payload.featuredImages[0].featuredEligibility?.eligible, false);
-  assert.equal(payload.featuredImages[0].featuredEligibility?.reason, "比例不符");
+  assert.equal(payload.featuredImages[0].featuredEligibility?.dimensions, "1920×1080");
+  assert.equal(payload.featuredImages[0].featuredEligibility?.eligible, true);
+  assert.equal(payload.featuredImages[0].featuredEligibility?.reason, null);
 
   const publicResponse = await publicSiteHandler({
     env,
@@ -160,6 +160,51 @@ test("admin site patch rolls back text when featured image validation fails", as
   assert.deepEqual(
     (await repository.listFeaturedImages()).map((featured) => featured.id),
     [image.id],
+  );
+});
+
+test("admin site patch rejects ineligible featured images atomically", async () => {
+  const env = createTestEnv();
+  const repository = createGalleryRepository(env.GALLERY_DB);
+  const selected = await createImage(repository, "selected-before-ineligible");
+  const ineligible = await createImage(
+    repository,
+    "ineligible-ratio",
+    null,
+    { width: 1920, height: 1200 },
+  );
+  await repository.updateSiteSettings({
+    issueName: "原期名",
+    heroCopy: "原文案",
+  });
+  await repository.setFeaturedImages([selected.id]);
+
+  const response = await adminSiteHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/site", {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json",
+        "x-gallery-admin-key": "gallery-secret",
+      },
+      body: JSON.stringify({
+        issueName: "不应保存",
+        heroCopy: "也不应保存",
+        featuredImageIds: [ineligible.id],
+      }),
+    }),
+  });
+
+  assert.equal(response.status, 400);
+  const payload = await response.json();
+  assert.match(payload.error, /exact 16:9 and at least 1920x1080/);
+  assert.deepEqual(await repository.getSiteSettings(), {
+    issueName: "原期名",
+    heroCopy: "原文案",
+  });
+  assert.deepEqual(
+    (await repository.listFeaturedImages()).map((image) => image.id),
+    [selected.id],
   );
 });
 

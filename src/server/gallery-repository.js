@@ -1,4 +1,5 @@
 import { normalizeTagName, slugifyTagName } from "../shared/tag-utils.js";
+import { classifyFeaturedImage } from "../shared/featured-image-rules.js";
 
 const DEFAULT_CATEGORIES = [
   { name: "性感美人", directorySlug: "sexy-beauty", sortOrder: 1 },
@@ -524,6 +525,33 @@ export function createGalleryRepository(database) {
     await schemaReady;
   }
 
+  async function assertEligibleFeaturedImages(imageIds) {
+    if (imageIds.length === 0) {
+      return;
+    }
+
+    const placeholders = imageIds.map(() => "?").join(", ");
+    const rows = await all(
+      database,
+      `SELECT id, width, height FROM images WHERE id IN (${placeholders})`,
+      imageIds,
+    );
+    const rowsById = new Map(rows.map((row) => [Number(row.id), row]));
+    const missingIds = imageIds.filter((imageId) => !rowsById.has(imageId));
+    if (missingIds.length > 0) {
+      throw new RangeError(`unknown image ids: ${missingIds.join(", ")}`);
+    }
+
+    const invalidIds = imageIds.filter(
+      (imageId) => !classifyFeaturedImage(rowsById.get(imageId)).eligible,
+    );
+    if (invalidIds.length > 0) {
+      throw new RangeError(
+        `featured images must be exact 16:9 and at least 1920x1080: ${invalidIds.join(", ")}`,
+      );
+    }
+  }
+
   return {
     async getSiteSettings() {
       await ensureSchema();
@@ -590,18 +618,8 @@ export function createGalleryRepository(database) {
         ? validateFeaturedImageIds(changes.featuredImageIds)
         : undefined;
 
-      if (featuredImageIds?.length > 0) {
-        const placeholders = featuredImageIds.map(() => "?").join(", ");
-        const existingRows = await all(
-          database,
-          `SELECT id FROM images WHERE id IN (${placeholders})`,
-          featuredImageIds,
-        );
-        const existingIds = new Set(existingRows.map((row) => Number(row.id)));
-        const missingIds = featuredImageIds.filter((imageId) => !existingIds.has(imageId));
-        if (missingIds.length > 0) {
-          throw new RangeError(`unknown image ids: ${missingIds.join(", ")}`);
-        }
+      if (hasFeaturedImages) {
+        await assertEligibleFeaturedImages(featuredImageIds);
       }
 
       const entries = [];
@@ -664,23 +682,7 @@ export function createGalleryRepository(database) {
         orderedIds.push(imageId);
       }
 
-      if (orderedIds.length > 0) {
-        const placeholders = orderedIds.map(() => "?").join(", ");
-        const existingRows = await all(
-          database,
-          `
-            SELECT id
-            FROM images
-            WHERE id IN (${placeholders})
-          `,
-          orderedIds,
-        );
-        const existingIds = new Set(existingRows.map((row) => Number(row.id)));
-        const missing = orderedIds.filter((id) => !existingIds.has(id));
-        if (missing.length > 0) {
-          throw new RangeError(`unknown image ids: ${missing.join(", ")}`);
-        }
-      }
+      await assertEligibleFeaturedImages(orderedIds);
 
       await run(database, `DELETE FROM featured_images`);
 
