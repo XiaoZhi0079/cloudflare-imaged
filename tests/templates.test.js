@@ -158,6 +158,30 @@ test("featured hero copy overlays the image without an opaque panel", () => {
   );
 });
 
+test("featured hero uses a fixed responsive 16:9 stage", () => {
+  const css = readFileSync(new URL("../public/assets/main.css", import.meta.url), "utf8");
+  const index = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
+
+  assert.match(
+    css,
+    /\.hero-stage\s*\{[^}]*aspect-ratio:\s*16\s*\/\s*9;[^}]*min-height:\s*0;/,
+  );
+  assert.match(
+    css,
+    /\.hero-image\s*\{[^}]*height:\s*100%;[^}]*object-fit:\s*contain;[^}]*object-position:\s*center;/,
+  );
+  for (const viewportHeightRule of [
+    /(?:^|\r?\n)\s*height:\s*min\(52vh,\s*520px\);?/m,
+    /(?:^|\r?\n)\s*min-height:\s*min\(52vh,\s*520px\);?/m,
+    /(?:^|\r?\n)\s*height:\s*min\(42vh,\s*360px\);?/m,
+    /(?:^|\r?\n)\s*min-height:\s*min\(42vh,\s*360px\);?/m,
+  ]) {
+    assert.doesNotMatch(css, viewportHeightRule);
+  }
+  assert.match(index, /main\.css\?v=20260715-featured-dimensions/);
+  assert.match(index, /gallery\.js\?v=20260715-featured-dimensions/);
+});
+
 test("public entry assets share one cache-busting release version", () => {
   const index = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
   const cssVersion = index.match(/href="\/assets\/main\.css\?v=([^"]+)"/);

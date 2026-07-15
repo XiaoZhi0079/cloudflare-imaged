@@ -99,15 +99,16 @@ button[disabled] {
 
 .hero-stage {
   position: relative;
-  min-height: min(52vh, 520px);
+  aspect-ratio: 16 / 9;
+  min-height: 0;
   background: #1a1411;
 }
 
 .hero-image {
   width: 100%;
-  height: min(52vh, 520px);
-  object-fit: cover;
-  object-position: center 20%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
   display: block;
 }
 
@@ -431,12 +432,6 @@ button[disabled] {
 
   .hero {
     padding: 0;
-  }
-
-  .hero-image,
-  .hero-stage {
-    height: min(42vh, 360px);
-    min-height: min(42vh, 360px);
   }
 
   .hero-meta {
