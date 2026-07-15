@@ -7,12 +7,95 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+function labelText(value, fallback) {
+  const text = String(value ?? "").trim();
+  return text || fallback;
+}
+
+function featuredDisplay(image) {
+  const eligibility = image.featuredEligibility && typeof image.featuredEligibility === "object"
+    ? image.featuredEligibility
+    : {};
+  const eligible = eligibility.eligible === true;
+  const dimensions = labelText(eligibility.dimensions, "尺寸未知");
+  const status = eligible
+    ? labelText(eligibility.statusLabel, "状态未知")
+    : labelText(eligibility.reason || eligibility.statusLabel, "状态未知");
+  const quality = String(eligibility.qualityLabel ?? "").trim();
+
+  return {
+    dimensions,
+    eligible,
+    is4K: eligibility.is4K === true,
+    quality,
+    status,
+  };
+}
+
+function renderFeaturedMetadata(display, className, { prefixInvalid = false } = {}) {
+  const status = prefixInvalid && !display.eligible
+    ? `不可加入：${display.status}`
+    : display.status;
+  const qualityBadge = display.quality
+    ? `<span class="site-eligibility-quality">${escapeHtml(display.quality)}</span>`
+    : "";
+
+  return `<div class="${className}">
+              <span class="site-eligibility-dimensions">${escapeHtml(display.dimensions)}</span>
+              <span class="site-eligibility-status">${escapeHtml(status)}</span>
+              ${qualityBadge}
+            </div>`;
+}
+
+export function renderFeaturedItem(image, index, total) {
+  const display = featuredDisplay(image);
+  const stateClass = display.eligible ? "is-eligible" : "is-ineligible";
+  const qualityClass = display.is4K ? " is-4k" : "";
+  const fileName = escapeHtml(image.fileName || "未命名图片");
+  const fileUrl = escapeHtml(image.fileUrl || "");
+  const warning = display.eligible
+    ? ""
+    : `<p class="site-featured-warning">当前图片不符合轮播规格，请移除后再保存。</p>`;
+
+  return `<article class="site-featured-item ${stateClass}${qualityClass}" data-featured-id="${escapeHtml(image.id)}">
+          <img src="${fileUrl}" alt="${fileName}" loading="lazy" />
+          <div class="site-featured-copy">
+            <strong title="${fileName}">${fileName}</strong>
+            <span>第 ${index + 1} 张</span>
+            ${renderFeaturedMetadata(display, "site-featured-meta")}
+            ${warning}
+          </div>
+          <div class="site-featured-item-actions">
+            <button type="button" data-action="move-up" ${index === 0 ? "disabled" : ""} aria-label="上移">↑</button>
+            <button type="button" data-action="move-down" ${index === total - 1 ? "disabled" : ""} aria-label="下移">↓</button>
+            <button type="button" data-action="remove" class="admin-button-danger">移除</button>
+          </div>
+        </article>`;
+}
+
+export function renderFeaturedPickerCard(image, selected = false) {
+  const display = featuredDisplay(image);
+  const stateClass = display.eligible ? "is-eligible" : "is-ineligible is-disabled";
+  const qualityClass = display.is4K ? " is-4k" : "";
+  const checked = selected ? " checked" : "";
+  const disabled = display.eligible ? "" : " disabled";
+  const fileName = escapeHtml(image.fileName || "未命名");
+
+  return `<label class="site-picker-card ${stateClass}${qualityClass}">
+              <input type="checkbox" value="${escapeHtml(image.id)}"${checked}${disabled} />
+              <img src="${escapeHtml(image.fileUrl || "")}" alt="${fileName}" loading="lazy" />
+              <span class="site-picker-name" title="${fileName}">${fileName}</span>
+              ${renderFeaturedMetadata(display, "site-picker-meta", { prefixInvalid: true })}
+            </label>`;
+}
+
 export function mergeFeaturedSelection(current, library, selectedIds) {
   const selected = new Set(selectedIds.map(Number));
   const kept = current.filter((image) => selected.has(Number(image.id)));
   const keptIds = new Set(kept.map((image) => Number(image.id)));
   const added = library.filter((image) => (
     selected.has(Number(image.id))
+    && image.featuredEligibility?.eligible === true
     && !keptIds.has(Number(image.id))
   ));
 
@@ -78,22 +161,7 @@ export function createSiteSettingsController({
     }
 
     elements.list.innerHTML = draft.featuredImages
-      .map((image, index) => {
-        const fileName = escapeHtml(image.fileName || "未命名图片");
-        const fileUrl = escapeHtml(image.fileUrl || "");
-        return `<article class="site-featured-item" data-featured-id="${escapeHtml(image.id)}">
-          <img src="${fileUrl}" alt="${fileName}" loading="lazy" />
-          <div class="site-featured-copy">
-            <strong title="${fileName}">${fileName}</strong>
-            <span>第 ${index + 1} 张</span>
-          </div>
-          <div class="site-featured-item-actions">
-            <button type="button" data-action="move-up" ${index === 0 ? "disabled" : ""} aria-label="上移">↑</button>
-            <button type="button" data-action="move-down" ${index === draft.featuredImages.length - 1 ? "disabled" : ""} aria-label="下移">↓</button>
-            <button type="button" data-action="remove" class="admin-button-danger">移除</button>
-          </div>
-        </article>`;
-      })
+      .map((image, index) => renderFeaturedItem(image, index, draft.featuredImages.length))
       .join("");
     updateStatus();
   }
@@ -139,19 +207,19 @@ export function createSiteSettingsController({
     try {
       const { images = [] } = await client.request("/api/admin/images");
       const selected = new Set(draft.featuredImages.map((image) => Number(image.id)));
+      const currentIds = new Set(draft.featuredImages.map((image) => Number(image.id)));
+      const eligibleIds = new Set(images
+        .filter((image) => image.featuredEligibility?.eligible === true)
+        .map((image) => Number(image.id)));
       const body = document.createElement("div");
       body.className = "site-picker";
       body.innerHTML = `
-        <p class="admin-muted">勾选要加入大屏的图片，确认后可继续调整顺序。</p>
+        <p class="site-picker-rule">仅精确 16:9 且至少 1920×1080 可加入轮播。当前已选但不合规的旧图片需在当前精选列表中移除。</p>
         <div class="site-picker-grid">
-          ${images.map((image) => {
-            const checked = selected.has(Number(image.id)) ? "checked" : "";
-            return `<label class="site-picker-card">
-              <input type="checkbox" value="${escapeHtml(image.id)}" ${checked} />
-              <img src="${escapeHtml(image.fileUrl || "")}" alt="${escapeHtml(image.fileName || "")}" loading="lazy" />
-              <span title="${escapeHtml(image.fileName || "")}">${escapeHtml(image.fileName || "未命名")}</span>
-            </label>`;
-          }).join("")}
+          ${images.map((image) => renderFeaturedPickerCard(
+            image,
+            selected.has(Number(image.id)),
+          )).join("")}
         </div>
       `;
 
@@ -166,7 +234,9 @@ export function createSiteSettingsController({
         return;
       }
 
-      const chosenIds = [...body.querySelectorAll("input[type=checkbox]:checked")].map((input) => Number(input.value));
+      const chosenIds = [...body.querySelectorAll("input[type=checkbox]:checked")]
+        .map((input) => Number(input.value))
+        .filter((imageId) => currentIds.has(imageId) || eligibleIds.has(imageId));
       draft.featuredImages = mergeFeaturedSelection(draft.featuredImages, images, chosenIds);
       renderFeatured();
     } catch (error) {

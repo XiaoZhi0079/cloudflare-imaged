@@ -107,6 +107,20 @@ body.is-sorting { user-select:none; cursor:grabbing; }
   background: var(--admin-surface);
 }
 
+.site-featured-item.is-eligible {
+  border-left: 4px solid var(--admin-success);
+}
+
+.site-featured-item.is-eligible.is-4k {
+  border-left-color: #7556ad;
+}
+
+.site-featured-item.is-ineligible {
+  border-color: #d5a293;
+  border-left: 4px solid var(--admin-danger);
+  background: #fff8f5;
+}
+
 .site-featured-item img {
   width: 72px;
   height: 72px;
@@ -127,10 +141,59 @@ body.is-sorting { user-select:none; cursor:grabbing; }
   white-space: nowrap;
 }
 
-.site-featured-copy span,
+.site-featured-copy > span,
 .site-featured-head .admin-muted {
   color: var(--admin-muted);
   font-size: 12px;
+}
+
+.site-featured-meta,
+.site-picker-meta {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  color: var(--admin-muted);
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.site-featured-meta > span,
+.site-picker-meta > span {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.site-eligibility-dimensions {
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+}
+
+.site-eligibility-status {
+  font-weight: 700;
+}
+
+.site-eligibility-quality {
+  width: max-content;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: #e9e2f5;
+  color: #5b428b;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.site-featured-warning {
+  margin: 2px 0 0;
+  color: var(--admin-danger);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .site-featured-item-actions {
@@ -144,34 +207,94 @@ body.is-sorting { user-select:none; cursor:grabbing; }
 
 .site-picker-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr));
   gap: 10px;
 }
 
+.site-picker-rule {
+  margin: 0;
+  padding: 9px 10px;
+  border-left: 4px solid var(--admin-accent);
+  border-radius: 6px;
+  background: var(--admin-panel);
+  color: var(--admin-ink);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
 .site-picker-card {
+  position: relative;
+  min-width: 0;
   display: grid;
+  align-content: start;
   gap: 6px;
   padding: 8px;
   border: 1px solid var(--admin-line);
+  border-left-width: 4px;
   border-radius: 8px;
   background: var(--admin-surface);
   cursor: pointer;
 }
 
+.site-picker-card.is-eligible {
+  border-left-color: var(--admin-success);
+}
+
+.site-picker-card.is-4k {
+  border-left-color: #7556ad;
+}
+
+.site-picker-card.is-ineligible {
+  border-color: #d5a293;
+  border-left-color: var(--admin-danger);
+  background: #fff8f5;
+}
+
+.site-picker-card.is-disabled {
+  cursor: not-allowed;
+}
+
+.site-picker-card.is-disabled img {
+  opacity: .58;
+  filter: grayscale(.25);
+}
+
+.site-picker-card:has(input:checked) {
+  outline: 2px solid var(--admin-accent);
+  outline-offset: -2px;
+}
+
+.site-picker-card input {
+  margin: 0;
+  accent-color: var(--admin-accent);
+}
+
+.site-picker-card input:disabled {
+  cursor: not-allowed;
+}
+
 .site-picker-card img {
   width: 100%;
-  aspect-ratio: 1;
+  aspect-ratio: 16 / 9;
   object-fit: cover;
   border-radius: 6px;
   background: #ddd3c6;
 }
 
-.site-picker-card span {
+.site-picker-name {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 12px;
-  color: var(--admin-muted);
+  color: var(--admin-ink);
+  font-weight: 700;
+}
+
+.site-picker-card.is-ineligible .site-eligibility-status {
+  color: var(--admin-danger);
 }
 
 @media (max-width:680px) {
@@ -184,12 +307,21 @@ body.is-sorting { user-select:none; cursor:grabbing; }
     grid-template-columns: 64px minmax(0, 1fr);
   }
 
+  .site-featured-item img {
+    width: 64px;
+    height: 64px;
+  }
+
   .site-featured-item-actions {
     grid-column: 1 / -1;
   }
 
   .site-featured-item-actions button {
     flex: 1;
+  }
+
+  .site-picker-grid {
+    grid-template-columns: repeat(auto-fill, minmax(min(140px, 100%), 1fr));
   }
 }
 
