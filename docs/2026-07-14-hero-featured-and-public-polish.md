@@ -211,7 +211,7 @@ npm run seed:demo
 
 本地验证证据：
 
-- `npm test`：170 项测试，170 项通过，0 项失败。
+- `npm test`：171 项测试，171 项通过，0 项失败。
 - 相对基线变更的 26 个 JavaScript 文件全部通过 `node --check`，`bash -n start-local.sh` 与 `git diff --check cada320` 均退出 0。
 - 隔离本地 D1 的 DOM 验收确认：图库无轮播筛选；标签交集有效；picker 的全部/4K/2K/1K 数量为 3/1/1/1；跨档勾选保持；legacy 项不会被静默删除，显式移除后保存为 200。
 - 浏览器在导航前阻断所有图片请求，共阻断 21 次、收到 0 个图片响应，所有图片自然尺寸均为 0；未截图、未查看或分析图片内容。
@@ -241,7 +241,7 @@ npm run seed:demo
 2. **生产库 schema 同步（旧基线已存在；正式 migration 待执行）**
    - [x] 当前生产 `/api/public/site` 与既有标签/图片读取正常
    - [x] baseline migration 的 fresh、重复应用、schema 一致性和已有数据保全测试通过
-   - [ ] 在最终 `main` SHA 上完成六表列定义、全部外键、七索引 SQL、排序聚合和待执行 migration 的只读 preflight
+   - [ ] 在最终 `main` SHA 上完成六表完整 `CREATE TABLE` SQL/列定义、全部外键、七索引 SQL、排序连续性聚合和待执行 migration 的只读 preflight
    - [ ] 应用 `0001_baseline.sql` 到生产 D1，确认无待执行 migration，再推送同一 SHA
 
 ### P1 — 产品增强（可选）
@@ -340,7 +340,7 @@ npm run seed:demo
 - [x] 旧不合规精选保持只读兼容并可由用户手动移除
 - [x] Hero 使用响应式 `16:9` + `contain`；移动端透明文案在舞台下正常流
 - [x] Repository 公共读取路径不再执行运行时 DDL/DML；本地 migration 与 Pages 共用同一 D1 身份
-- [x] 当前功能分支全量测试通过（170 / 170；本改造尚未合并、迁移生产 D1、推送或部署）
+- [x] 当前功能分支全量测试通过（171 / 171；本改造尚未合并、迁移生产 D1、推送或部署）
 
 ---
 

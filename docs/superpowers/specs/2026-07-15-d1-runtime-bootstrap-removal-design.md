@@ -75,10 +75,11 @@
 
 在第一次应用基线前，使用只读 D1 命令检查：
 
-- 6 张业务表的完整列定义与 `schema.sql` 一致；
+- 6 张业务表的完整 `CREATE TABLE` SQL 与 `schema.sql` 一致，覆盖主键、唯一约束、自增、非空、默认值和表内外键；
+- 6 张业务表的逐列定义与 `schema.sql` 一致；
 - 6 张表的全部外键目标和删除行为一致；
 - 7 个业务索引的名称与完整 SQL 一致；
-- 标签和分类的数量、`sort_order` 去重数、最小值、最大值及空值数没有异常，且不输出名称；
+- 标签和分类的数量、`sort_order` 去重数、最小值、最大值及空值数满足连续性公式并返回 `sort_order_is_contiguous = 1`，且不输出名称；
 - `wrangler d1 migrations list GALLERY_DB --remote` 的待执行列表符合预期。
 
 检查只输出表、列、索引和 migration 状态，不读取图片 URL、标签文本、文案或其他业务内容。
@@ -207,7 +208,7 @@ npx wrangler d1 migrations apply GALLERY_DB --remote
 
 ## 实施与本地验收证据（2026-07-16）
 
-- `npm test`：170 项全部通过，0 失败。
+- `npm test`：171 项全部通过，0 失败。
 - 对相对基线变更的 26 个 JavaScript 文件执行 `node --check`，全部退出 0；`bash -n start-local.sh` 退出 0。
 - `git diff --check cada320` 退出 0；两份实施计划文件的 EOF 多余空行已清除。
 - `npm run db:migrate:local` 返回“无待执行 migration”。真实 `npm run dev` 输出 D1 绑定为 `env.GALLERY_DB (gallery)`，不再出现 `local-GALLERY_DB`；公共 tags/site API 均返回 200。

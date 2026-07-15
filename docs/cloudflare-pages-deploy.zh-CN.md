@@ -55,6 +55,12 @@ npx wrangler d1 migrations list GALLERY_DB --remote
 npx wrangler d1 execute GALLERY_DB --remote --command "SELECT type, name FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name"
 ```
 
+再输出六张表的完整 `CREATE TABLE` SQL，并与 `schema.sql` 逐项比较。这个检查覆盖 `PRIMARY KEY`、`UNIQUE`、`AUTOINCREMENT`、`NOT NULL`、默认值和表内外键等 `table_info` 无法完整表达的约束：
+
+```powershell
+npx wrangler d1 execute GALLERY_DB --remote --command "SELECT name, sql FROM sqlite_schema WHERE type = 'table' AND name IN ('tags', 'categories', 'images', 'image_tags', 'site_settings', 'featured_images') ORDER BY name"
+```
+
 逐表核对完整列定义：
 
 ```powershell
@@ -86,10 +92,12 @@ npx wrangler d1 execute GALLERY_DB --remote --command "SELECT name, sql FROM sql
 最后只用聚合数值检查标签与分类排序，不输出任何名称：
 
 ```powershell
-npx wrangler d1 execute GALLERY_DB --remote --command "SELECT 'tags' AS entity, COUNT(*) AS row_count, COUNT(DISTINCT sort_order) AS distinct_sort_orders, MIN(sort_order) AS min_sort_order, MAX(sort_order) AS max_sort_order, SUM(CASE WHEN sort_order IS NULL THEN 1 ELSE 0 END) AS null_sort_orders FROM tags UNION ALL SELECT 'categories' AS entity, COUNT(*) AS row_count, COUNT(DISTINCT sort_order) AS distinct_sort_orders, MIN(sort_order) AS min_sort_order, MAX(sort_order) AS max_sort_order, SUM(CASE WHEN sort_order IS NULL THEN 1 ELSE 0 END) AS null_sort_orders FROM categories"
+npx wrangler d1 execute GALLERY_DB --remote --command "SELECT 'tags' AS entity, COUNT(*) AS row_count, COUNT(DISTINCT sort_order) AS distinct_sort_orders, MIN(sort_order) AS min_sort_order, MAX(sort_order) AS max_sort_order, SUM(CASE WHEN sort_order IS NULL THEN 1 ELSE 0 END) AS null_sort_orders, CASE WHEN COUNT(*) = 0 THEN 1 WHEN COUNT(DISTINCT sort_order) = COUNT(*) AND MIN(sort_order) = 1 AND MAX(sort_order) = COUNT(*) AND SUM(CASE WHEN sort_order IS NULL THEN 1 ELSE 0 END) = 0 THEN 1 ELSE 0 END AS sort_order_is_contiguous FROM tags UNION ALL SELECT 'categories' AS entity, COUNT(*) AS row_count, COUNT(DISTINCT sort_order) AS distinct_sort_orders, MIN(sort_order) AS min_sort_order, MAX(sort_order) AS max_sort_order, SUM(CASE WHEN sort_order IS NULL THEN 1 ELSE 0 END) AS null_sort_orders, CASE WHEN COUNT(*) = 0 THEN 1 WHEN COUNT(DISTINCT sort_order) = COUNT(*) AND MIN(sort_order) = 1 AND MAX(sort_order) = COUNT(*) AND SUM(CASE WHEN sort_order IS NULL THEN 1 ELSE 0 END) = 0 THEN 1 ELSE 0 END AS sort_order_is_contiguous FROM categories"
 ```
 
-必须确认：六张表的列与 `schema.sql` 一致；外键目标和删除行为一致；七个索引名称与 SQL 一致；聚合结果没有异常空排序；待执行列表只有本次审查过的 migration。任何一项不一致都应停止发布，不得尝试用写入命令“顺手修复”。
+对于非空表，必须同时满足 `distinct_sort_orders = row_count`、`min_sort_order = 1`、`max_sort_order = row_count`、`null_sort_orders = 0`，且 `sort_order_is_contiguous = 1`；空表也应返回 `sort_order_is_contiguous = 1`。
+
+必须确认：六张表的完整 `CREATE TABLE` SQL 与 `schema.sql` 一致，包括主键、唯一约束、自增、非空、默认值和外键；逐列及外键检查一致；七个索引名称与 SQL 一致；排序连续性为 1；待执行列表只有本次审查过的 migration。任何一项不一致都应停止发布，不得尝试用写入命令“顺手修复”。
 
 ## 第三步：迁移、推送同一 SHA 并等待部署
 

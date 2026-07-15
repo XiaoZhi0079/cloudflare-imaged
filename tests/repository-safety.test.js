@@ -167,3 +167,28 @@ test("Cloudflare D1 preflight documents every table, foreign key, and index", ()
   assert.match(guide, /COUNT\(DISTINCT sort_order\)/);
   assert.match(guide, /d1 migrations list GALLERY_DB --remote/);
 });
+
+test("Cloudflare D1 preflight compares complete table DDL and proves sort continuity", () => {
+  const guide = readFileSync(
+    new URL("../docs/cloudflare-pages-deploy.zh-CN.md", import.meta.url),
+    "utf8",
+  );
+  const tableDdlCommand = guide
+    .split(/\r?\n/)
+    .find((line) => line.includes("SELECT name, sql FROM sqlite_schema")
+      && line.includes("type = 'table'"));
+
+  assert.ok(tableDdlCommand, "preflight must output complete CREATE TABLE SQL");
+  for (const table of [
+    "tags",
+    "categories",
+    "images",
+    "image_tags",
+    "site_settings",
+    "featured_images",
+  ]) {
+    assert.match(tableDdlCommand, new RegExp(`'${table}'`));
+  }
+  assert.match(guide, /sort_order_is_contiguous/);
+  assert.match(guide, /非空表[^。]*distinct_sort_orders[^。]*row_count[^。]*min_sort_order[^。]*max_sort_order[^。]*null_sort_orders/);
+});
