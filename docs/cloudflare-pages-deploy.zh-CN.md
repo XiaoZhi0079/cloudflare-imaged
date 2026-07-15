@@ -16,9 +16,9 @@
 
 核对日期：2026-07-15。
 
-- 本地分支与 `origin/main` 的已提交基线一致：`3bf57a1`
-- Hero 精选、站点配置和发布安全修复目前仍在本地未提交工作区
-- Cloudflare Pages 从 GitHub `main` 分支部署，因此本地未提交内容不会自动上线
+- 当前本地与远端差异必须以 `git status --short --branch` 和 `git log origin/main..main` 的实时输出为准。
+- Cloudflare Pages 只部署已经普通推送到 GitHub `main` 的提交；本地提交不会自动上线。
+- 发布前先确认工作区干净、测试通过，并使用普通快进推送；不得用文档中的历史 SHA 判断当前发布状态。
 
 正确顺序是：本地验证 → 精选暂存 → 提交 → 普通推送 → Cloudflare 部署检查。
 

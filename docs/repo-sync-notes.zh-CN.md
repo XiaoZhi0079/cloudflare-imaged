@@ -6,9 +6,8 @@
 
 - 本地分支：`main`
 - 远端：`https://github.com/XiaoZhi0079/cloudflare-imaged.git`
-- 本地 `HEAD` 与远端 `origin/main` 的已提交基线一致：`3bf57a1`
-- Hero 精选、站点配置及发布安全修复目前位于本地未提交工作区
-- Cloudflare 生产站点仍运行已提交的旧版代码
+- 本地与远端差异以 `git status --short --branch` 和 `git log origin/main..main` 的实时输出为准。
+- Cloudflare Pages 生产版本以 GitHub `main` 的最新成功部署为准；不要用本文档中的历史提交号推断线上状态。
 
 这不是两套仓库历史，也不需要用本地分支替换远端历史。完成本地验证和提交后，使用普通快进推送即可。
 
