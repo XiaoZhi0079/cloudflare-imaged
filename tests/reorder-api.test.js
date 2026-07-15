@@ -1,17 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { DatabaseSync } from "node:sqlite";
 
 import { createGalleryRepository } from "../src/server/gallery-repository.js";
 import { onRequest as reorderTagsHandler } from "../functions/api/admin/tags/reorder.js";
 import { onRequest as reorderCategoriesHandler } from "../functions/api/admin/categories/reorder.js";
+import { createTestDatabase } from "./helpers/test-database.js";
 
 function createTestEnv() {
-  const database = new DatabaseSync(":memory:");
-  database.exec(readFileSync(new URL("../schema.sql", import.meta.url), "utf8"));
   return {
-    GALLERY_DB: database,
+    GALLERY_DB: createTestDatabase(),
     GALLERY_ADMIN_KEY: "gallery-secret",
   };
 }

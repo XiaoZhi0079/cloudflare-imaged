@@ -1,21 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { DatabaseSync } from "node:sqlite";
 
 import { createGalleryRepository } from "../src/server/gallery-repository.js";
+import { createTestDatabase } from "./helpers/test-database.js";
 
 function createTestDb() {
-  const database = new DatabaseSync(":memory:");
-  const schema = readFileSync(new URL("../schema.sql", import.meta.url), "utf8");
-
-  database.exec(schema);
-
-  return database;
+  return createTestDatabase();
 }
 
-test("listVisibleTags bootstraps the schema when the database is empty", async () => {
-  const database = new DatabaseSync(":memory:");
+test("listVisibleTags reads an explicitly migrated empty tag table", async () => {
+  const database = createTestDb();
   const repository = createGalleryRepository(database);
 
   assert.deepEqual(await repository.listVisibleTags(), []);

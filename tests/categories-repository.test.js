@@ -1,21 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { DatabaseSync } from "node:sqlite";
 
 import { createGalleryRepository } from "../src/server/gallery-repository.js";
+import { createTestDatabase } from "./helpers/test-database.js";
 
 function createTestDb() {
-  const database = new DatabaseSync(":memory:");
-  const schema = readFileSync(new URL("../schema.sql", import.meta.url), "utf8");
-
-  database.exec(schema);
-
-  return database;
+  return createTestDatabase();
 }
 
-test("listCategories bootstraps default upload categories when the database is empty", async () => {
-  const database = new DatabaseSync(":memory:");
+test("listCategories reads default upload categories from the baseline migration", async () => {
+  const database = createTestDb();
   const repository = createGalleryRepository(database);
 
   const categories = await repository.listCategories();
@@ -34,33 +28,13 @@ test("listCategories bootstraps default upload categories when the database is e
   );
 });
 
-test("listCategories migrates a legacy images table before creating category indexes", async () => {
-  const database = new DatabaseSync(":memory:");
-  database.exec(`
-    CREATE TABLE images (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      storage_key TEXT NOT NULL UNIQUE,
-      file_name TEXT NOT NULL,
-      file_url TEXT NOT NULL,
-      width INTEGER,
-      height INTEGER,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      sync_status TEXT NOT NULL DEFAULT 'ok',
-      note TEXT
-    );
-  `);
-
-  const repository = createGalleryRepository(database);
-  const categories = await repository.listCategories();
+test("baseline migration includes the current image category column and index", () => {
+  const database = createTestDb();
   const imageColumns = database.prepare("PRAGMA table_info(images)").all();
+  const imageIndexes = database.prepare("PRAGMA index_list(images)").all();
 
   assert.equal(imageColumns.some((column) => column.name === "category_id"), true);
-  assert.deepEqual(categories.map((category) => category.directory_slug), [
-    "sexy-beauty",
-    "elegant-beauty",
-    "scenery",
-  ]);
+  assert.equal(imageIndexes.some((index) => index.name === "idx_images_category_id"), true);
 });
 
 test("createCategory persists a custom category", async () => {

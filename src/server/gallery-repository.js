@@ -1,95 +1,10 @@
 import { normalizeTagName, slugifyTagName } from "../shared/tag-utils.js";
 import { classifyFeaturedImage } from "../shared/featured-image-rules.js";
 
-const DEFAULT_CATEGORIES = [
-  { name: "性感美人", directorySlug: "sexy-beauty", sortOrder: 1 },
-  { name: "气质美人", directorySlug: "elegant-beauty", sortOrder: 2 },
-  { name: "风景", directorySlug: "scenery", sortOrder: 3 },
-];
-
 const DEFAULT_SITE_SETTINGS = {
   issue_name: "图集",
   hero_copy: "慢慢看，挑一份喜欢的气质。本期以红调与侧光为主，适合夜色、轮廓与留白。",
 };
-
-const SCHEMA_STATEMENTS = [
-  `
-    CREATE TABLE IF NOT EXISTS tags (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL UNIQUE,
-      slug TEXT NOT NULL UNIQUE,
-      sort_order INTEGER NOT NULL DEFAULT 0,
-      is_visible INTEGER NOT NULL DEFAULT 1,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )
-  `,
-  `
-    CREATE TABLE IF NOT EXISTS categories (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL UNIQUE,
-      directory_slug TEXT NOT NULL UNIQUE,
-      sort_order INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )
-  `,
-  `
-    CREATE TABLE IF NOT EXISTS images (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      storage_key TEXT NOT NULL UNIQUE,
-      file_name TEXT NOT NULL,
-      file_url TEXT NOT NULL,
-      width INTEGER,
-      height INTEGER,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      sync_status TEXT NOT NULL DEFAULT 'ok',
-      note TEXT,
-      category_id INTEGER,
-      FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
-    )
-  `,
-  `
-    CREATE TABLE IF NOT EXISTS image_tags (
-      image_id INTEGER NOT NULL,
-      tag_id INTEGER NOT NULL,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      PRIMARY KEY (image_id, tag_id),
-      FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE,
-      FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
-    )
-  `,
-  `
-    CREATE TABLE IF NOT EXISTS site_settings (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )
-  `,
-  `
-    CREATE TABLE IF NOT EXISTS featured_images (
-      image_id INTEGER PRIMARY KEY,
-      sort_order INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE
-    )
-  `,
-];
-
-const MIGRATION_STATEMENTS = [
-  `ALTER TABLE images ADD COLUMN category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL`,
-];
-
-const INDEX_STATEMENTS = [
-  `CREATE INDEX IF NOT EXISTS idx_tags_visible_order ON tags(is_visible, sort_order, name)`,
-  `CREATE INDEX IF NOT EXISTS idx_categories_order ON categories(sort_order, name)`,
-  `CREATE INDEX IF NOT EXISTS idx_images_file_id ON images(storage_key)`,
-  `CREATE INDEX IF NOT EXISTS idx_images_category_id ON images(category_id)`,
-  `CREATE INDEX IF NOT EXISTS idx_image_tags_image_id ON image_tags(image_id)`,
-  `CREATE INDEX IF NOT EXISTS idx_image_tags_tag_id ON image_tags(tag_id)`,
-  `CREATE INDEX IF NOT EXISTS idx_featured_images_order ON featured_images(sort_order, image_id)`,
-];
 
 const SELECT_IMAGE_COLUMNS = `
   images.id,
@@ -420,34 +335,6 @@ function normalizeCategoryDirectorySlug(value) {
     .replace(/^-+|-+$/g, "");
 }
 
-async function seedDefaultCategories(database) {
-  for (const category of DEFAULT_CATEGORIES) {
-    await run(
-      database,
-      `
-        INSERT INTO categories (name, directory_slug, sort_order)
-        VALUES (?, ?, ?)
-        ON CONFLICT DO NOTHING
-      `,
-      [category.name, category.directorySlug, category.sortOrder],
-    );
-  }
-}
-
-async function seedDefaultSiteSettings(database) {
-  for (const [key, value] of Object.entries(DEFAULT_SITE_SETTINGS)) {
-    await run(
-      database,
-      `
-        INSERT INTO site_settings (key, value)
-        VALUES (?, ?)
-        ON CONFLICT(key) DO NOTHING
-      `,
-      [key, value],
-    );
-  }
-}
-
 function mapSiteSettings(rows) {
   const values = new Map((rows ?? []).map((row) => [row.key, row.value]));
 
@@ -487,44 +374,6 @@ function validateFeaturedImageIds(value) {
 }
 
 export function createGalleryRepository(database) {
-  let schemaReady;
-
-  async function ensureSchema() {
-    if (!schemaReady) {
-      schemaReady = (async () => {
-        try {
-          await run(database, `PRAGMA foreign_keys = ON`);
-        } catch {
-          // Some database adapters may not support PRAGMA.
-        }
-
-        for (const statement of SCHEMA_STATEMENTS) {
-          await run(database, statement);
-        }
-
-        for (const statement of MIGRATION_STATEMENTS) {
-          try {
-            await run(database, statement);
-          } catch (error) {
-            const message = String(error?.message ?? "").toLowerCase();
-            if (!message.includes("duplicate column name")) {
-              throw error;
-            }
-          }
-        }
-
-        for (const statement of INDEX_STATEMENTS) {
-          await run(database, statement);
-        }
-
-        await seedDefaultCategories(database);
-        await seedDefaultSiteSettings(database);
-      })();
-    }
-
-    await schemaReady;
-  }
-
   async function assertEligibleFeaturedImages(imageIds) {
     if (imageIds.length === 0) {
       return;
@@ -554,14 +403,11 @@ export function createGalleryRepository(database) {
 
   return {
     async getSiteSettings() {
-      await ensureSchema();
       const rows = await all(database, `SELECT key, value FROM site_settings`);
       return mapSiteSettings(rows);
     },
 
     async updateSiteSettings(changes = {}) {
-      await ensureSchema();
-
       const nextIssueName = changes.issueName === undefined
         ? undefined
         : String(changes.issueName ?? "").trim();
@@ -591,8 +437,6 @@ export function createGalleryRepository(database) {
     },
 
     async updateSiteConfiguration(changes = {}) {
-      await ensureSchema();
-
       const hasIssueName = changes.issueName !== undefined;
       const hasHeroCopy = changes.heroCopy !== undefined;
       const hasFeaturedImages = changes.featuredImageIds !== undefined;
@@ -650,8 +494,6 @@ export function createGalleryRepository(database) {
     },
 
     async listFeaturedImages() {
-      await ensureSchema();
-
       const imageRows = await all(
         database,
         `
@@ -668,8 +510,6 @@ export function createGalleryRepository(database) {
     },
 
     async setFeaturedImages(imageIds = []) {
-      await ensureSchema();
-
       const orderedIds = [];
       const seen = new Set();
 
@@ -701,8 +541,6 @@ export function createGalleryRepository(database) {
     },
 
     async createTag({ name, sortOrder = 0, isVisible = true }) {
-      await ensureSchema();
-
       const normalizedName = normalizeTagName(name);
       const slug = slugifyTagName(normalizedName);
       const orderedTags = await normalizeTagSortOrders(database);
@@ -734,8 +572,6 @@ export function createGalleryRepository(database) {
     },
 
     async updateTag(tagId, changes) {
-      await ensureSchema();
-
       const current = await getTagById(database, tagId);
       if (!current) {
         return null;
@@ -770,8 +606,6 @@ export function createGalleryRepository(database) {
     },
 
     async deleteTag(tagId) {
-      await ensureSchema();
-
       const current = await getTagById(database, tagId);
       if (!current) {
         return false;
@@ -785,22 +619,16 @@ export function createGalleryRepository(database) {
     },
 
     async listTags() {
-      await ensureSchema();
-      await normalizeTagSortOrders(database);
       return await listTagsOrdered(database);
     },
 
     async reorderTags(orderedIds) {
-      await ensureSchema();
       const records = recordsInSubmittedOrder(await listTagsOrdered(database), orderedIds);
       await applyExactOrder(database, "tags", records);
       return await listTagsOrdered(database);
     },
 
     async listVisibleTags() {
-      await ensureSchema();
-      await normalizeTagSortOrders(database);
-
       return await all(
         database,
         `
@@ -813,31 +641,24 @@ export function createGalleryRepository(database) {
     },
 
     async getExistingTagIds(tagIds) {
-      await ensureSchema();
       return await getExistingTagIds(database, tagIds);
     },
 
     async listCategories() {
-      await ensureSchema();
-      await normalizeCategorySortOrders(database);
       return await listCategoriesOrdered(database);
     },
 
     async reorderCategories(orderedIds) {
-      await ensureSchema();
       const records = recordsInSubmittedOrder(await listCategoriesOrdered(database), orderedIds);
       await applyExactOrder(database, "categories", records);
       return await listCategoriesOrdered(database);
     },
 
     async getCategoryById(categoryId) {
-      await ensureSchema();
       return await getCategoryById(database, categoryId);
     },
 
     async createCategory({ name, directorySlug, sortOrder = 0 }) {
-      await ensureSchema();
-
       const normalizedName = normalizeCategoryName(name);
       const normalizedDirectorySlug = normalizeCategoryDirectorySlug(directorySlug);
       const orderedCategories = await normalizeCategorySortOrders(database);
@@ -869,8 +690,6 @@ export function createGalleryRepository(database) {
     },
 
     async updateCategory(categoryId, changes) {
-      await ensureSchema();
-
       const current = await getCategoryById(database, categoryId);
       if (!current) {
         return null;
@@ -903,8 +722,6 @@ export function createGalleryRepository(database) {
     },
 
     async upsertImage({ storageKey, fileName, fileUrl, width, height, syncStatus, note = null, categoryId = null }) {
-      await ensureSchema();
-
       await run(
         database,
         `
@@ -936,8 +753,6 @@ export function createGalleryRepository(database) {
     },
 
     async getImageById(imageId) {
-      await ensureSchema();
-
       const image = await first(
         database,
         `
@@ -957,8 +772,6 @@ export function createGalleryRepository(database) {
     },
 
     async listImages() {
-      await ensureSchema();
-
       const imageRows = await all(
         database,
         `
@@ -974,8 +787,6 @@ export function createGalleryRepository(database) {
     },
 
     async updateImage(imageId, changes) {
-      await ensureSchema();
-
       const current = await this.getImageById(imageId);
       if (!current) {
         return null;
@@ -1013,8 +824,6 @@ export function createGalleryRepository(database) {
     },
 
     async updateImageSyncState(imageId, { syncStatus, note = null }) {
-      await ensureSchema();
-
       await run(
         database,
         `
@@ -1029,8 +838,6 @@ export function createGalleryRepository(database) {
     },
 
     async deleteImage(imageId) {
-      await ensureSchema();
-
       await run(database, `DELETE FROM image_tags WHERE image_id = ?`, [imageId]);
       await run(database, `DELETE FROM featured_images WHERE image_id = ?`, [imageId]);
       const result = await run(database, `DELETE FROM images WHERE id = ?`, [imageId]);
@@ -1039,8 +846,6 @@ export function createGalleryRepository(database) {
     },
 
     async replaceImageTags(imageId, tagIds) {
-      await ensureSchema();
-
       await run(database, `DELETE FROM image_tags WHERE image_id = ?`, [imageId]);
 
       for (const tagId of tagIds) {
@@ -1056,8 +861,6 @@ export function createGalleryRepository(database) {
     },
 
     async listImagesByTagSlug(tagSlug) {
-      await ensureSchema();
-
       const imageRows = await all(
         database,
         `

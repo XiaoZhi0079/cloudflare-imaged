@@ -1,15 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { DatabaseSync } from "node:sqlite";
 
 import { createGalleryRepository } from "../src/server/gallery-repository.js";
+import { createTestDatabase } from "./helpers/test-database.js";
 
 function createTestDb() {
-  const database = new DatabaseSync(":memory:");
-  const schema = readFileSync(new URL("../schema.sql", import.meta.url), "utf8");
-  database.exec(schema);
-  return database;
+  return createTestDatabase();
 }
 
 async function createImage(repository, key, dimensions = {}) {
@@ -23,8 +19,8 @@ async function createImage(repository, key, dimensions = {}) {
   });
 }
 
-test("getSiteSettings seeds default issue name and hero copy", async () => {
-  const repository = createGalleryRepository(new DatabaseSync(":memory:"));
+test("getSiteSettings reads baseline issue name and hero copy", async () => {
+  const repository = createGalleryRepository(createTestDb());
   const settings = await repository.getSiteSettings();
 
   assert.equal(settings.issueName, "图集");
@@ -164,8 +160,8 @@ test("updateSiteConfiguration rejects ineligible featured images atomically", as
   );
 });
 
-test("concurrent repository instances bootstrap defaults idempotently", async () => {
-  const database = new DatabaseSync(":memory:");
+test("concurrent repository instances read migrated defaults consistently", async () => {
+  const database = createTestDb();
   const firstRepository = createGalleryRepository(database);
   const secondRepository = createGalleryRepository(database);
 

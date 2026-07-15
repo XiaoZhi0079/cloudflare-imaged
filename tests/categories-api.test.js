@@ -1,17 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { DatabaseSync } from "node:sqlite";
 
 import { onRequest as adminCategoriesHandler } from "../functions/api/admin/categories.js";
+import { createTestDatabase } from "./helpers/test-database.js";
 
 function createTestEnv() {
-  const database = new DatabaseSync(":memory:");
-  const schema = readFileSync(new URL("../schema.sql", import.meta.url), "utf8");
-  database.exec(schema);
-
   return {
-    GALLERY_DB: database,
+    GALLERY_DB: createTestDatabase(),
     GALLERY_ADMIN_KEY: "gallery-secret",
   };
 }

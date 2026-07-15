@@ -1,10 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { DatabaseSync } from "node:sqlite";
 
 import { createGalleryRepository } from "../src/server/gallery-repository.js";
 import { onRequest as bulkCategoryHandler } from "../functions/api/admin/images/category-assignments/bulk.js";
+import { createTestDatabase } from "./helpers/test-database.js";
 
 function createMockBucket() {
   const objects = new Map();
@@ -34,10 +33,8 @@ function createMockBucket() {
 }
 
 function createTestEnv() {
-  const database = new DatabaseSync(":memory:");
-  database.exec(readFileSync(new URL("../schema.sql", import.meta.url), "utf8"));
   return {
-    GALLERY_DB: database,
+    GALLERY_DB: createTestDatabase(),
     GALLERY_ADMIN_KEY: "gallery-secret",
     GALLERY_PUBLIC_BASE_URL: "https://gallery.example.com/file",
     GALLERY_BUCKET: createMockBucket(),

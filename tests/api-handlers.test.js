@@ -1,7 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { DatabaseSync } from "node:sqlite";
 
 import { createGalleryRepository } from "../src/server/gallery-repository.js";
 import { onRequest as publicTagsHandler } from "../functions/api/public/tags.js";
@@ -13,24 +11,19 @@ import { onRequest as adminUploadHandler } from "../functions/api/admin/images/u
 import { onRequest as adminTagAssignmentsHandler } from "../functions/api/admin/images/tag-assignments.js";
 import { onRequest as adminBulkTagAssignmentsHandler } from "../functions/api/admin/images/tag-assignments/bulk.js";
 import { onRequest as adminBulkDeleteHandler } from "../functions/api/admin/images/bulk-delete.js";
+import { createTestDatabase } from "./helpers/test-database.js";
 
-function createTestEnv(options = {}) {
-  const database = new DatabaseSync(":memory:");
-  if (options.withSchema !== false) {
-    const schema = readFileSync(new URL("../schema.sql", import.meta.url), "utf8");
-    database.exec(schema);
-  }
-
+function createTestEnv() {
   return {
-    GALLERY_DB: database,
+    GALLERY_DB: createTestDatabase(),
     GALLERY_ADMIN_KEY: "gallery-secret",
     GALLERY_BUCKET: createMockBucket(),
     GALLERY_PUBLIC_BASE_URL: "https://gallery.example.com/file",
   };
 }
 
-test("public tags handler bootstraps the schema when the database is empty", async () => {
-  const env = createTestEnv({ withSchema: false });
+test("public tags handler reads an explicitly migrated empty tag table", async () => {
+  const env = createTestEnv();
 
   const response = await publicTagsHandler({
     env,
@@ -308,8 +301,8 @@ test("admin tags handler deletes a tag when the admin key is valid", async () =>
   assert.deepEqual((await listResponse.json()).tags, []);
 });
 
-test("admin images handler returns an empty list on a fresh database", async () => {
-  const env = createTestEnv({ withSchema: false });
+test("admin images handler returns an empty list on a migrated database", async () => {
+  const env = createTestEnv();
 
   const response = await adminImagesHandler({
     env,
