@@ -45,6 +45,8 @@ origin  https://github.com/XiaoZhi0079/cloudflare-imaged.git
 
 推送前必须先验证并检查暂存内容：
 
+如果本次修改了 `public/assets/main.css` 或 `public/assets/gallery.js`，先同步递增 `public/index.html` 中两个入口 URL 的 `?v` 发布版本，避免浏览器继续使用旧缓存。
+
 ```powershell
 npm test
 git diff --check
