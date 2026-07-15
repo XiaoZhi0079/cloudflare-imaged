@@ -1,7 +1,7 @@
 # 精选图片尺寸资格与固定轮播设计
 
 日期：2026-07-15
-状态：已批准，待实施
+状态：已实施并验证
 
 ## 目标
 
@@ -90,6 +90,21 @@
 - CSS 静态测试：固定 `16:9`、`contain`、无旧视口高度规则。
 - 完整 `npm test`、JavaScript 语法、`git diff --check`。
 - 如后续部署，生产验收只读 DOM、计算样式和宽高元数据；不截图、不分析图片内容，也不自动修改生产 D1/R2。
+
+### 实施证据（2026-07-15）
+
+- 缓存版本契约先在管理入口仍使用无 query URL 时按预期失败，再以统一 token `20260715-featured-dimensions` 完成 GREEN。
+- `npm test`：157 项测试，157 项通过，0 项失败；其中包含通过测试数据库 SQL 直插部署前 legacy 精选记录的 Repository 与公开 API 只读兼容回归。
+- `node --check src/shared/featured-image-rules.js`：退出 0。
+- `node --check public/assets/admin/library-state.js`：退出 0。
+- `node --check public/assets/admin/library-page.js`：退出 0。
+- `node --check public/assets/admin/renderers/image-card.js`：退出 0。
+- `node --check public/assets/admin/site-settings.js`：退出 0。
+- `node --check public/assets/admin/settings-page.js`：退出 0。
+- `node --check functions/api/admin/_shared.js`：退出 0。
+- `node --check src/server/gallery-repository.js`：退出 0。
+- `git diff --check`：退出 0。
+- 实施与验证均未查看、渲染、截图或分析图片，未访问或写入生产 D1/R2；截至本记录尚未推送或部署。
 
 ## 非目标
 
