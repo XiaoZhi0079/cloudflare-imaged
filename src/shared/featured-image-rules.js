@@ -1,13 +1,13 @@
 function positiveInteger(value) {
   const numeric = Number(value);
-  return Number.isInteger(numeric) && numeric > 0 ? numeric : null;
+  return Number.isSafeInteger(numeric) && numeric > 0 ? numeric : null;
 }
 
 export function classifyFeaturedImage(image = {}) {
   const width = positiveInteger(image.width);
   const height = positiveInteger(image.height);
   const hasDimensions = width !== null && height !== null;
-  const isExactSixteenNine = hasDimensions && width * 9 === height * 16;
+  const isExactSixteenNine = hasDimensions && BigInt(width) * 9n === BigInt(height) * 16n;
   const meetsMinimum = hasDimensions && width >= 1920 && height >= 1080;
   const eligible = isExactSixteenNine && meetsMinimum;
   const is4K = width === 3840 && height === 2160;

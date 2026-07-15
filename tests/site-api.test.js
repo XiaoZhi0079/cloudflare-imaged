@@ -85,7 +85,9 @@ test("admin can patch site settings and featured order", async () => {
   assert.deepEqual(payload.featuredImageIds, [second.id, first.id]);
   assert.deepEqual(payload.featuredImages.map((image) => image.id), [second.id, first.id]);
   assert.equal(payload.featuredImages[0].category.id, category.id);
-  assert.equal(typeof payload.featuredImages[0].featuredEligibility?.eligible, "boolean");
+  assert.equal(payload.featuredImages[0].featuredEligibility?.dimensions, "900×1200");
+  assert.equal(payload.featuredImages[0].featuredEligibility?.eligible, false);
+  assert.equal(payload.featuredImages[0].featuredEligibility?.reason, "比例不符");
 
   const publicResponse = await publicSiteHandler({
     env,
