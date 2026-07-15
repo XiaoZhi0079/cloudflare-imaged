@@ -6,7 +6,7 @@ function tagName(tag) {
   return typeof tag === "string" ? tag : tag?.name;
 }
 
-export function filterImages(images, { query = "", tagNames = new Set() } = {}) {
+export function filterImages(images, { query = "", tagNames = new Set(), featured = "all" } = {}) {
   const needle = normalizedText(query);
   const requiredTags = [...tagNames].map(normalizedText).filter(Boolean);
 
@@ -15,7 +15,12 @@ export function filterImages(images, { query = "", tagNames = new Set() } = {}) 
     const searchable = [normalizedText(image.fileName), ...imageTags];
     const matchesQuery = !needle || searchable.some((value) => value.includes(needle));
     const matchesTags = requiredTags.every((required) => imageTags.includes(required));
-    return matchesQuery && matchesTags;
+    const matchesFeatured = featured === "eligible"
+      ? image.featuredEligibility?.eligible === true
+      : featured === "4k"
+        ? image.featuredEligibility?.is4K === true
+        : true;
+    return matchesQuery && matchesTags && matchesFeatured;
   });
 }
 
@@ -35,6 +40,7 @@ export function createLibraryState({ initialRenderLimit = 120, renderIncrement =
   let selectedTagNames = new Set();
   let selectedIds = new Set();
   let sort = "newest";
+  let featuredFilter = "all";
   let renderLimit = initialRenderLimit;
 
   function resetRenderLimit() {
@@ -51,7 +57,7 @@ export function createLibraryState({ initialRenderLimit = 120, renderIncrement =
     getTags: () => tags,
     getCategories: () => categories,
     getSelectedIds: () => new Set(selectedIds),
-    getFilters: () => ({ query, tagNames: new Set(selectedTagNames), sort }),
+    getFilters: () => ({ query, tagNames: new Set(selectedTagNames), sort, featured: featuredFilter }),
     setImages(next) {
       images = Array.isArray(next) ? [...next] : [];
       syncSelection();
@@ -78,9 +84,14 @@ export function createLibraryState({ initialRenderLimit = 120, renderIncrement =
       sort = next === "name" ? "name" : "newest";
       resetRenderLimit();
     },
+    setFeaturedFilter(next) {
+      featuredFilter = next === "eligible" || next === "4k" ? next : "all";
+      resetRenderLimit();
+    },
     resetFilters() {
       query = "";
       selectedTagNames = new Set();
+      featuredFilter = "all";
       resetRenderLimit();
     },
     toggleSelection(id, force) {
@@ -98,7 +109,7 @@ export function createLibraryState({ initialRenderLimit = 120, renderIncrement =
       selectedIds.clear();
     },
     visibleImages() {
-      return sortImages(filterImages(images, { query, tagNames: selectedTagNames }), sort);
+      return sortImages(filterImages(images, { query, tagNames: selectedTagNames, featured: featuredFilter }), sort);
     },
     renderedImages() {
       return state.visibleImages().slice(0, renderLimit);

@@ -89,6 +89,16 @@ test("image workbench exposes filtering details upload and bulk controls", () =>
   assert.doesNotMatch(html, /<h3>主分类<\/h3>/);
 });
 
+test("image workbench exposes mutually exclusive featured eligibility filters", () => {
+  const html = readFileSync(new URL("../public/admin/index.html", import.meta.url), "utf8");
+  const values = [...html.matchAll(/<input[^>]*type="radio"[^>]*name="featured-filter"[^>]*value="([^"]+)"/g)]
+    .map((match) => match[1]);
+  assert.deepEqual(values, ["all", "eligible", "4k"]);
+  assert.match(html, /value="all" checked/);
+  assert.match(html, />轮播可用<\/span>/);
+  assert.match(html, />4K<\/span>/);
+});
+
 test("image workbench renders only real filters with visible multi-select state", () => {
   const html = readFileSync(new URL("../public/admin/index.html", import.meta.url), "utf8");
   const controller = readFileSync(new URL("../public/assets/admin/library-page.js", import.meta.url), "utf8");

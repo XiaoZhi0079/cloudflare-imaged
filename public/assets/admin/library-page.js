@@ -25,6 +25,7 @@ const elements = {
   tagFilterSearch: document.querySelector("#tag-filter-search"),
   selectedTagCount: document.querySelector("#tag-filter-selected-count"),
   tagFilters: document.querySelector("#tag-filter-list"),
+  featuredFilters: [...document.querySelectorAll('[name="featured-filter"]')],
   imageList: document.querySelector("#image-list"),
   loadMore: document.querySelector("#admin-load-more"),
   uploadOpen: document.querySelector("#admin-upload-open"),
@@ -113,8 +114,18 @@ function replaceImages(updates) {
   state.syncImages(state.getImages().map((image) => replacements.get(Number(image.id)) ?? image));
 }
 
+function syncFeaturedFilters() {
+  const { featured } = state.getFilters();
+  for (const input of elements.featuredFilters) {
+    const selected = input.value === featured;
+    input.checked = selected;
+    input.closest(".filter-featured-option")?.classList.toggle("is-selected", selected);
+  }
+}
+
 function renderFilters() {
   const { tagNames } = state.getFilters();
+  syncFeaturedFilters();
   const tagQuery = elements.tagFilterSearch.value.trim().toLocaleLowerCase("zh-CN");
   elements.selectedTagCount.textContent = `已选 ${tagNames.size}`;
   elements.tagFilters.replaceChildren();
@@ -233,6 +244,33 @@ function checkboxField(tag, checked) {
   return label;
 }
 
+function featuredDetail(image) {
+  const eligibility = image.featuredEligibility && typeof image.featuredEligibility === "object"
+    ? image.featuredEligibility
+    : {};
+  const dimensionsText = String(eligibility.dimensions ?? "").trim() || "尺寸未知";
+  const statusText = String(
+    eligibility.eligible === false
+      ? eligibility.reason || eligibility.statusLabel || ""
+      : eligibility.statusLabel || "",
+  ).trim() || "状态未知";
+  const qualityText = String(eligibility.qualityLabel ?? "").trim();
+  const statusClass = eligibility.is4K === true
+    ? "is-4k"
+    : eligibility.eligible === true
+      ? "is-eligible"
+      : eligibility.eligible === false
+        ? "is-invalid"
+        : "is-unknown";
+  const details = createElement("div", { className: `detail-dimensions ${statusClass}` });
+  details.append(
+    createElement("strong", {}, dimensionsText),
+    createElement("span", {}, statusText),
+  );
+  if (qualityText) details.append(createElement("small", {}, qualityText));
+  return details;
+}
+
 function openDetail(image, opener) {
   detailImageId = Number(image.id);
   detailOpener = opener;
@@ -245,6 +283,7 @@ function openDetail(image, opener) {
   const preview = image.fileUrl
     ? createElement("img", { className: "detail-preview", src: image.fileUrl, alt: image.fileName })
     : createElement("div", { className: "detail-preview image-preview-fallback" }, "预览不可用");
+  const dimensions = featuredDetail(image);
   const form = createElement("form", { className: "detail-form" });
   const nameLabel = createElement("label", { className: "admin-field" });
   const fileName = createElement("input", { name: "fileName", value: image.fileName, required: "" });
@@ -264,7 +303,7 @@ function openDetail(image, opener) {
   const save = createElement("button", { type: "submit", className: "admin-button-primary" }, "保存修改");
   form.append(nameLabel, categoryLabel, tags, error, save);
   form.addEventListener("submit", (event) => saveDetail(event, { fileName, category, tags, error, save }));
-  elements.detailDrawer.replaceChildren(header, preview, form);
+  elements.detailDrawer.replaceChildren(header, preview, dimensions, form);
   elements.detailDrawer.hidden = false;
   requestAnimationFrame(() => fileName.focus());
 }
@@ -630,6 +669,14 @@ elements.clearFilters.addEventListener("click", () => {
   renderAll();
 });
 elements.tagFilterSearch.addEventListener("input", renderFilters);
+for (const input of elements.featuredFilters) {
+  input.addEventListener("change", () => {
+    if (!input.checked) return;
+    state.setFeaturedFilter(input.value);
+    syncFeaturedFilters();
+    renderLibrary();
+  });
+}
 elements.loadMore.addEventListener("click", () => { state.showMore(); renderLibrary(); });
 elements.imageList.addEventListener("click", (event) => {
   const action = event.target.closest("[data-action]")?.dataset.action;

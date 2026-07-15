@@ -16,10 +16,11 @@
 #tag-filter-selected-count { color:var(--admin-accent); font-weight:800; }
 .filter-rail input[type="search"] { width:100%; min-height:40px; padding:0 10px; border:1px solid var(--admin-line); border-radius:6px; background:var(--admin-surface); }
 #tag-filter-list { display:grid; gap:4px; margin-top:8px; }
+.featured-filter-list { display:grid; gap:4px; }
 .filter-option { min-height:40px; display:grid; grid-template-columns:20px minmax(0,1fr) auto; align-items:center; gap:8px; padding:0 8px; border-radius:6px; cursor:pointer; font-size:13px; }
 .filter-option:hover { background:rgba(180,78,39,.08); }
-.filter-tag-option { border:1px solid transparent; }
-.filter-tag-option.is-selected { border-color:rgba(180,78,39,.34); background:rgba(180,78,39,.09); box-shadow:inset 3px 0 var(--admin-accent); }
+.filter-tag-option,.filter-featured-option { border:1px solid transparent; }
+.filter-tag-option.is-selected,.filter-featured-option.is-selected,.filter-featured-option:has(input:checked) { border-color:rgba(180,78,39,.34); background:rgba(180,78,39,.09); box-shadow:inset 3px 0 var(--admin-accent); }
 .filter-option input { width:17px; height:17px; margin:0; accent-color:var(--admin-accent); }
 .filter-option small { color:var(--admin-muted); }
 .image-library { min-width:0; }
@@ -32,10 +33,16 @@
 .image-card-stage img { width:100%; height:100%; display:block; object-fit:cover; }
 .image-preview-fallback { width:100%; height:100%; display:grid; place-items:center; color:var(--admin-muted); font-size:12px; }
 .image-preview-fallback[hidden] { display:none; }
-.image-card-open { position:absolute; inset:0; width:100%; height:100%; min-height:0; padding:0; border:0; border-radius:0; background:transparent; }
+.image-card-open { position:absolute; inset:0; z-index:1; width:100%; height:100%; min-height:0; padding:0; border:0; border-radius:0; background:transparent; }
 .image-card-open:active { transform:none; }
-.image-card-select { position:absolute; top:8px; left:8px; z-index:2; width:34px; min-height:34px; padding:0; border-color:rgba(255,255,255,.85); background:rgba(255,255,255,.9); color:transparent; box-shadow:0 2px 8px rgba(39,30,21,.16); }
+.image-card-select { position:absolute; top:8px; left:8px; z-index:3; width:34px; min-height:34px; padding:0; border-color:rgba(255,255,255,.85); background:rgba(255,255,255,.9); color:transparent; box-shadow:0 2px 8px rgba(39,30,21,.16); }
 .image-card-select[aria-pressed="true"] { border-color:var(--admin-accent); background:var(--admin-accent); color:#fff; }
+.image-featured-badge { position:absolute; top:8px; right:8px; z-index:2; max-width:calc(100% - 58px); display:flex; flex-wrap:wrap; justify-content:flex-end; gap:3px; pointer-events:none; font-size:10px; font-weight:800; line-height:1.2; }
+.image-featured-badge span { min-width:0; overflow:hidden; padding:4px 6px; border-radius:5px; background:rgba(54,48,43,.86); color:#fff; text-overflow:ellipsis; white-space:nowrap; box-shadow:0 2px 7px rgba(39,30,21,.16); }
+.image-featured-badge.is-eligible .image-featured-status { background:rgba(47,105,73,.92); }
+.image-featured-badge.is-4k .image-featured-status,.image-featured-badge.is-4k .image-featured-quality { background:rgba(91,66,139,.94); }
+.image-featured-badge.is-invalid .image-featured-status { background:rgba(153,61,50,.92); }
+.image-featured-badge.is-unknown .image-featured-status { background:rgba(90,84,78,.88); }
 .image-sync-warning { position:absolute; right:8px; bottom:8px; z-index:2; padding:4px 7px; border-radius:5px; background:var(--admin-warning); color:#fff; font-size:11px; font-weight:800; }
 .image-card-copy { display:grid; gap:7px; padding:10px; }
 .image-card-copy strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; }
@@ -52,6 +59,13 @@
 .admin-detail-drawer header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
 .admin-detail-drawer h2 { margin:0; font-size:19px; }
 .detail-preview { width:100%; aspect-ratio:4/3; margin:18px 0; object-fit:contain; background:#e8e1d8; }
+.detail-dimensions { min-width:0; display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:-8px 0 18px; padding:10px 12px; border:1px solid var(--admin-line); border-left:4px solid #77706a; border-radius:6px; background:var(--admin-surface); overflow-wrap:anywhere; }
+.detail-dimensions strong { font-size:13px; }
+.detail-dimensions span { color:var(--admin-muted); font-size:12px; }
+.detail-dimensions small { padding:3px 6px; border-radius:4px; background:#e9e2f5; color:#5b428b; font-size:10px; font-weight:850; }
+.detail-dimensions.is-eligible { border-left-color:var(--admin-success); }
+.detail-dimensions.is-4k { border-left-color:#7556ad; }
+.detail-dimensions.is-invalid { border-left-color:var(--admin-danger); }
 .detail-form { display:grid; gap:14px; }
 .upload-panel { width:min(680px,100%); max-height:calc(100dvh - 32px); overflow:auto; border:1px solid var(--admin-line); border-radius:8px; background:var(--admin-panel); box-shadow:0 22px 60px rgba(39,30,21,.2); }
 .upload-panel header,.upload-panel footer { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 16px; }
@@ -91,6 +105,8 @@
   .admin-image-grid,.admin-image-grid.is-compact { grid-template-columns:1fr; gap:9px; }
   .admin-image-card { display:grid; grid-template-columns:132px minmax(0,1fr); }
   .image-card-stage { aspect-ratio:1/1; }
+  .image-featured-badge { max-width:calc(100% - 52px); font-size:9px; }
+  .image-featured-badge span { padding:3px 5px; }
   .image-card-copy { align-content:center; }
   .admin-bulk-toolbar { bottom:8px; align-items:stretch; padding:9px; }
   .admin-bulk-toolbar strong { display:none; }
