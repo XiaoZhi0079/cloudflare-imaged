@@ -182,6 +182,7 @@ test("admin upload complete handler stores image records after direct upload suc
           meetsMinimum: false,
           eligible: false,
           is4K: false,
+          resolutionTier: null,
           qualityLabel: null,
           statusLabel: "比例不符",
           reason: "比例不符",

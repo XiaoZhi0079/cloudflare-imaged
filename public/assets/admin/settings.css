@@ -224,6 +224,53 @@ body.is-sorting { user-select:none; cursor:grabbing; }
   overflow-wrap: anywhere;
 }
 
+.site-picker-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.site-picker-filter {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+}
+
+.site-picker-filter.is-active {
+  border-color: var(--admin-accent);
+  background: rgba(180, 78, 39, .1);
+  color: var(--admin-accent);
+}
+
+.site-picker-filter-count {
+  min-width: 22px;
+  height: 22px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(119, 108, 98, .13);
+  color: var(--admin-muted);
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.site-picker-filter.is-active .site-picker-filter-count {
+  background: var(--admin-accent);
+  color: #fff;
+}
+
+.site-picker-empty {
+  grid-column: 1 / -1;
+  padding: 28px 16px;
+  border: 1px dashed var(--admin-line);
+  border-radius: 8px;
+  color: var(--admin-muted);
+  text-align: center;
+}
+
 .site-picker-card {
   position: relative;
   min-width: 0;
@@ -232,33 +279,22 @@ body.is-sorting { user-select:none; cursor:grabbing; }
   gap: 6px;
   padding: 8px;
   border: 1px solid var(--admin-line);
-  border-left-width: 4px;
+  border-left: 4px solid var(--admin-success);
   border-radius: 8px;
   background: var(--admin-surface);
   cursor: pointer;
-}
-
-.site-picker-card.is-eligible {
-  border-left-color: var(--admin-success);
 }
 
 .site-picker-card.is-4k {
   border-left-color: #7556ad;
 }
 
-.site-picker-card.is-ineligible {
-  border-color: #d5a293;
-  border-left-color: var(--admin-danger);
-  background: #fff8f5;
+.site-picker-card.is-2k {
+  border-left-color: #477c9f;
 }
 
-.site-picker-card.is-disabled {
-  cursor: not-allowed;
-}
-
-.site-picker-card.is-disabled img {
-  opacity: .58;
-  filter: grayscale(.25);
+.site-picker-card.is-1k {
+  border-left-color: var(--admin-success);
 }
 
 .site-picker-card:has(input:checked) {
@@ -269,10 +305,6 @@ body.is-sorting { user-select:none; cursor:grabbing; }
 .site-picker-card input {
   margin: 0;
   accent-color: var(--admin-accent);
-}
-
-.site-picker-card input:disabled {
-  cursor: not-allowed;
 }
 
 .site-picker-card img {
@@ -291,10 +323,6 @@ body.is-sorting { user-select:none; cursor:grabbing; }
   font-size: 12px;
   color: var(--admin-ink);
   font-weight: 700;
-}
-
-.site-picker-card.is-ineligible .site-eligibility-status {
-  color: var(--admin-danger);
 }
 
 @media (max-width:680px) {

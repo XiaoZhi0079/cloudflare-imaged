@@ -12,6 +12,19 @@ function labelText(value, fallback) {
   return text || fallback;
 }
 
+const RESOLUTION_TIERS = new Set(["4k", "2k", "1k"]);
+const TIER_LABELS = {
+  "4k": "4K",
+  "2k": "2K",
+  "1k": "1K / 1080p",
+};
+const PICKER_FILTERS = [
+  { value: "all", label: "全部可用" },
+  { value: "4k", label: "4K" },
+  { value: "2k", label: "2K" },
+  { value: "1k", label: "1K / 1080p" },
+];
+
 function featuredDisplay(image) {
   const eligibility = image.featuredEligibility && typeof image.featuredEligibility === "object"
     ? image.featuredEligibility
@@ -21,13 +34,17 @@ function featuredDisplay(image) {
   const status = eligible
     ? labelText(eligibility.statusLabel, "状态未知")
     : labelText(eligibility.reason || eligibility.statusLabel, "状态未知");
-  const quality = String(eligibility.qualityLabel ?? "").trim();
+  const resolutionTier = RESOLUTION_TIERS.has(eligibility.resolutionTier)
+    ? eligibility.resolutionTier
+    : null;
+  const quality = labelText(eligibility.qualityLabel, TIER_LABELS[resolutionTier] ?? "");
 
   return {
     dimensions,
     eligible,
     is4K: eligibility.is4K === true,
     quality,
+    resolutionTier,
     status,
   };
 }
@@ -75,27 +92,48 @@ export function renderFeaturedItem(image, index, total) {
 
 export function renderFeaturedPickerCard(image, selected = false) {
   const display = featuredDisplay(image);
-  const stateClass = display.eligible ? "is-eligible" : "is-ineligible is-disabled";
-  const qualityClass = display.is4K ? " is-4k" : "";
+  if (!display.eligible || !display.resolutionTier) {
+    return "";
+  }
+
   const checked = selected ? " checked" : "";
-  const disabled = display.eligible ? "" : " disabled";
   const fileName = escapeHtml(image.fileName || "未命名");
 
-  return `<label class="site-picker-card ${stateClass}${qualityClass}">
-              <input type="checkbox" value="${escapeHtml(image.id)}"${checked}${disabled} />
+  return `<label class="site-picker-card is-${display.resolutionTier}">
+              <input type="checkbox" value="${escapeHtml(image.id)}"${checked} />
               <img src="${escapeHtml(image.fileUrl || "")}" alt="${fileName}" loading="lazy" />
               <span class="site-picker-name" title="${fileName}">${fileName}</span>
-              ${renderFeaturedMetadata(display, "site-picker-meta", { prefixInvalid: true })}
+              <span class="site-picker-meta">
+                <span class="site-eligibility-dimensions">${escapeHtml(display.dimensions)}</span>
+                <span class="site-eligibility-quality">${escapeHtml(display.quality)}</span>
+              </span>
             </label>`;
+}
+
+export function filterFeaturedCandidates(images, tier = "all") {
+  const normalizedTier = RESOLUTION_TIERS.has(tier) ? tier : "all";
+  return (Array.isArray(images) ? images : []).filter((image) => {
+    const eligibility = image?.featuredEligibility;
+    if (
+      eligibility?.eligible !== true
+      || !RESOLUTION_TIERS.has(eligibility.resolutionTier)
+    ) {
+      return false;
+    }
+    return normalizedTier === "all" || eligibility.resolutionTier === normalizedTier;
+  });
 }
 
 export function mergeFeaturedSelection(current, library, selectedIds) {
   const selected = new Set(selectedIds.map(Number));
-  const kept = current.filter((image) => selected.has(Number(image.id)));
+  const candidates = filterFeaturedCandidates(library);
+  const candidateIds = new Set(candidates.map((image) => Number(image.id)));
+  const kept = current.filter((image) => (
+    !candidateIds.has(Number(image.id)) || selected.has(Number(image.id))
+  ));
   const keptIds = new Set(kept.map((image) => Number(image.id)));
-  const added = library.filter((image) => (
+  const added = candidates.filter((image) => (
     selected.has(Number(image.id))
-    && image.featuredEligibility?.eligible === true
     && !keptIds.has(Number(image.id))
   ));
 
@@ -206,22 +244,61 @@ export function createSiteSettingsController({
     setBusy(true);
     try {
       const { images = [] } = await client.request("/api/admin/images");
-      const selected = new Set(draft.featuredImages.map((image) => Number(image.id)));
-      const currentIds = new Set(draft.featuredImages.map((image) => Number(image.id)));
-      const eligibleIds = new Set(images
-        .filter((image) => image.featuredEligibility?.eligible === true)
-        .map((image) => Number(image.id)));
+      const candidateImages = filterFeaturedCandidates(images);
+      const candidateIds = new Set(candidateImages.map((image) => Number(image.id)));
+      const selectedCandidateIds = new Set(
+        draft.featuredImages
+          .map((image) => Number(image.id))
+          .filter((imageId) => candidateIds.has(imageId)),
+      );
       const body = document.createElement("div");
       body.className = "site-picker";
       body.innerHTML = `
         <p class="site-picker-rule">仅精确 16:9 且至少 1920×1080 可加入轮播。当前已选但不合规的旧图片需在当前精选列表中移除。</p>
-        <div class="site-picker-grid">
-          ${images.map((image) => renderFeaturedPickerCard(
-            image,
-            selected.has(Number(image.id)),
-          )).join("")}
+        <div class="site-picker-filters" role="group" aria-label="轮播候选分辨率">
+          ${PICKER_FILTERS.map(({ value, label }) => `
+            <button class="site-picker-filter${value === "all" ? " is-active" : ""}" type="button" data-picker-tier="${value}" aria-pressed="${value === "all"}">
+              <span>${label}</span>
+              <span class="site-picker-filter-count">${filterFeaturedCandidates(candidateImages, value).length}</span>
+            </button>
+          `).join("")}
         </div>
+        <div class="site-picker-grid" aria-live="polite"></div>
       `;
+
+      const grid = body.querySelector(".site-picker-grid");
+      let activeTier = "all";
+
+      function renderCandidates() {
+        for (const button of body.querySelectorAll("[data-picker-tier]")) {
+          const active = button.dataset.pickerTier === activeTier;
+          button.classList.toggle("is-active", active);
+          button.setAttribute("aria-pressed", String(active));
+        }
+
+        const visibleCandidates = filterFeaturedCandidates(candidateImages, activeTier);
+        grid.innerHTML = visibleCandidates.length
+          ? visibleCandidates.map((image) => renderFeaturedPickerCard(
+              image,
+              selectedCandidateIds.has(Number(image.id)),
+            )).join("")
+          : `<div class="site-picker-empty">当前档位没有可用图片。</div>`;
+      }
+
+      body.addEventListener("change", (event) => {
+        const input = event.target.closest('.site-picker-card input[type="checkbox"]');
+        if (!input) return;
+        const imageId = Number(input.value);
+        if (input.checked) selectedCandidateIds.add(imageId);
+        else selectedCandidateIds.delete(imageId);
+      });
+      body.addEventListener("click", (event) => {
+        const filter = event.target.closest("[data-picker-tier]");
+        if (!filter) return;
+        activeTier = filter.dataset.pickerTier;
+        renderCandidates();
+      });
+      renderCandidates();
 
       const confirmed = await dialogs.open({
         title: "选择精选图片",
@@ -234,10 +311,11 @@ export function createSiteSettingsController({
         return;
       }
 
-      const chosenIds = [...body.querySelectorAll("input[type=checkbox]:checked")]
-        .map((input) => Number(input.value))
-        .filter((imageId) => currentIds.has(imageId) || eligibleIds.has(imageId));
-      draft.featuredImages = mergeFeaturedSelection(draft.featuredImages, images, chosenIds);
+      draft.featuredImages = mergeFeaturedSelection(
+        draft.featuredImages,
+        candidateImages,
+        [...selectedCandidateIds],
+      );
       renderFeatured();
     } catch (error) {
       notifier.error(error?.message || "加载图片失败");

@@ -150,6 +150,7 @@ test("admin upload complete handler stores image category metadata", async () =>
           meetsMinimum: false,
           eligible: false,
           is4K: false,
+          resolutionTier: null,
           qualityLabel: null,
           statusLabel: "比例不符",
           reason: "比例不符",
