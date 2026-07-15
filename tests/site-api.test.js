@@ -85,6 +85,7 @@ test("admin can patch site settings and featured order", async () => {
   assert.deepEqual(payload.featuredImageIds, [second.id, first.id]);
   assert.deepEqual(payload.featuredImages.map((image) => image.id), [second.id, first.id]);
   assert.equal(payload.featuredImages[0].category.id, category.id);
+  assert.equal(typeof payload.featuredImages[0].featuredEligibility?.eligible, "boolean");
 
   const publicResponse = await publicSiteHandler({
     env,
@@ -96,6 +97,7 @@ test("admin can patch site settings and featured order", async () => {
   assert.deepEqual(publicPayload.featuredImages.map((image) => image.id), [second.id, first.id]);
   assert.equal("fileName" in publicPayload.featuredImages[0], false);
   assert.equal("category" in publicPayload.featuredImages[0], false);
+  assert.equal("featuredEligibility" in publicPayload.featuredImages[0], false);
 });
 
 test("admin site patch rejects unknown featured image ids", async () => {

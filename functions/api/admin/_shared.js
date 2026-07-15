@@ -1,5 +1,6 @@
 import { createGalleryRepository } from "../../../src/server/gallery-repository.js";
 import { createGalleryStorage, resolvePublicBaseUrl } from "../../../src/server/gallery-storage.js";
+import { classifyFeaturedImage } from "../../../src/shared/featured-image-rules.js";
 import { jsonResponse } from "../../../src/shared/http.js";
 
 function bindStatement(database, sql, params) {
@@ -96,6 +97,7 @@ export function toApiImage(image) {
     width: image.width,
     height: image.height,
     tags: image.tags ?? [],
+    featuredEligibility: classifyFeaturedImage(image),
     ...(image.category ? { category: image.category } : {}),
   };
 }
