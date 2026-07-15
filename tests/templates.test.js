@@ -148,6 +148,16 @@ test("featured hero copy overlays the image without an opaque panel", () => {
   );
 });
 
+test("public entry assets share one cache-busting release version", () => {
+  const index = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
+  const cssVersion = index.match(/href="\/assets\/main\.css\?v=([^"]+)"/);
+  const scriptVersion = index.match(/src="\/assets\/gallery\.js\?v=([^"]+)"/);
+
+  assert.ok(cssVersion, "main.css must include a non-empty release version");
+  assert.ok(scriptVersion, "gallery.js must include a non-empty release version");
+  assert.equal(cssVersion[1], scriptVersion[1]);
+});
+
 test("admin controls expose static accessibility contracts", () => {
   const library = readFileSync(new URL("../public/admin/index.html", import.meta.url), "utf8");
   const settings = readFileSync(new URL("../public/admin/settings.html", import.meta.url), "utf8");
