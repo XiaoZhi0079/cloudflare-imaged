@@ -17,7 +17,48 @@
     </section>
     <div id="admin-app" hidden>
       <header class="admin-topbar"><a class="admin-brand" href="/admin/">Gallery 管理</a><nav class="admin-nav" aria-label="管理页面"><a href="/admin/">图片库</a><a class="is-active" href="/admin/settings.html">内容设置</a></nav><div class="admin-top-actions"><a href="/">查看前台</a><button type="button" data-admin-logout>退出</button></div></header>
-      <main class="settings-page"><header class="settings-heading"><div><p class="admin-eyebrow">Taxonomy</p><h1>内容设置</h1></div><button id="taxonomy-create" class="admin-button-primary" type="button">新增标签</button></header><div class="admin-segments" role="tablist"><button class="is-active" type="button" data-settings-tab="tags" role="tab">标签 <span id="tag-count">0</span></button><button type="button" data-settings-tab="categories" role="tab">主分类 <span id="category-count">0</span></button></div><section class="settings-panel"><div class="settings-tools"><input id="taxonomy-search" type="search" placeholder="搜索名称" /><div><button id="taxonomy-reset-order" type="button" disabled>取消排序</button><button id="taxonomy-save-order" class="admin-button-primary" type="button" disabled>保存排序</button></div></div><p id="taxonomy-status" class="settings-status" aria-live="polite"></p><div id="taxonomy-list" class="taxonomy-list"></div></section></main>
+      <main class="settings-page">
+        <header class="settings-heading">
+          <div><p class="admin-eyebrow">Settings</p><h1>内容设置</h1></div>
+          <button id="taxonomy-create" class="admin-button-primary" type="button">新增标签</button>
+        </header>
+        <div class="admin-segments" role="tablist">
+          <button class="is-active" type="button" data-settings-tab="tags" role="tab">标签 <span id="tag-count">0</span></button>
+          <button type="button" data-settings-tab="categories" role="tab">主分类 <span id="category-count">0</span></button>
+          <button type="button" data-settings-tab="site" role="tab">站点</button>
+        </div>
+
+        <section id="taxonomy-panel" class="settings-panel">
+          <div class="settings-tools">
+            <input id="taxonomy-search" type="search" placeholder="搜索名称" />
+            <div>
+              <button id="taxonomy-reset-order" type="button" disabled>取消排序</button>
+              <button id="taxonomy-save-order" class="admin-button-primary" type="button" disabled>保存排序</button>
+            </div>
+          </div>
+          <p id="taxonomy-status" class="settings-status" aria-live="polite"></p>
+          <div id="taxonomy-list" class="taxonomy-list"></div>
+        </section>
+
+        <section id="site-panel" class="settings-panel" hidden>
+          <div class="site-form">
+            <label class="admin-field" for="site-issue-name"><span>本期名字</span><input id="site-issue-name" type="text" maxlength="40" /></label>
+            <label class="admin-field" for="site-hero-copy"><span>大屏文案</span><textarea id="site-hero-copy" rows="3" maxlength="240"></textarea></label>
+            <div class="site-featured-head">
+              <div>
+                <h2>大屏精选</h2>
+                <p class="admin-muted">手动选择前台大屏展示的图片，顺序即轮播顺序。本期张数由精选数量自动得出。</p>
+              </div>
+              <div class="site-featured-actions">
+                <button id="site-add-featured" type="button">从图片库添加</button>
+                <button id="site-save" class="admin-button-primary" type="button">保存站点设置</button>
+              </div>
+            </div>
+            <p id="site-status" class="settings-status" aria-live="polite"></p>
+            <div id="site-featured-list" class="site-featured-list"></div>
+          </div>
+        </section>
+      </main>
       <div id="admin-dialog-host"></div><div id="admin-toast-host" class="admin-toast-host" aria-live="polite"></div>
     </div>
     <script type="module" src="/assets/admin/settings-page.js"></script>

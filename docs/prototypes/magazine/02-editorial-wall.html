@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>原型 02 · 编辑墙</title>
+    <style>
+      :root {
+        --bg: #f3f0e8;
+        --ink: #1f1c18;
+        --muted: #6b6258;
+        --accent: #b44e27;
+        --panel: #fffcf5;
+        --line: rgba(31, 28, 24, 0.12);
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Noto Serif SC", "Source Han Serif SC", Georgia, serif;
+        color: var(--ink);
+        background: #f3f0e8;
+      }
+
+      .proto-bar {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 18px;
+        background: rgba(31, 28, 24, 0.92);
+        color: #f8f1e8;
+        font-family: system-ui, sans-serif;
+        font-size: 13px;
+      }
+      .proto-bar a { color: #f0d2bf; }
+      .proto-bar nav { display: flex; gap: 14px; flex-wrap: wrap; }
+
+      .shell {
+        width: min(1220px, calc(100vw - 28px));
+        margin: 28px auto 48px;
+      }
+
+      .masthead {
+        display: grid;
+        grid-template-columns: 1.1fr 0.9fr;
+        gap: 28px;
+        align-items: end;
+        padding-bottom: 22px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .eyebrow {
+        margin: 0 0 8px;
+        color: var(--accent);
+        letter-spacing: 0.28em;
+        text-transform: uppercase;
+        font-size: 12px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(42px, 6vw, 64px);
+        letter-spacing: 0.08em;
+        line-height: 1;
+      }
+
+      .lede {
+        margin: 0;
+        color: var(--muted);
+        font-size: 16px;
+        line-height: 1.75;
+        max-width: 28em;
+      }
+
+      .lede strong {
+        color: var(--ink);
+        font-weight: 600;
+      }
+
+      .layout {
+        margin-top: 24px;
+        display: grid;
+        grid-template-columns: 210px 1fr;
+        gap: 28px;
+      }
+
+      .rail {
+        position: sticky;
+        top: 56px;
+        align-self: start;
+      }
+
+      .rail h2 {
+        margin: 0 0 12px;
+        font-size: 13px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--muted);
+        font-weight: 500;
+      }
+
+      .series-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .series-item {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 12px 12px;
+        border-radius: 14px;
+        border: 1px solid transparent;
+        background: transparent;
+        color: var(--ink);
+        text-align: left;
+        cursor: default;
+      }
+
+      .series-item.active {
+        background: var(--panel);
+        border-color: var(--line);
+        box-shadow: 0 10px 24px rgba(39, 30, 21, 0.06);
+      }
+
+      .series-item span:last-child {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .chapter {
+        margin-bottom: 34px;
+      }
+
+      .chapter-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: baseline;
+        margin-bottom: 14px;
+      }
+
+      .chapter-head h3 {
+        margin: 0;
+        font-size: 28px;
+        letter-spacing: 0.04em;
+      }
+
+      .chapter-head p {
+        margin: 6px 0 0;
+        color: var(--muted);
+        font-size: 14px;
+      }
+
+      .chapter-head .count {
+        color: var(--muted);
+        font-size: 13px;
+        letter-spacing: 0.08em;
+        white-space: nowrap;
+      }
+
+      .wall {
+        display: grid;
+        grid-template-columns: 1.4fr 1fr 1fr;
+        grid-template-rows: 220px 160px;
+        gap: 12px;
+      }
+
+      .tile {
+        border-radius: 18px;
+        border: 1px solid var(--line);
+        overflow: hidden;
+        position: relative;
+        color: #fff8f1;
+        min-height: 120px;
+      }
+
+      .tile.hero {
+        grid-row: 1 / span 2;
+      }
+
+      .tile .label {
+        position: absolute;
+        left: 14px;
+        bottom: 12px;
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-shadow: 0 1px 10px rgba(0, 0, 0, 0.35);
+      }
+
+      .t1 { background: linear-gradient(145deg, #9a6248, #2a1b16); }
+      .t2 { background: linear-gradient(145deg, #6d7a68, #1d221e); }
+      .t3 { background: linear-gradient(145deg, #7d5a72, #221820); }
+      .t4 { background: linear-gradient(145deg, #4f6b78, #152028); }
+      .t5 { background: linear-gradient(145deg, #8a6a45, #261c12); }
+
+      .quote-band {
+        margin: 10px 0 28px;
+        padding: 18px 0;
+        border-top: 1px solid var(--line);
+        border-bottom: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 15px;
+        line-height: 1.7;
+        letter-spacing: 0.02em;
+      }
+
+      .mini-grid {
+        column-count: 3;
+        column-gap: 12px;
+      }
+
+      .mini-card {
+        break-inside: avoid;
+        margin-bottom: 12px;
+        border-radius: 16px;
+        min-height: 150px;
+        border: 1px solid var(--line);
+      }
+
+      .mini-card.a { min-height: 210px; background: linear-gradient(160deg, #7a5344, #211612); }
+      .mini-card.b { min-height: 160px; background: linear-gradient(160deg, #5d6d62, #171c19); }
+      .mini-card.c { min-height: 190px; background: linear-gradient(160deg, #6e5872, #1a141c); }
+      .mini-card.d { min-height: 140px; background: linear-gradient(160deg, #4d6570, #121a20); }
+      .mini-card.e { min-height: 230px; background: linear-gradient(160deg, #816044, #22180f); }
+      .mini-card.f { min-height: 170px; background: linear-gradient(160deg, #6a4f49, #1c1412); }
+
+      .foot {
+        margin-top: 36px;
+        padding-top: 16px;
+        border-top: 1px solid var(--line);
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        color: var(--muted);
+        font-size: 13px;
+        letter-spacing: 0.06em;
+        flex-wrap: wrap;
+      }
+
+      @media (max-width: 920px) {
+        .masthead, .layout { grid-template-columns: 1fr; }
+        .rail { position: static; }
+        .series-list { display: flex; gap: 8px; overflow-x: auto; }
+        .series-item { min-width: 120px; }
+        .wall { grid-template-columns: 1fr 1fr; grid-template-rows: 180px 140px 140px; }
+        .tile.hero { grid-row: auto; grid-column: 1 / -1; min-height: 240px; }
+        .mini-grid { column-count: 2; }
+      }
+
+      @media (max-width: 560px) {
+        .wall { grid-template-columns: 1fr; }
+        .mini-grid { column-count: 1; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="proto-bar">
+      <strong>原型 02 · 编辑墙</strong>
+      <nav>
+        <a href="./01-cover-issue.html">01 封面</a>
+        <a href="./02-editorial-wall.html">02 编辑墙</a>
+        <a href="./03-immersive-reader.html">03 沉浸阅读</a>
+        <a href="./index.html">总览</a>
+      </nav>
+    </div>
+
+    <div class="shell">
+      <header class="masthead">
+        <div>
+          <p class="eyebrow">Gallery · Editorial</p>
+          <h1>图集</h1>
+        </div>
+        <p class="lede">
+          <strong>不是素材库，是一期一期的整理。</strong>
+          左侧是系列，右侧像杂志内页：先给主图，再展开其余画幅。
+        </p>
+      </header>
+
+      <div class="layout">
+        <aside class="rail">
+          <h2>系列</h2>
+          <div class="series-list">
+            <div class="series-item active"><span>人像</span><span>24</span></div>
+            <div class="series-item"><span>风景</span><span>12</span></div>
+            <div class="series-item"><span>静物</span><span>9</span></div>
+            <div class="series-item"><span>街拍</span><span>15</span></div>
+          </div>
+        </aside>
+
+        <main>
+          <section class="chapter">
+            <div class="chapter-head">
+              <div>
+                <h3>人像</h3>
+                <p>偏冷调，强调轮廓与呼吸感。</p>
+              </div>
+              <div class="count">01 — 05 / 24</div>
+            </div>
+
+            <div class="wall" aria-hidden="true">
+              <div class="tile hero t1"><span class="label">开篇主图</span></div>
+              <div class="tile t2"><span class="label">02</span></div>
+              <div class="tile t3"><span class="label">03</span></div>
+              <div class="tile t4"><span class="label">04</span></div>
+              <div class="tile t5"><span class="label">05</span></div>
+            </div>
+          </section>
+
+          <div class="quote-band">
+            “先看见光，再看见人。” · 本页仅示意杂志式信息层次，不展示文件名。
+          </div>
+
+          <section class="chapter">
+            <div class="chapter-head">
+              <div>
+                <h3>续页</h3>
+                <p>主图之后回到更松的网格节奏。</p>
+              </div>
+              <div class="count">06 — 12 / 24</div>
+            </div>
+            <div class="mini-grid" aria-hidden="true">
+              <div class="mini-card a"></div>
+              <div class="mini-card b"></div>
+              <div class="mini-card c"></div>
+              <div class="mini-card d"></div>
+              <div class="mini-card e"></div>
+              <div class="mini-card f"></div>
+            </div>
+          </section>
+
+          <footer class="foot">
+            <span>整理中的私人图集</span>
+            <span>下一系列 · 风景</span>
+          </footer>
+        </main>
+      </div>
+    </div>
+  </body>
+</html>

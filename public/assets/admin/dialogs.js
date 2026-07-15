@@ -47,6 +47,7 @@ export function createDialogHost(host) {
   }
 
   return {
+    open,
     confirm({ title, message, confirmLabel = "确认", danger = false }) {
       const body = document.createElement("p");
       body.textContent = message;

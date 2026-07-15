@@ -1,73 +1,75 @@
-# GitHub 仓库同步说明
+# GitHub 仓库安全同步说明
 
 ## 当前状态
 
-本地：
+核对日期：2026-07-15
 
-- `D:\GoodTry\Image Gallery\gallery` 是独立仓库
-- 当前分支是 `main`
-- 最新提交已经进入独立 `gallery` 仓库
+- 本地分支：`main`
+- 远端：`https://github.com/XiaoZhi0079/cloudflare-imaged.git`
+- 本地 `HEAD` 与远端 `origin/main` 的已提交基线一致：`3bf57a1`
+- Hero 精选、站点配置及发布安全修复目前位于本地未提交工作区
+- Cloudflare 生产站点仍运行已提交的旧版代码
 
-远端：
+这不是两套仓库历史，也不需要用本地分支替换远端历史。完成本地验证和提交后，使用普通快进推送即可。
 
-- 仓库地址：`https://github.com/XiaoZhi0079/cloudflare-imaged.git`
-- 远端 `main` 仍然是旧大仓库结构
-- 远端仓库中虽然有 `gallery/` 子目录，但它还是旧版“通过 ImgBed 中转上传”的实现
+## 推荐同步流程
 
-## 这意味着什么
-
-本地当前状态和远端当前状态不是一个简单的“落后几次提交”的关系，而是两套仓库结构：
-
-- 本地：独立 `gallery`
-- 远端：旧仓库根目录 + 较旧的 `gallery/` 子目录
-
-因此后续同步 GitHub 时，大概率不是普通快进推送，而是“用本地独立仓库替换远端主分支内容”。
-
-## 推荐做法
-
-在确认你要正式废弃旧远端结构后，进入本地 `gallery` 仓库运行：
+### 1. 完成验证
 
 ```powershell
-git push -u origin main --force
+npm test
+git diff --check
+git status --short --branch
 ```
 
-或者直接运行仓库根目录里的辅助脚本：
+所有测试通过后再进入暂存步骤。
+
+### 2. 精选暂存文件
+
+`public/demo/` 是本地种子脚本生成的演示资源，已被 `.gitignore` 排除。
+
+不要在未检查状态时盲目暂存全部文件。先查看：
 
 ```powershell
-.\sync-github.cmd
+git status --short
 ```
 
-这个脚本会先检查：
+然后按确认过的文件或目录暂存，并检查实际暂存内容：
 
-- 当前是不是 Git 仓库
-- 当前分支是不是 `main`
-- 工作区是不是干净
+```powershell
+git diff --cached --stat
+git diff --cached
+```
 
-然后才会要求你输入 `YES` 确认强推。
+### 3. 创建普通提交
 
-## 为什么这里推荐 force push
+提交信息应描述 Hero 精选、站点配置和发布安全修复。提交前再次运行测试。
 
-因为目标已经不是“保留旧远端历史并继续叠加”，而是：
+### 4. 普通推送
 
-- 让 GitHub 仓库只承载独立 `gallery`
-- 让 Cloudflare Pages 以后只认这一套结构
-- 彻底去掉旧 `CloudFlare-ImgBed` 主项目角色
+```powershell
+git push -u origin main
+```
 
-## 风险说明
+仓库中的 `sync-github.cmd` 执行的也是这条普通推送命令。
 
-执行 `--force` 后：
+如果远端出现新的、无法快进的提交，Git 会拒绝推送。此时应先获取并检查远端变化，再决定合并或变基；不要自动覆盖远端。
 
-- 远端主分支旧文件树会被当前本地仓库替换
-- 旧项目历史仍然会保留在 GitHub 提交历史中，但主分支文件内容会变成新的独立 `gallery`
-- 如果你以后还想参考旧项目，本地备份目录 `CloudFlare-ImgBed` 仍然在
+## 禁止强推
 
-## 如果不想 force push
+本项目当前没有覆盖远端历史的需求。不要对 `origin/main` 使用 `--force` 或 `--force-with-lease`。
 
-那就只能继续保留远端旧结构，并在 Cloudflare Pages 中把根目录设置成 `gallery`。
+普通推送的非快进拒绝是重要的安全保护，可避免覆盖其他设备或协作者已经推送的代码。
 
-但这样会带来两个问题：
+## Cloudflare 部署关系
 
-1. GitHub 仓库根目录仍旧混着旧系统
-2. Cloudflare 部署拿到的还是 GitHub 上当前那个旧版 `gallery/`
+Cloudflare Pages 通过 GitHub `main` 分支直接部署。推送后需要检查：
 
-所以这只能算临时过渡方案，不适合作为长期主线。
+1. GitHub CI 是否通过
+2. Cloudflare 部署是否成功
+3. `/api/public/site` 是否返回 JSON
+4. 首页标签浏览是否仍可用
+5. 管理端“站点”页能否保存期名、文案和精选顺序
+6. 删除精选图片后，首页数量与轮播是否同步
+
+本说明只描述安全同步流程，不授权自动提交、推送或生产部署。

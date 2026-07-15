@@ -41,9 +41,23 @@ CREATE TABLE IF NOT EXISTS image_tags (
   FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS site_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS featured_images (
+  image_id INTEGER PRIMARY KEY,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE
+);
+
 CREATE INDEX IF NOT EXISTS idx_tags_visible_order ON tags(is_visible, sort_order, name);
 CREATE INDEX IF NOT EXISTS idx_categories_order ON categories(sort_order, name);
 CREATE INDEX IF NOT EXISTS idx_images_file_id ON images(storage_key);
 CREATE INDEX IF NOT EXISTS idx_images_category_id ON images(category_id);
 CREATE INDEX IF NOT EXISTS idx_image_tags_image_id ON image_tags(image_id);
 CREATE INDEX IF NOT EXISTS idx_image_tags_tag_id ON image_tags(tag_id);
+CREATE INDEX IF NOT EXISTS idx_featured_images_order ON featured_images(sort_order, image_id);

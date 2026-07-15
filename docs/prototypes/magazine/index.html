@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>杂志感原型总览</title>
+    <style>
+      :root {
+        --ink: #1f1c18;
+        --muted: #6b6258;
+        --accent: #b44e27;
+        --line: rgba(31, 28, 24, 0.12);
+        --panel: rgba(255, 252, 245, 0.92);
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Noto Serif SC", "Source Han Serif SC", Georgia, serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(180, 78, 39, 0.12), transparent 32%),
+          linear-gradient(180deg, #f6f1e8 0%, #efe8dd 100%);
+      }
+
+      .shell {
+        width: min(980px, calc(100vw - 28px));
+        margin: 40px auto 56px;
+      }
+
+      .eyebrow {
+        margin: 0 0 8px;
+        color: var(--accent);
+        letter-spacing: 0.24em;
+        text-transform: uppercase;
+        font-size: 12px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(34px, 5vw, 48px);
+        letter-spacing: 0.06em;
+      }
+
+      .intro {
+        margin: 14px 0 0;
+        max-width: 36em;
+        color: var(--muted);
+        line-height: 1.75;
+        font-size: 16px;
+      }
+
+      .note {
+        margin: 18px 0 28px;
+        padding: 14px 16px;
+        border: 1px dashed var(--line);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.35);
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.6;
+      }
+
+      .cards {
+        display: grid;
+        gap: 16px;
+      }
+
+      a.card {
+        display: grid;
+        grid-template-columns: 168px 1fr;
+        gap: 18px;
+        text-decoration: none;
+        color: inherit;
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        background: var(--panel);
+        box-shadow: 0 16px 36px rgba(39, 30, 21, 0.08);
+      }
+
+      .preview {
+        border-radius: 16px;
+        min-height: 120px;
+        border: 1px solid var(--line);
+      }
+
+      .p1 {
+        background:
+          linear-gradient(180deg, rgba(20, 14, 10, 0.2), rgba(20, 14, 10, 0.7)),
+          linear-gradient(135deg, #c47a55, #2a1d18);
+      }
+      .p2 {
+        background:
+          linear-gradient(135deg, rgba(255, 252, 245, 0.2), transparent 40%),
+          linear-gradient(160deg, #8a6a45, #2c2118 55%, #6d7a68);
+      }
+      .p3 {
+        background:
+          radial-gradient(circle at 50% 40%, rgba(255, 255, 255, 0.12), transparent 35%),
+          linear-gradient(160deg, #1a1411, #8b5a44 90%);
+      }
+
+      .card h2 {
+        margin: 0 0 8px;
+        font-size: 24px;
+        letter-spacing: 0.04em;
+      }
+
+      .card p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.65;
+        font-size: 14px;
+      }
+
+      .meta {
+        margin-top: 12px;
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        font-size: 12px;
+        letter-spacing: 0.06em;
+        color: var(--accent);
+      }
+
+      .compare {
+        margin-top: 28px;
+        padding: 18px 18px 8px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: rgba(255, 252, 245, 0.7);
+      }
+
+      .compare h3 {
+        margin: 0 0 10px;
+        font-size: 18px;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+
+      th, td {
+        text-align: left;
+        padding: 10px 8px;
+        border-top: 1px solid var(--line);
+        vertical-align: top;
+      }
+
+      th { color: var(--muted); font-weight: 500; width: 22%; }
+
+      @media (max-width: 700px) {
+        a.card { grid-template-columns: 1fr; }
+        .preview { min-height: 140px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <p class="eyebrow">Prototypes only · No app code</p>
+      <h1>杂志感 · 三个方向</h1>
+      <p class="intro">
+        这些是静态原型图，用来比较「进门印象 / 浏览结构 / 看图方式」。
+        色块代替真实图片，不接接口，也不改现有前台代码。
+      </p>
+      <div class="note">
+        本地打开方式：直接用浏览器打开本目录里的 HTML。
+        路径：<code>docs/prototypes/magazine/index.html</code>
+      </div>
+
+      <div class="cards">
+        <a class="card" href="./advanced-01-03.html">
+          <div class="preview p1" aria-hidden="true"></div>
+          <div>
+            <h2>进阶 · 01 + 03（脱敏素材）</h2>
+            <p>
+              用仓库内演示素材呈现：封面特刊首页 + 沉浸阅读（左右切换 / 缩略图 / 键盘）。
+              这是当前推荐的落地组合。
+            </p>
+            <div class="meta">
+              <span>可交互</span>
+              <span>仓库素材</span>
+              <span>优先看这个</span>
+            </div>
+          </div>
+        </a>
+
+        <a class="card" href="./01-cover-issue.html">
+          <div class="preview p1" aria-hidden="true"></div>
+          <div>
+            <h2>01 封面特刊</h2>
+            <p>
+              大封面进门 + 系列 chips + 一句系列说明 + 瀑布流续页。
+              最接近「一期杂志封面」，仪式感强，适合内容少而精。
+            </p>
+            <div class="meta">
+              <span>首屏冲击强</span>
+              <span>改动中等</span>
+              <span>线框版</span>
+            </div>
+          </div>
+        </a>
+
+        <a class="card" href="./02-editorial-wall.html">
+          <div class="preview p2" aria-hidden="true"></div>
+          <div>
+            <h2>02 编辑墙</h2>
+            <p>
+              左系列栏 + 右杂志内页：开篇主图墙，再进入松散网格。
+              信息层次最丰富，像在翻编辑好的专题页。
+            </p>
+            <div class="meta">
+              <span>结构感最强</span>
+              <span>改动较大</span>
+              <span>桌面更出彩</span>
+            </div>
+          </div>
+        </a>
+
+        <a class="card" href="./03-immersive-reader.html">
+          <div class="preview p3" aria-hidden="true"></div>
+          <div>
+            <h2>03 沉浸阅读</h2>
+            <p>
+              不重做首页结构，重点强化点开后的阅读态：
+              模糊底、大图、左右切换、标签与进度。网格页可继续很克制。
+            </p>
+            <div class="meta">
+              <span>看图体验优先</span>
+              <span>可先做</span>
+              <span>与 01/02 可叠加</span>
+            </div>
+          </div>
+        </a>
+      </div>
+
+      <section class="compare">
+        <h3>怎么选</h3>
+        <table>
+          <tr>
+            <th>如果你想…</th>
+            <td>优先看</td>
+          </tr>
+          <tr>
+            <th>进门就有杂志感</th>
+            <td>01 封面特刊</td>
+          </tr>
+          <tr>
+            <th>浏览时像在读专题</th>
+            <td>02 编辑墙</td>
+          </tr>
+          <tr>
+            <th>先提升点开大图的质感</th>
+            <td>03 沉浸阅读（可与 01 或 02 组合）</td>
+          </tr>
+          <tr>
+            <th>我个人建议的落地组合</th>
+            <td><strong>01 首页结构 + 03 沉浸预览</strong>。02 可作为后续增强。</td>
+          </tr>
+        </table>
+      </section>
+    </div>
+  </body>
+</html>

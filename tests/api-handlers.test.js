@@ -101,7 +101,6 @@ test("public images handler returns images for the requested tag", async () => {
     images: [
       {
         id: campusImage.id,
-        fileName: "campus-01.webp",
         fileUrl: "https://gallery.example.com/file/girls/campus-01.webp",
         width: 900,
         height: 1350,

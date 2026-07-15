@@ -14,26 +14,20 @@
 
 ## 第一步：确认 GitHub 仓库状态
 
-当前本地 `gallery` 已经是独立 Git 仓库，但远端 `XiaoZhi0079/cloudflare-imaged` 仍然保留着旧的大仓库结构，里面只是包含了一个较旧版本的 `gallery/` 子目录。
+核对日期：2026-07-15。
 
-这意味着：
+- 本地分支与 `origin/main` 的已提交基线一致：`3bf57a1`
+- Hero 精选、站点配置和发布安全修复目前仍在本地未提交工作区
+- Cloudflare Pages 从 GitHub `main` 分支部署，因此本地未提交内容不会自动上线
 
-- 如果你现在直接让 Cloudflare 连接现有 GitHub 仓库并把根目录设为 `gallery`
-  Cloudflare 可以部署
-- 但是它部署的是 GitHub 上那个旧版 `gallery/`
-  不是你本地现在这个最新独立版本
+正确顺序是：本地验证 → 精选暂存 → 提交 → 普通推送 → Cloudflare 部署检查。
 
-所以更推荐的做法是：
+## 第二步：验证并安全推送
 
-1. 先把本地独立 `gallery` 推到 GitHub
-2. 再让 Cloudflare Pages 连接这个仓库
-
-## 第二步：本地推送独立 gallery
-
-进入本地独立仓库目录：
+进入当前仓库：
 
 ```powershell
-cd "D:\GoodTry\Image Gallery\gallery"
+cd "D:\GoodTry\Image-Gallery"
 ```
 
 当前远程已经配置为：
@@ -49,33 +43,28 @@ origin  https://github.com/XiaoZhi0079/cloudflare-imaged.git
 origin  https://github.com/XiaoZhi0079/cloudflare-imaged.git
 ```
 
-由于远端现在仍是旧仓库历史，后续大概率需要覆盖远端主分支。
+推送前必须先验证并检查暂存内容：
 
-推荐先试：
+```powershell
+npm test
+git diff --check
+git status --short --branch
+git diff --cached
+```
+
+确认提交内容后创建提交，再执行普通推送：
 
 ```powershell
 git push -u origin main
 ```
 
-如果提示非 fast-forward 或历史不相关，再用：
-
-```powershell
-git push -u origin main --force
-```
-
-如果你不想手敲命令，也可以直接运行：
+也可以在工作区干净、提交已经创建后运行：
 
 ```powershell
 .\sync-github.cmd
 ```
 
-这个脚本会先做本地检查，再要求你输入 `YES` 后才会真正执行强推。
-
-注意：
-
-- `--force` 会用当前独立 `gallery` 仓库替换远端现有主分支内容
-- 远端旧结构会被覆盖
-- 这正符合“以后只保留 gallery 作为主项目”的目标
+脚本只执行普通推送。如果 Git 提示无法快进，应先获取并审查远端提交，再决定合并或变基；不得自动覆盖远端历史。
 
 ## 第三步：在 Cloudflare 中连接 GitHub 仓库
 
@@ -100,9 +89,7 @@ git push -u origin main --force
 - Framework preset: `None`
 - Build command: 留空
 - Build output directory: `public`
-- Root directory:
-  - 如果远端已经被独立 `gallery` 仓库覆盖，留空即可
-  - 如果远端暂时还是旧大仓库结构，填 `gallery`
+- Root directory: 留空
 
 ## 第五步：确认 Wrangler 配置
 
@@ -186,24 +173,10 @@ git push -u origin main --force
 5. 上传 1 张图片成功
 6. 图片能通过 `/file/...` 打开
 7. 前台按标签筛选正常
+8. `/api/public/site` 返回 JSON，而不是静态 HTML
+9. 管理端“站点”页可以保存期名、文案和精选顺序
+10. 首页轮播可以暂停，且删除精选图片后数量同步
 
-## 如果你现在就想先部署
+## 回滚原则
 
-有两个路径：
-
-### 路径 A：先不推本地独立仓库
-
-可行，但 Cloudflare 只能部署 GitHub 上现有旧版 `gallery/` 子目录。
-
-这适合临时验证 Cloudflare 配置是否打通，不适合作为最终正式结构。
-
-### 路径 B：先把本地独立仓库推上去
-
-这是推荐路径。
-
-优点：
-
-- GitHub 仓库结构和本地一致
-- Cloudflare 根目录可以直接留空
-- 以后维护更简单
-- 不会再混着旧 `CloudFlare-ImgBed` 结构
+如果新部署破坏核心浏览流程，使用 `git revert` 创建回滚提交并普通推送，让 Cloudflare 部署回滚后的 `main`。数据库变更仅新增表，回滚代码前不要删除生产数据表。

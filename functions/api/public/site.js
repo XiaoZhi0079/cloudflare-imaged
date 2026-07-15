@@ -1,20 +1,17 @@
 import { getRepository, toPublicImage } from "../admin/_shared.js";
 import { jsonResponse } from "../../../src/shared/http.js";
 
-export async function onRequest({ env, request }) {
+export async function onRequest({ env }) {
   try {
-    const url = new URL(request.url);
-    const tagSlug = url.searchParams.get("tag");
-
-    if (!tagSlug) {
-      return jsonResponse({ error: "Missing tag query parameter" }, 400);
-    }
-
     const repository = getRepository(env);
-    const images = await repository.listImagesByTagSlug(tagSlug);
+    const settings = await repository.getSiteSettings();
+    const featuredImages = await repository.listFeaturedImages();
 
     return jsonResponse({
-      images: images.map(toPublicImage),
+      issueName: settings.issueName,
+      heroCopy: settings.heroCopy,
+      issueCount: featuredImages.length,
+      featuredImages: featuredImages.map(toPublicImage),
     });
   } catch (error) {
     return jsonResponse(

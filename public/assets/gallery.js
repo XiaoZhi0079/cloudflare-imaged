@@ -1,26 +1,30 @@
 import { renderGalleryCards, renderTagChips } from "./templates.js";
+import { fetchPublicJson, loadPublicBootstrapData } from "./public-data.js";
+import { createHeroCarousel } from "./hero-carousel.js";
 
+const siteHero = document.querySelector("#site-hero");
 const tagStrip = document.querySelector("#tag-strip");
 const galleryGrid = document.querySelector("#gallery-grid");
 const modal = document.querySelector("#image-modal");
 const modalImage = document.querySelector("#modal-image");
 const modalMeta = document.querySelector("#modal-meta");
 const modalClose = document.querySelector("#modal-close");
+const heroStage = document.querySelector("#hero-stage");
+const heroImage = document.querySelector("#hero-image");
+const heroControls = document.querySelector("#hero-controls");
+const heroDots = document.querySelector("#hero-dots");
+const heroIssue = document.querySelector("#hero-issue");
+const heroCopy = document.querySelector("#hero-copy");
+const heroPrev = document.querySelector("#hero-prev");
+const heroNext = document.querySelector("#hero-next");
+const heroPause = document.querySelector("#hero-pause");
+const reducedMotionQuery = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)") ?? null;
 
 let tags = [];
 let activeSlug = null;
 let images = [];
-
-async function fetchJson(url, init) {
-  const response = await fetch(url, init);
-  const payload = await response.json();
-
-  if (!response.ok) {
-    throw new Error(payload.error ?? `Request failed: ${response.status}`);
-  }
-
-  return payload;
-}
+let featuredImages = [];
+let heroCarousel = null;
 
 function bindTagClicks() {
   tagStrip.querySelectorAll("[data-tag-slug]").forEach((button) => {
@@ -40,9 +44,11 @@ function bindImageClicks() {
         return;
       }
 
+      const tagText = (image.tags ?? []).filter(Boolean).join(" · ");
       modalImage.src = image.fileUrl;
-      modalImage.alt = image.fileName;
-      modalMeta.textContent = `${image.fileName} · ${(image.tags ?? []).join(" / ")}`;
+      modalImage.alt = tagText || "图片预览";
+      modalMeta.textContent = tagText;
+      modalMeta.hidden = !tagText;
       modal.classList.remove("hidden");
     });
   });
@@ -54,21 +60,92 @@ function renderTags() {
 }
 
 function renderImages() {
-  galleryGrid.innerHTML = images.length
+  const hasImages = images.length > 0;
+  galleryGrid.classList.toggle("is-empty", !hasImages);
+  galleryGrid.innerHTML = hasImages
     ? renderGalleryCards(images)
-    : `<div class="panel">当前标签下还没有图片。</div>`;
+    : `<div class="panel empty-state">这个标签下暂时还没有内容，换一个看看。</div>`;
   bindImageClicks();
 }
 
+function showFeatured(index) {
+  if (!featuredImages.length) {
+    return;
+  }
+
+  const normalizedIndex = ((Number(index) % featuredImages.length) + featuredImages.length)
+    % featuredImages.length;
+  const image = featuredImages[normalizedIndex];
+  const label = (image.tags ?? []).filter(Boolean).join(" · ") || "精彩图片";
+  heroImage.src = image.fileUrl;
+  heroImage.alt = label;
+
+  heroDots.querySelectorAll("[data-hero-dot]").forEach((dot) => {
+    const active = Number(dot.dataset.heroDot) === normalizedIndex;
+    dot.classList.toggle("is-active", active);
+    dot.setAttribute("aria-current", active ? "true" : "false");
+  });
+}
+
+function renderHeroCarouselState(state) {
+  if (!heroPause) return;
+  heroPause.textContent = state.manualPaused ? "继续轮播" : "暂停轮播";
+  heroPause.setAttribute("aria-pressed", String(state.manualPaused));
+}
+
+function renderHero(site) {
+  const issueName = String(site?.issueName ?? "图集").trim() || "图集";
+  const heroText = String(site?.heroCopy ?? "").trim();
+  featuredImages = Array.isArray(site?.featuredImages) ? site.featuredImages : [];
+  const count = featuredImages.length;
+
+  heroIssue.textContent = count > 0 ? `${issueName} · 本期 ${count} 张` : issueName;
+  heroCopy.textContent = heroText;
+  heroCopy.hidden = !heroText;
+
+  heroCarousel?.destroy();
+  heroCarousel = null;
+
+  if (!count) {
+    heroStage.hidden = true;
+    heroControls.hidden = true;
+    heroDots.innerHTML = "";
+    heroImage.removeAttribute("src");
+    renderHeroCarouselState({ manualPaused: false });
+    return;
+  }
+
+  heroStage.hidden = false;
+  heroControls.hidden = count <= 1;
+  heroDots.innerHTML = featuredImages
+    .map((_, index) => `<button type="button" data-hero-dot="${index}" aria-label="切换到第 ${index + 1} 张"></button>`)
+    .join("");
+
+  heroDots.querySelectorAll("[data-hero-dot]").forEach((dot) => {
+    dot.addEventListener("click", () => {
+      heroCarousel?.select(Number(dot.dataset.heroDot));
+    });
+  });
+
+  heroCarousel = createHeroCarousel({
+    length: count,
+    reducedMotion: Boolean(reducedMotionQuery?.matches),
+    onIndexChange: showFeatured,
+    onStateChange: renderHeroCarouselState,
+  });
+  heroCarousel.setPauseReason("hidden", document.hidden);
+}
+
 async function loadImages(tagSlug) {
-  const payload = await fetchJson(`/api/public/images?tag=${encodeURIComponent(tagSlug)}`);
+  const payload = await fetchPublicJson(`/api/public/images?tag=${encodeURIComponent(tagSlug)}`);
   images = payload.images;
   renderImages();
 }
 
 async function bootstrap() {
-  const payload = await fetchJson("/api/public/tags");
-  tags = payload.tags;
+  const { site, tags: loadedTags } = await loadPublicBootstrapData();
+  renderHero(site);
+  tags = loadedTags;
   activeSlug = tags[0]?.slug ?? null;
   renderTags();
 
@@ -79,6 +156,38 @@ async function bootstrap() {
   }
 }
 
+heroPrev?.addEventListener("click", () => {
+  heroCarousel?.previous();
+});
+
+heroNext?.addEventListener("click", () => {
+  heroCarousel?.next();
+});
+
+heroPause?.addEventListener("click", () => {
+  heroCarousel?.toggleManualPause();
+});
+heroStage?.addEventListener("mouseenter", () => {
+  heroCarousel?.setPauseReason("hover", true);
+});
+heroStage?.addEventListener("mouseleave", () => {
+  heroCarousel?.setPauseReason("hover", false);
+});
+siteHero?.addEventListener("focusin", () => {
+  heroCarousel?.setPauseReason("focus", true);
+});
+siteHero?.addEventListener("focusout", (event) => {
+  if (!siteHero.contains(event.relatedTarget)) {
+    heroCarousel?.setPauseReason("focus", false);
+  }
+});
+document.addEventListener("visibilitychange", () => {
+  heroCarousel?.setPauseReason("hidden", document.hidden);
+});
+reducedMotionQuery?.addEventListener?.("change", (event) => {
+  heroCarousel?.setReducedMotion(event.matches);
+});
+
 modalClose.addEventListener("click", () => modal.classList.add("hidden"));
 modal.addEventListener("click", (event) => {
   if (event.target === modal) {
@@ -86,6 +195,7 @@ modal.addEventListener("click", (event) => {
   }
 });
 
-bootstrap().catch((error) => {
-  galleryGrid.innerHTML = `<div class="panel">${error.message}</div>`;
+bootstrap().catch(() => {
+  galleryGrid.classList.add("is-empty");
+  galleryGrid.innerHTML = `<div class="panel empty-state">图集暂时打不开，请稍后再试。</div>`;
 });

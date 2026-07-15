@@ -1,0 +1,603 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>进阶原型 · 01 封面 + 03 沉浸阅读</title>
+    <style>
+      :root {
+        --bg: #f3f0e8;
+        --ink: #1f1c18;
+        --muted: #6b6258;
+        --accent: #b44e27;
+        --panel: rgba(255, 252, 245, 0.92);
+        --line: rgba(31, 28, 24, 0.12);
+        --shadow: 0 22px 50px rgba(39, 30, 21, 0.14);
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        font-family: "Noto Serif SC", "Source Han Serif SC", Georgia, serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(180, 78, 39, 0.1), transparent 34%),
+          linear-gradient(180deg, #f6f1e8 0%, #efe8dd 100%);
+      }
+
+      button {
+        font: inherit;
+        cursor: pointer;
+      }
+
+      .proto-bar {
+        position: sticky;
+        top: 0;
+        z-index: 40;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 18px;
+        background: rgba(31, 28, 24, 0.94);
+        color: #f8f1e8;
+        font-family: system-ui, sans-serif;
+        font-size: 13px;
+      }
+
+      .proto-bar a { color: #f0d2bf; text-decoration: none; }
+      .proto-bar nav { display: flex; gap: 14px; flex-wrap: wrap; }
+
+      .shell {
+        width: min(1180px, calc(100vw - 24px));
+        margin: 0 auto;
+        padding-bottom: 48px;
+      }
+
+      /* Cover */
+      .cover {
+        position: relative;
+        margin-top: 18px;
+        min-height: min(78vh, 740px);
+        border-radius: 28px;
+        overflow: hidden;
+        box-shadow: var(--shadow);
+        background: #1a1411;
+      }
+
+      .cover-image {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: center 18%;
+        transform: scale(1.02);
+      }
+
+      .cover-shade {
+        position: absolute;
+        inset: 0;
+        background:
+          linear-gradient(180deg, rgba(18, 12, 10, 0.12) 0%, rgba(18, 12, 10, 0.18) 40%, rgba(18, 12, 10, 0.78) 100%);
+      }
+
+      .cover-meta {
+        position: absolute;
+        left: 36px;
+        right: 36px;
+        bottom: 34px;
+        color: #fff8f1;
+        z-index: 1;
+      }
+
+      .cover-kicker {
+        margin: 0 0 10px;
+        letter-spacing: 0.28em;
+        text-transform: uppercase;
+        font-size: 12px;
+        color: #f0c8b0;
+      }
+
+      .cover h1 {
+        margin: 0;
+        font-size: clamp(42px, 7vw, 76px);
+        line-height: 0.98;
+        letter-spacing: 0.06em;
+        font-weight: 600;
+      }
+
+      .cover p {
+        margin: 14px 0 0;
+        max-width: 26em;
+        font-size: 16px;
+        line-height: 1.7;
+        color: rgba(255, 248, 240, 0.86);
+      }
+
+      .cover-stats {
+        margin-top: 18px;
+        display: flex;
+        gap: 18px;
+        flex-wrap: wrap;
+        font-size: 13px;
+        letter-spacing: 0.08em;
+        color: rgba(255, 248, 240, 0.72);
+      }
+
+      .issue-bar {
+        display: flex;
+        gap: 10px;
+        overflow-x: auto;
+        padding: 18px 0 4px;
+      }
+
+      .issue-chip {
+        flex: 0 0 auto;
+        border: 1px solid var(--line);
+        background: var(--panel);
+        border-radius: 999px;
+        padding: 11px 18px;
+        white-space: nowrap;
+        color: var(--ink);
+      }
+
+      .issue-chip.active {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+
+      .issue-chip small {
+        opacity: 0.72;
+        margin-left: 8px;
+      }
+
+      .series-note {
+        margin-top: 14px;
+        padding: 16px 20px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: rgba(255, 252, 245, 0.74);
+        color: var(--muted);
+        line-height: 1.7;
+      }
+
+      .series-note strong {
+        color: var(--ink);
+        font-weight: 600;
+      }
+
+      /* Grid */
+      .grid {
+        margin-top: 22px;
+        column-count: 3;
+        column-gap: 16px;
+      }
+
+      .card {
+        break-inside: avoid;
+        margin-bottom: 16px;
+        border-radius: 20px;
+        overflow: hidden;
+        border: 1px solid var(--line);
+        background: var(--panel);
+        box-shadow: 0 14px 28px rgba(39, 30, 21, 0.08);
+        padding: 0;
+        display: block;
+        width: 100%;
+        text-align: left;
+        color: inherit;
+      }
+
+      .card img {
+        width: 100%;
+        display: block;
+        vertical-align: middle;
+        transition: transform 280ms ease, filter 280ms ease;
+      }
+
+      .card:hover img,
+      .card:focus-visible img {
+        transform: scale(1.03);
+        filter: brightness(0.92);
+      }
+
+      .card-meta {
+        padding: 12px 14px 14px;
+        display: grid;
+        gap: 4px;
+      }
+
+      .card-tags {
+        font-size: 13px;
+        color: var(--muted);
+        letter-spacing: 0.04em;
+      }
+
+      .card-index {
+        font-size: 12px;
+        color: rgba(31, 28, 24, 0.45);
+        letter-spacing: 0.08em;
+      }
+
+      .foot {
+        margin-top: 28px;
+        padding-top: 16px;
+        border-top: 1px solid var(--line);
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        color: var(--muted);
+        font-size: 13px;
+        letter-spacing: 0.06em;
+        flex-wrap: wrap;
+      }
+
+      /* Immersive reader */
+      .reader {
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        display: none;
+        background: #120e0c;
+      }
+
+      .reader.is-open {
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+      }
+
+      .reader-top {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+        padding: 14px 18px;
+        color: rgba(255, 248, 240, 0.88);
+        font-family: system-ui, sans-serif;
+        font-size: 13px;
+      }
+
+      .reader-top button {
+        border: 0;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.12);
+        color: #fff;
+        padding: 8px 14px;
+      }
+
+      .reader-stage {
+        position: relative;
+        min-height: 0;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+      }
+
+      .reader-bg {
+        position: absolute;
+        inset: -30px;
+        background-size: cover;
+        background-position: center;
+        filter: blur(28px) saturate(1.05) brightness(0.45);
+        transform: scale(1.08);
+      }
+
+      .reader-photo {
+        position: relative;
+        z-index: 1;
+        max-width: min(92vw, 920px);
+        max-height: min(68vh, 720px);
+        border-radius: 18px;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+        object-fit: contain;
+        background: rgba(0, 0, 0, 0.2);
+      }
+
+      .reader-nav {
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0 12px;
+        pointer-events: none;
+      }
+
+      .reader-nav button {
+        pointer-events: auto;
+        width: 48px;
+        height: 48px;
+        border: 0;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.14);
+        color: #fff;
+        font-size: 22px;
+      }
+
+      .reader-caption {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: center;
+        padding: 10px 22px 8px;
+        color: rgba(255, 248, 240, 0.88);
+      }
+
+      .reader-caption .tags {
+        letter-spacing: 0.12em;
+        font-size: 13px;
+      }
+
+      .reader-caption .progress {
+        color: rgba(255, 248, 240, 0.62);
+        font-size: 13px;
+        letter-spacing: 0.1em;
+      }
+
+      .reader-thumbs {
+        display: flex;
+        gap: 8px;
+        overflow-x: auto;
+        padding: 8px 18px 18px;
+      }
+
+      .reader-thumbs button {
+        flex: 0 0 auto;
+        width: 58px;
+        height: 74px;
+        border-radius: 10px;
+        overflow: hidden;
+        border: 2px solid transparent;
+        padding: 0;
+        background: #2a201b;
+      }
+
+      .reader-thumbs button.on {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 2px rgba(180, 78, 39, 0.25);
+      }
+
+      .reader-thumbs img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+
+      .hint {
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 12px;
+        letter-spacing: 0.04em;
+      }
+
+      @media (max-width: 860px) {
+        .grid { column-count: 2; }
+        .cover-meta { left: 22px; right: 22px; bottom: 22px; }
+      }
+
+      @media (max-width: 520px) {
+        .grid { column-count: 1; }
+        .reader-photo { max-height: 56vh; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="proto-bar">
+      <strong>进阶原型 · 01 封面 + 03 沉浸阅读</strong>
+      <nav>
+        <a href="./index.html">总览</a>
+        <a href="./01-cover-issue.html">01</a>
+        <a href="./02-editorial-wall.html">02</a>
+        <a href="./03-immersive-reader.html">03</a>
+      </nav>
+    </div>
+
+    <div class="shell">
+      <section class="cover" aria-label="本期封面">
+        <img
+          class="cover-image"
+          id="cover-image"
+          src="./assets/demo-01.svg"
+          alt="本期封面"
+        />
+        <div class="cover-shade"></div>
+        <div class="cover-meta">
+          <p class="cover-kicker">Issue 07 · Gallery</p>
+          <h1>图集</h1>
+          <p>慢慢看，挑一份喜欢的气质。本期以红调与侧光为主，适合夜色、轮廓与留白。</p>
+          <div class="cover-stats">
+            <span id="cover-count">本期 11 张</span>
+            <span>最近更新 · 今天</span>
+            <span>系列 · 人像</span>
+          </div>
+        </div>
+      </section>
+
+      <div class="issue-bar" aria-label="系列导航">
+        <button class="issue-chip active" type="button" data-series="人像">人像 <small id="count-portrait">0</small></button>
+        <button class="issue-chip" type="button" data-series="风景">风景 <small>0</small></button>
+        <button class="issue-chip" type="button" data-series="静物">静物 <small>0</small></button>
+        <button class="issue-chip" type="button" data-series="街拍">街拍 <small>0</small></button>
+      </div>
+
+      <p class="series-note">
+        <strong>人像</strong>
+        · 偏冷暖交叠的光感，强调轮廓与呼吸感。点击任意图片进入沉浸阅读；支持键盘 ← → 与 Esc。
+      </p>
+
+      <div class="grid" id="gallery-grid" aria-label="图集网格"></div>
+
+      <footer class="foot">
+        <span>整理中的私人图集 · 原型演示</span>
+        <span id="foot-progress">使用仓库内脱敏演示素材</span>
+      </footer>
+
+      <p class="hint">所有图片均为仓库内演示素材，可直接在本地或代码托管页面打开。</p>
+    </div>
+
+    <div class="reader" id="reader" aria-hidden="true">
+      <div class="reader-top">
+        <span>沉浸阅读 · 演示态</span>
+        <button type="button" id="reader-close">返回网格</button>
+      </div>
+      <div class="reader-stage">
+        <div class="reader-bg" id="reader-bg"></div>
+        <img class="reader-photo" id="reader-photo" alt="" />
+        <div class="reader-nav">
+          <button type="button" id="reader-prev" aria-label="上一张">‹</button>
+          <button type="button" id="reader-next" aria-label="下一张">›</button>
+        </div>
+      </div>
+      <div>
+        <div class="reader-caption">
+          <div class="tags" id="reader-tags">人像</div>
+          <div class="progress" id="reader-progress">01 / 11</div>
+        </div>
+        <div class="reader-thumbs" id="reader-thumbs"></div>
+      </div>
+    </div>
+
+    <script>
+      const FILES = [
+        "./assets/demo-01.svg",
+        "./assets/demo-02.svg",
+        "./assets/demo-03.svg",
+        "./assets/demo-04.svg",
+        "./assets/demo-05.svg",
+        "./assets/demo-06.svg",
+        "./assets/demo-02.svg",
+        "./assets/demo-03.svg",
+        "./assets/demo-04.svg",
+        "./assets/demo-05.svg",
+        "./assets/demo-01.svg",
+      ];
+
+      const TAG_SETS = [
+        ["人像", "侧光"],
+        ["人像", "红调"],
+        ["人像", "蓝裙"],
+        ["人像", "柔光"],
+        ["人像", "白裙"],
+        ["人像", "冷调"],
+        ["人像", "轮廓"],
+        ["人像", "夜色"],
+        ["人像", "气质"],
+        ["人像", "留白"],
+        ["人像", "特写"],
+      ];
+
+      const images = FILES.map((file, index) => ({
+        src: file,
+        tags: TAG_SETS[index] || ["人像"],
+      }));
+
+      let currentIndex = 0;
+
+      const grid = document.querySelector("#gallery-grid");
+      const reader = document.querySelector("#reader");
+      const readerPhoto = document.querySelector("#reader-photo");
+      const readerBg = document.querySelector("#reader-bg");
+      const readerTags = document.querySelector("#reader-tags");
+      const readerProgress = document.querySelector("#reader-progress");
+      const readerThumbs = document.querySelector("#reader-thumbs");
+      const coverCount = document.querySelector("#cover-count");
+      const countPortrait = document.querySelector("#count-portrait");
+      const footProgress = document.querySelector("#foot-progress");
+
+      function pad(n) {
+        return String(n).padStart(2, "0");
+      }
+
+      function renderGrid() {
+        coverCount.textContent = `本期 ${images.length} 张`;
+        countPortrait.textContent = String(images.length);
+        footProgress.textContent = `共 ${images.length} 张 · 点击进入沉浸阅读`;
+
+        grid.innerHTML = images
+          .map((image, index) => {
+            const tags = image.tags.join(" · ");
+            return `
+              <button class="card" type="button" data-index="${index}" aria-label="打开第 ${index + 1} 张">
+                <img src="${image.src}" alt="${tags}" loading="lazy" />
+                <span class="card-meta">
+                  <span class="card-tags">${tags}</span>
+                  <span class="card-index">${pad(index + 1)} / ${pad(images.length)}</span>
+                </span>
+              </button>
+            `;
+          })
+          .join("");
+
+        grid.querySelectorAll("[data-index]").forEach((button) => {
+          button.addEventListener("click", () => openReader(Number(button.dataset.index)));
+        });
+      }
+
+      function renderThumbs() {
+        readerThumbs.innerHTML = images
+          .map((image, index) => {
+            return `
+              <button type="button" data-thumb="${index}" class="${index === currentIndex ? "on" : ""}" aria-label="切换到第 ${index + 1} 张">
+                <img src="${image.src}" alt="" />
+              </button>
+            `;
+          })
+          .join("");
+
+        readerThumbs.querySelectorAll("[data-thumb]").forEach((button) => {
+          button.addEventListener("click", () => showImage(Number(button.dataset.thumb)));
+        });
+      }
+
+      function showImage(index) {
+        currentIndex = (index + images.length) % images.length;
+        const image = images[currentIndex];
+        readerPhoto.src = image.src;
+        readerPhoto.alt = image.tags.join(" · ");
+        readerBg.style.backgroundImage = `url("${image.src}")`;
+        readerTags.textContent = image.tags.join(" · ");
+        readerProgress.textContent = `${pad(currentIndex + 1)} / ${pad(images.length)}`;
+        renderThumbs();
+      }
+
+      function openReader(index) {
+        showImage(index);
+        reader.classList.add("is-open");
+        reader.setAttribute("aria-hidden", "false");
+        document.body.style.overflow = "hidden";
+      }
+
+      function closeReader() {
+        reader.classList.remove("is-open");
+        reader.setAttribute("aria-hidden", "true");
+        document.body.style.overflow = "";
+      }
+
+      document.querySelector("#reader-close").addEventListener("click", closeReader);
+      document.querySelector("#reader-prev").addEventListener("click", () => showImage(currentIndex - 1));
+      document.querySelector("#reader-next").addEventListener("click", () => showImage(currentIndex + 1));
+
+      document.addEventListener("keydown", (event) => {
+        if (!reader.classList.contains("is-open")) return;
+        if (event.key === "Escape") closeReader();
+        if (event.key === "ArrowLeft") showImage(currentIndex - 1);
+        if (event.key === "ArrowRight") showImage(currentIndex + 1);
+      });
+
+      // Series chips are visual only in this prototype
+      document.querySelectorAll(".issue-chip").forEach((chip) => {
+        chip.addEventListener("click", () => {
+          document.querySelectorAll(".issue-chip").forEach((item) => item.classList.remove("active"));
+          chip.classList.add("active");
+        });
+      });
+
+      renderGrid();
+    </script>
+  </body>
+</html>

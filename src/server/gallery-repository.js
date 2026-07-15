@@ -6,6 +6,11 @@ const DEFAULT_CATEGORIES = [
   { name: "风景", directorySlug: "scenery", sortOrder: 3 },
 ];
 
+const DEFAULT_SITE_SETTINGS = {
+  issue_name: "图集",
+  hero_copy: "慢慢看，挑一份喜欢的气质。本期以红调与侧光为主，适合夜色、轮廓与留白。",
+};
+
 const SCHEMA_STATEMENTS = [
   `
     CREATE TABLE IF NOT EXISTS tags (
@@ -54,6 +59,21 @@ const SCHEMA_STATEMENTS = [
       FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
     )
   `,
+  `
+    CREATE TABLE IF NOT EXISTS site_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `,
+  `
+    CREATE TABLE IF NOT EXISTS featured_images (
+      image_id INTEGER PRIMARY KEY,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE
+    )
+  `,
 ];
 
 const MIGRATION_STATEMENTS = [
@@ -67,6 +87,7 @@ const INDEX_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_images_category_id ON images(category_id)`,
   `CREATE INDEX IF NOT EXISTS idx_image_tags_image_id ON image_tags(image_id)`,
   `CREATE INDEX IF NOT EXISTS idx_image_tags_tag_id ON image_tags(tag_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_featured_images_order ON featured_images(sort_order, image_id)`,
 ];
 
 const SELECT_IMAGE_COLUMNS = `
@@ -399,22 +420,69 @@ function normalizeCategoryDirectorySlug(value) {
 }
 
 async function seedDefaultCategories(database) {
-  const countRow = await first(database, `SELECT COUNT(*) AS count FROM categories`);
-  const count = Number(countRow?.count ?? 0);
-  if (count > 0) {
-    return;
-  }
-
   for (const category of DEFAULT_CATEGORIES) {
     await run(
       database,
       `
         INSERT INTO categories (name, directory_slug, sort_order)
         VALUES (?, ?, ?)
+        ON CONFLICT DO NOTHING
       `,
       [category.name, category.directorySlug, category.sortOrder],
     );
   }
+}
+
+async function seedDefaultSiteSettings(database) {
+  for (const [key, value] of Object.entries(DEFAULT_SITE_SETTINGS)) {
+    await run(
+      database,
+      `
+        INSERT INTO site_settings (key, value)
+        VALUES (?, ?)
+        ON CONFLICT(key) DO NOTHING
+      `,
+      [key, value],
+    );
+  }
+}
+
+function mapSiteSettings(rows) {
+  const values = new Map((rows ?? []).map((row) => [row.key, row.value]));
+
+  return {
+    issueName: String(values.get("issue_name") ?? DEFAULT_SITE_SETTINGS.issue_name),
+    heroCopy: String(values.get("hero_copy") ?? DEFAULT_SITE_SETTINGS.hero_copy),
+  };
+}
+
+function siteSettingUpsertEntry(key, value) {
+  return {
+    sql: `
+      INSERT INTO site_settings (key, value, updated_at)
+      VALUES (?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(key) DO UPDATE SET
+        value = excluded.value,
+        updated_at = CURRENT_TIMESTAMP
+    `,
+    params: [key, value],
+  };
+}
+
+function validateFeaturedImageIds(value) {
+  if (!Array.isArray(value)) {
+    throw new TypeError("featuredImageIds must be an array");
+  }
+
+  if (value.some((imageId) => !Number.isInteger(imageId) || imageId <= 0)) {
+    throw new RangeError("featuredImageIds must contain positive integers");
+  }
+
+  if (new Set(value).size !== value.length) {
+    throw new RangeError("featuredImageIds must not contain duplicates");
+  }
+
+  return [...value];
 }
 
 export function createGalleryRepository(database) {
@@ -423,6 +491,12 @@ export function createGalleryRepository(database) {
   async function ensureSchema() {
     if (!schemaReady) {
       schemaReady = (async () => {
+        try {
+          await run(database, `PRAGMA foreign_keys = ON`);
+        } catch {
+          // Some database adapters may not support PRAGMA.
+        }
+
         for (const statement of SCHEMA_STATEMENTS) {
           await run(database, statement);
         }
@@ -443,6 +517,7 @@ export function createGalleryRepository(database) {
         }
 
         await seedDefaultCategories(database);
+        await seedDefaultSiteSettings(database);
       })();
     }
 
@@ -450,6 +525,179 @@ export function createGalleryRepository(database) {
   }
 
   return {
+    async getSiteSettings() {
+      await ensureSchema();
+      const rows = await all(database, `SELECT key, value FROM site_settings`);
+      return mapSiteSettings(rows);
+    },
+
+    async updateSiteSettings(changes = {}) {
+      await ensureSchema();
+
+      const nextIssueName = changes.issueName === undefined
+        ? undefined
+        : String(changes.issueName ?? "").trim();
+      const nextHeroCopy = changes.heroCopy === undefined
+        ? undefined
+        : String(changes.heroCopy ?? "").trim();
+
+      if (nextIssueName !== undefined && !nextIssueName) {
+        throw new RangeError("issueName is required");
+      }
+      if (nextHeroCopy !== undefined && !nextHeroCopy) {
+        throw new RangeError("heroCopy is required");
+      }
+
+      const entries = [];
+      if (nextIssueName !== undefined) {
+        entries.push(siteSettingUpsertEntry("issue_name", nextIssueName));
+      }
+      if (nextHeroCopy !== undefined) {
+        entries.push(siteSettingUpsertEntry("hero_copy", nextHeroCopy));
+      }
+      if (entries.length > 0) {
+        await runBatch(database, entries);
+      }
+
+      return await this.getSiteSettings();
+    },
+
+    async updateSiteConfiguration(changes = {}) {
+      await ensureSchema();
+
+      const hasIssueName = changes.issueName !== undefined;
+      const hasHeroCopy = changes.heroCopy !== undefined;
+      const hasFeaturedImages = changes.featuredImageIds !== undefined;
+
+      if (hasIssueName && typeof changes.issueName !== "string") {
+        throw new TypeError("issueName must be a string");
+      }
+      if (hasHeroCopy && typeof changes.heroCopy !== "string") {
+        throw new TypeError("heroCopy must be a string");
+      }
+
+      const issueName = hasIssueName ? String(changes.issueName ?? "").trim() : undefined;
+      const heroCopy = hasHeroCopy ? String(changes.heroCopy ?? "").trim() : undefined;
+
+      if (hasIssueName && !issueName) {
+        throw new RangeError("issueName is required");
+      }
+      if (hasHeroCopy && !heroCopy) {
+        throw new RangeError("heroCopy is required");
+      }
+
+      const featuredImageIds = hasFeaturedImages
+        ? validateFeaturedImageIds(changes.featuredImageIds)
+        : undefined;
+
+      if (featuredImageIds?.length > 0) {
+        const placeholders = featuredImageIds.map(() => "?").join(", ");
+        const existingRows = await all(
+          database,
+          `SELECT id FROM images WHERE id IN (${placeholders})`,
+          featuredImageIds,
+        );
+        const existingIds = new Set(existingRows.map((row) => Number(row.id)));
+        const missingIds = featuredImageIds.filter((imageId) => !existingIds.has(imageId));
+        if (missingIds.length > 0) {
+          throw new RangeError(`unknown image ids: ${missingIds.join(", ")}`);
+        }
+      }
+
+      const entries = [];
+      if (hasIssueName) {
+        entries.push(siteSettingUpsertEntry("issue_name", issueName));
+      }
+      if (hasHeroCopy) {
+        entries.push(siteSettingUpsertEntry("hero_copy", heroCopy));
+      }
+      if (hasFeaturedImages) {
+        entries.push({ sql: `DELETE FROM featured_images`, params: [] });
+        featuredImageIds.forEach((imageId, index) => {
+          entries.push({
+            sql: `INSERT INTO featured_images (image_id, sort_order) VALUES (?, ?)`,
+            params: [imageId, index + 1],
+          });
+        });
+      }
+
+      if (entries.length > 0) {
+        await runBatch(database, entries);
+      }
+
+      return {
+        ...(await this.getSiteSettings()),
+        featuredImages: await this.listFeaturedImages(),
+      };
+    },
+
+    async listFeaturedImages() {
+      await ensureSchema();
+
+      const imageRows = await all(
+        database,
+        `
+          SELECT ${SELECT_IMAGE_COLUMNS}
+          FROM featured_images
+          INNER JOIN images ON images.id = featured_images.image_id
+          LEFT JOIN categories ON categories.id = images.category_id
+          ORDER BY featured_images.sort_order ASC, featured_images.image_id ASC
+        `,
+      );
+
+      const images = imageRows.map(mapImageRow);
+      return attachTagNames(images, await getImageTagRows(database, images.map((image) => image.id)));
+    },
+
+    async setFeaturedImages(imageIds = []) {
+      await ensureSchema();
+
+      const orderedIds = [];
+      const seen = new Set();
+
+      for (const value of imageIds) {
+        const imageId = Number(value);
+        if (!Number.isInteger(imageId) || imageId <= 0 || seen.has(imageId)) {
+          continue;
+        }
+        seen.add(imageId);
+        orderedIds.push(imageId);
+      }
+
+      if (orderedIds.length > 0) {
+        const placeholders = orderedIds.map(() => "?").join(", ");
+        const existingRows = await all(
+          database,
+          `
+            SELECT id
+            FROM images
+            WHERE id IN (${placeholders})
+          `,
+          orderedIds,
+        );
+        const existingIds = new Set(existingRows.map((row) => Number(row.id)));
+        const missing = orderedIds.filter((id) => !existingIds.has(id));
+        if (missing.length > 0) {
+          throw new RangeError(`unknown image ids: ${missing.join(", ")}`);
+        }
+      }
+
+      await run(database, `DELETE FROM featured_images`);
+
+      for (let index = 0; index < orderedIds.length; index += 1) {
+        await run(
+          database,
+          `
+            INSERT INTO featured_images (image_id, sort_order)
+            VALUES (?, ?)
+          `,
+          [orderedIds[index], index + 1],
+        );
+      }
+
+      return await this.listFeaturedImages();
+    },
+
     async createTag({ name, sortOrder = 0, isVisible = true }) {
       await ensureSchema();
 
@@ -782,6 +1030,7 @@ export function createGalleryRepository(database) {
       await ensureSchema();
 
       await run(database, `DELETE FROM image_tags WHERE image_id = ?`, [imageId]);
+      await run(database, `DELETE FROM featured_images WHERE image_id = ?`, [imageId]);
       const result = await run(database, `DELETE FROM images WHERE id = ?`, [imageId]);
 
       return Number(result?.meta?.changes ?? result?.changes ?? 0) > 0;

@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>原型 03 · 沉浸阅读</title>
+    <style>
+      :root {
+        --ink: #1f1c18;
+        --muted: #6b6258;
+        --accent: #b44e27;
+        --line: rgba(31, 28, 24, 0.12);
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Noto Serif SC", "Source Han Serif SC", Georgia, serif;
+        color: var(--ink);
+        background: #efe8dd;
+      }
+
+      .proto-bar {
+        position: sticky;
+        top: 0;
+        z-index: 30;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 18px;
+        background: rgba(31, 28, 24, 0.92);
+        color: #f8f1e8;
+        font-family: system-ui, sans-serif;
+        font-size: 13px;
+      }
+      .proto-bar a { color: #f0d2bf; }
+      .proto-bar nav { display: flex; gap: 14px; flex-wrap: wrap; }
+
+      .page {
+        width: min(1180px, calc(100vw - 24px));
+        margin: 20px auto 0;
+      }
+
+      .top {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: end;
+        margin-bottom: 16px;
+      }
+
+      .top h1 {
+        margin: 0;
+        font-size: 34px;
+        letter-spacing: 0.08em;
+      }
+
+      .top p {
+        margin: 8px 0 0;
+        color: var(--muted);
+      }
+
+      .chips {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .chip {
+        border: 1px solid var(--line);
+        background: rgba(255, 252, 245, 0.85);
+        border-radius: 999px;
+        padding: 8px 14px;
+        font-size: 13px;
+      }
+
+      .chip.active {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+
+      .strip {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 10px;
+        margin-bottom: 18px;
+      }
+
+      .thumb {
+        aspect-ratio: 3 / 4;
+        border-radius: 14px;
+        border: 2px solid transparent;
+        background: #cbb8a6;
+      }
+
+      .thumb.on {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 2px rgba(180, 78, 39, 0.18);
+      }
+
+      .t1 { background: linear-gradient(160deg, #8b5a44, #2a1d18); }
+      .t2 { background: linear-gradient(160deg, #6f7d6a, #1f2420); }
+      .t3 { background: linear-gradient(160deg, #8a6d4d, #2c2118); }
+      .t4 { background: linear-gradient(160deg, #6a4f62, #1d151c); }
+      .t5 { background: linear-gradient(160deg, #4f6674, #152027); }
+      .t6 { background: linear-gradient(160deg, #7a4f3f, #241612); }
+
+      .stage-wrap {
+        position: relative;
+        border-radius: 28px;
+        overflow: hidden;
+        min-height: min(72vh, 680px);
+        box-shadow: 0 28px 70px rgba(39, 30, 21, 0.22);
+        background: #1a1411;
+      }
+
+      .stage-bg {
+        position: absolute;
+        inset: -20px;
+        background:
+          linear-gradient(180deg, rgba(12, 9, 8, 0.35), rgba(12, 9, 8, 0.72)),
+          linear-gradient(135deg, #8b5a44, #2a1d18 55%, #120e0c);
+        filter: blur(18px) saturate(1.05);
+        transform: scale(1.05);
+      }
+
+      .stage {
+        position: relative;
+        z-index: 1;
+        min-height: inherit;
+        display: grid;
+        grid-template-rows: 1fr auto;
+      }
+
+      .frame {
+        display: grid;
+        place-items: center;
+        padding: 28px 28px 10px;
+      }
+
+      .photo {
+        width: min(100%, 860px);
+        aspect-ratio: 4 / 5;
+        max-height: 58vh;
+        border-radius: 18px;
+        background: linear-gradient(160deg, #9a6248, #2a1b16 70%);
+        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+      }
+
+      .caption {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: center;
+        padding: 16px 28px 22px;
+        color: rgba(255, 248, 240, 0.88);
+      }
+
+      .caption .tags {
+        letter-spacing: 0.12em;
+        font-size: 13px;
+      }
+
+      .caption .progress {
+        color: rgba(255, 248, 240, 0.62);
+        font-size: 13px;
+        letter-spacing: 0.1em;
+      }
+
+      .nav {
+        position: absolute;
+        inset: 0;
+        z-index: 2;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0 10px;
+        pointer-events: none;
+      }
+
+      .nav button {
+        pointer-events: auto;
+        width: 46px;
+        height: 46px;
+        border: 0;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.14);
+        color: #fff;
+        font-size: 20px;
+        cursor: default;
+      }
+
+      .hint {
+        width: min(1180px, calc(100vw - 24px));
+        margin: 16px auto 40px;
+        color: var(--muted);
+        font-size: 13px;
+        letter-spacing: 0.04em;
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      @media (max-width: 720px) {
+        .strip { grid-template-columns: repeat(3, 1fr); }
+        .caption { flex-direction: column; align-items: flex-start; }
+        .photo { max-height: 50vh; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="proto-bar">
+      <strong>原型 03 · 沉浸阅读</strong>
+      <nav>
+        <a href="./01-cover-issue.html">01 封面</a>
+        <a href="./02-editorial-wall.html">02 编辑墙</a>
+        <a href="./03-immersive-reader.html">03 沉浸阅读</a>
+        <a href="./index.html">总览</a>
+      </nav>
+    </div>
+
+    <div class="page">
+      <div class="top">
+        <div>
+          <h1>图集</h1>
+          <p>从网格点进后的阅读态：图是主角，信息极简。</p>
+        </div>
+        <div class="chips">
+          <span class="chip active">人像</span>
+          <span class="chip">风景</span>
+          <span class="chip">静物</span>
+        </div>
+      </div>
+
+      <div class="strip" aria-hidden="true">
+        <div class="thumb t1 on"></div>
+        <div class="thumb t2"></div>
+        <div class="thumb t3"></div>
+        <div class="thumb t4"></div>
+        <div class="thumb t5"></div>
+        <div class="thumb t6"></div>
+      </div>
+
+      <section class="stage-wrap" aria-label="沉浸预览示意">
+        <div class="stage-bg"></div>
+        <div class="stage">
+          <div class="frame">
+            <div class="photo"></div>
+          </div>
+          <div class="caption">
+            <div class="tags">人像 · 侧光</div>
+            <div class="progress">07 / 24</div>
+          </div>
+        </div>
+        <div class="nav">
+          <button type="button" aria-label="上一张">‹</button>
+          <button type="button" aria-label="下一张">›</button>
+        </div>
+      </section>
+    </div>
+
+    <div class="hint">
+      <span>键盘 ← → 切换 · Esc 返回网格（示意）</span>
+      <span>不展示文件名 · 不展示后台状态</span>
+    </div>
+  </body>
+</html>

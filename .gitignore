@@ -4,3 +4,4 @@
 .xdg/
 node_modules/
 .worktrees/
+public/demo/

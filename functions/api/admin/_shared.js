@@ -100,6 +100,16 @@ export function toApiImage(image) {
   };
 }
 
+export function toPublicImage(image) {
+  return {
+    id: image.id,
+    fileUrl: image.fileUrl,
+    width: image.width,
+    height: image.height,
+    tags: image.tags ?? [],
+  };
+}
+
 export function toAdminImage(image) {
   return {
     ...toApiImage(image),

@@ -38,8 +38,9 @@ echo.
 echo Latest commits:
 git -c safe.directory="%SAFE_DIR%" log --oneline -3
 echo.
-echo This command will REPLACE origin/main with this standalone gallery repository:
-echo   git push -u origin main --force
+echo This command will push local main to origin/main:
+echo   git push -u origin main
+echo A non-fast-forward update will be rejected so remote work is never overwritten automatically.
 echo.
 set /p "CONFIRM=Type YES to continue: "
 if /i not "%CONFIRM%"=="YES" (
@@ -47,7 +48,7 @@ if /i not "%CONFIRM%"=="YES" (
   exit /b 1
 )
 
-git -c safe.directory="%SAFE_DIR%" push -u origin main --force
+git -c safe.directory="%SAFE_DIR%" push -u origin main
 if errorlevel 1 (
   echo.
   echo [ERROR] Push failed. Check GitHub authentication or network access, then try again.

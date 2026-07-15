@@ -7,6 +7,10 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
+function formatPublicTagText(tags) {
+  return (tags ?? []).filter(Boolean).join(" · ");
+}
+
 export function renderTagChips(tags, activeSlug) {
   return tags
     .map((tag) => {
@@ -20,18 +24,19 @@ export function renderTagChips(tags, activeSlug) {
 export function renderGalleryCards(images) {
   return images
     .map((image) => {
-      const tagText = (image.tags ?? []).join(" / ") || "\u672a\u5206\u914d\u6807\u7b7e";
+      const tagText = formatPublicTagText(image.tags);
+      const label = tagText || "查看图片";
+      const metaMarkup = tagText
+        ? `<span class="gallery-hover-meta"><span class="card-tags">${escapeHtml(tagText)}</span></span>`
+        : "";
 
       return `
         <article class="gallery-card" data-image-id="${escapeHtml(image.id)}">
-          <button type="button" data-action="open-image" aria-label="\u6253\u5f00 ${escapeHtml(image.fileName)}">
+          <button type="button" data-action="open-image" aria-label="${escapeHtml(label)}">
             <span class="gallery-image-stage">
-              <img src="${escapeHtml(image.fileUrl)}" alt="${escapeHtml(image.fileName)}" loading="lazy" />
+              <img src="${escapeHtml(image.fileUrl)}" alt="${escapeHtml(label)}" loading="lazy" />
               <span class="gallery-hover-shade" aria-hidden="true"></span>
-              <span class="gallery-hover-meta">
-                <span class="card-title">${escapeHtml(image.fileName)}</span>
-                <span class="card-tags">${escapeHtml(tagText)}</span>
-              </span>
+              ${metaMarkup}
             </span>
           </button>
         </article>

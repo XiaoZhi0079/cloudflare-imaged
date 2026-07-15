@@ -6,11 +6,49 @@ import { renderGalleryCards, renderTagChips } from "../src/shared/templates.js";
 
 test("public renderers keep gallery behavior", () => {
   const chips = renderTagChips([{ name: "人像", slug: "portrait" }], "portrait");
-  const cards = renderGalleryCards([{ id: 1, fileName: "a.webp", fileUrl: "/file/a.webp", tags: ["人像"], category: { name: "Portrait" } }]);
+  const cards = renderGalleryCards([{ id: 1, fileName: "private-name.webp", fileUrl: "/file/object-42", tags: ["人像"], category: { name: "Portrait" } }]);
   assert.match(chips, /tag-chip active/);
   assert.match(cards, /loading="lazy"/);
   assert.match(cards, /gallery-hover-meta/);
+  assert.match(cards, /人像/);
   assert.doesNotMatch(cards, /Portrait/);
+  assert.match(cards, /\/file\/object-42/);
+  assert.doesNotMatch(cards, /private-name\.webp/);
+  assert.doesNotMatch(cards, /未分配标签/);
+  assert.doesNotMatch(cards, /card-title/);
+});
+
+test("public gallery copy stays light-branded", () => {
+  const html = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
+  const gallery = readFileSync(new URL("../public/assets/gallery.js", import.meta.url), "utf8");
+  const publicData = readFileSync(new URL("../public/assets/public-data.js", import.meta.url), "utf8");
+  assert.match(html, /id="site-hero"/);
+  assert.match(html, /id="hero-stage"/);
+  assert.match(html, /id="hero-copy"/);
+  assert.match(html, /id="hero-issue"/);
+  assert.match(html, /id="hero-pause"[^>]*aria-pressed="false"/);
+  assert.doesNotMatch(html, /按标签浏览/);
+  assert.doesNotMatch(html, /快速查看整理好的图片内容/);
+  assert.match(gallery, /loadPublicBootstrapData/);
+  assert.match(gallery, /createHeroCarousel/);
+  assert.match(gallery, /setPauseReason\("hover"/);
+  assert.match(gallery, /prefers-reduced-motion/);
+  assert.match(gallery, /visibilitychange/);
+  assert.doesNotMatch(gallery, /const \[sitePayload, tagsPayload\] = await Promise\.all/);
+  assert.match(publicData, /\/api\/public\/site/);
+  assert.match(gallery, /这个标签下暂时还没有内容/);
+  assert.match(gallery, /图集暂时打不开/);
+  assert.doesNotMatch(gallery, /image\.fileName/);
+  assert.doesNotMatch(gallery, /error\.message/);
+});
+
+test("settings page exposes site configuration tab", () => {
+  const html = readFileSync(new URL("../public/admin/settings.html", import.meta.url), "utf8");
+  assert.match(html, /data-settings-tab="site"/);
+  assert.match(html, /id="site-panel"/);
+  assert.match(html, /id="site-issue-name"/);
+  assert.match(html, /id="site-hero-copy"/);
+  assert.match(html, /id="site-featured-list"/);
 });
 
 test("both admin pages use the shared authentication gate", () => {
@@ -84,6 +122,11 @@ test("public assets contain only public gallery concerns", () => {
   for (const source of [runtime, shared]) {
     assert.deepEqual([...source.matchAll(/export function (\w+)/g)].map((match) => match[1]), ["renderTagChips", "renderGalleryCards"]);
   }
+});
+
+test("single-image hero controls have an explicit hidden override", () => {
+  const css = readFileSync(new URL("../public/assets/main.css", import.meta.url), "utf8");
+  assert.match(css, /\.hero-controls\[hidden\]\s*\{[^}]*display:\s*none\s*!important/);
 });
 
 test("admin controls expose static accessibility contracts", () => {
