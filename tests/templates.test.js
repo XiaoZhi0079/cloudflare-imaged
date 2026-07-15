@@ -129,6 +129,25 @@ test("single-image hero controls have an explicit hidden override", () => {
   assert.match(css, /\.hero-controls\[hidden\]\s*\{[^}]*display:\s*none\s*!important/);
 });
 
+test("featured hero copy overlays the image without an opaque panel", () => {
+  const css = readFileSync(new URL("../public/assets/main.css", import.meta.url), "utf8");
+  const gallery = readFileSync(new URL("../public/assets/gallery.js", import.meta.url), "utf8");
+
+  assert.match(gallery, /siteHero\.classList\.toggle\("has-featured", count > 0\)/);
+  assert.match(
+    css,
+    /\.hero-featured\.has-featured\s*\{[^}]*position:\s*relative/,
+  );
+  assert.match(
+    css,
+    /\.hero-featured\.has-featured \.hero-meta\s*\{[^}]*position:\s*absolute[^}]*bottom:\s*72px[^}]*background:\s*transparent[^}]*pointer-events:\s*none/,
+  );
+  assert.match(
+    css,
+    /\.hero-featured\.has-featured \.hero-copy\s*\{[^}]*color:\s*#fff[^}]*text-shadow:/,
+  );
+});
+
 test("admin controls expose static accessibility contracts", () => {
   const library = readFileSync(new URL("../public/admin/index.html", import.meta.url), "utf8");
   const settings = readFileSync(new URL("../public/admin/settings.html", import.meta.url), "utf8");

@@ -98,6 +98,7 @@ function renderHero(site) {
   const heroText = String(site?.heroCopy ?? "").trim();
   featuredImages = Array.isArray(site?.featuredImages) ? site.featuredImages : [];
   const count = featuredImages.length;
+  siteHero.classList.toggle("has-featured", count > 0);
 
   heroIssue.textContent = count > 0 ? `${issueName} · 本期 ${count} 张` : issueName;
   heroCopy.textContent = heroText;

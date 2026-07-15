@@ -71,6 +71,32 @@ button[disabled] {
   display: grid;
 }
 
+.hero-featured.has-featured {
+  position: relative;
+  background: #1a1411;
+}
+
+.hero-featured.has-featured .hero-meta {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 72px;
+  z-index: 1;
+  padding: 0 24px;
+  background: transparent;
+  pointer-events: none;
+}
+
+.hero-featured.has-featured .hero-issue {
+  color: rgba(255, 248, 240, 0.78);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.72);
+}
+
+.hero-featured.has-featured .hero-copy {
+  color: #fff;
+  text-shadow: 0 1px 5px rgba(0, 0, 0, 0.78);
+}
+
 .hero-stage {
   position: relative;
   min-height: min(52vh, 520px);
@@ -415,6 +441,11 @@ button[disabled] {
 
   .hero-meta {
     padding: 16px 18px 18px;
+  }
+
+  .hero-featured.has-featured .hero-meta {
+    bottom: 68px;
+    padding: 0 18px;
   }
 
   .gallery-grid {
