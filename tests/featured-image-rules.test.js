@@ -10,19 +10,26 @@ test("featured eligibility accepts full HD and larger exact 16:9 images", () => 
     meetsMinimum: true,
     eligible: true,
     is4K: false,
-    qualityLabel: "Full HD",
+    resolutionTier: "1k",
+    qualityLabel: "1K / 1080p",
     statusLabel: "轮播可用",
     reason: null,
   });
-  assert.equal(classifyFeaturedImage({ width: 2560, height: 1440 }).eligible, true);
+  assert.equal(classifyFeaturedImage({ width: 2560, height: 1440 }).resolutionTier, "2k");
+  assert.equal(classifyFeaturedImage({ width: 3200, height: 1800 }).resolutionTier, "2k");
+  assert.equal(classifyFeaturedImage({ width: 3840, height: 2160 }).resolutionTier, "4k");
   assert.equal(classifyFeaturedImage({ width: 3840, height: 2160 }).is4K, true);
-  assert.equal(classifyFeaturedImage({ width: 7680, height: 4320 }).is4K, false);
+  assert.equal(classifyFeaturedImage({ width: 7680, height: 4320 }).resolutionTier, "4k");
+  assert.equal(classifyFeaturedImage({ width: 7680, height: 4320 }).is4K, true);
 });
 
 test("featured eligibility rejects low resolution wrong ratio and unknown dimensions", () => {
   assert.equal(classifyFeaturedImage({ width: 1280, height: 720 }).reason, "分辨率不足");
   assert.equal(classifyFeaturedImage({ width: 1920, height: 1200 }).reason, "比例不符");
   assert.equal(classifyFeaturedImage({ width: null, height: null }).reason, "尺寸未知");
+  assert.equal(classifyFeaturedImage({ width: 1280, height: 720 }).resolutionTier, null);
+  assert.equal(classifyFeaturedImage({ width: 1920, height: 1200 }).resolutionTier, null);
+  assert.equal(classifyFeaturedImage({ width: null, height: null }).resolutionTier, null);
 });
 
 test("featured eligibility safely rejects extreme dimensions", () => {

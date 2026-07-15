@@ -10,12 +10,21 @@ export function classifyFeaturedImage(image = {}) {
   const isExactSixteenNine = hasDimensions && BigInt(width) * 9n === BigInt(height) * 16n;
   const meetsMinimum = hasDimensions && width >= 1920 && height >= 1080;
   const eligible = isExactSixteenNine && meetsMinimum;
-  const is4K = width === 3840 && height === 2160;
-  const qualityLabel = is4K
+  const resolutionTier = !eligible
+    ? null
+    : width >= 3840 && height >= 2160
+      ? "4k"
+      : width >= 2560 && height >= 1440
+        ? "2k"
+        : "1k";
+  const is4K = resolutionTier === "4k";
+  const qualityLabel = resolutionTier === "4k"
     ? "4K"
-    : width === 1920 && height === 1080
-      ? "Full HD"
-      : null;
+    : resolutionTier === "2k"
+      ? "2K"
+      : resolutionTier === "1k"
+        ? "1K / 1080p"
+        : null;
   const reason = !hasDimensions
     ? "尺寸未知"
     : !isExactSixteenNine
@@ -30,6 +39,7 @@ export function classifyFeaturedImage(image = {}) {
     meetsMinimum,
     eligible,
     is4K,
+    resolutionTier,
     qualityLabel,
     statusLabel: eligible ? "轮播可用" : reason,
     reason,
