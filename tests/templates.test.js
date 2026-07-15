@@ -158,6 +158,28 @@ test("featured hero copy overlays the image without an opaque panel", () => {
   );
 });
 
+test("mobile featured hero copy stays in document flow", () => {
+  const css = readFileSync(new URL("../public/assets/main.css", import.meta.url), "utf8");
+  const mobileMedia = css.match(
+    /@media \(max-width:\s*720px\)\s*\{([\s\S]*?)\r?\n\}\s*@media \(max-width:\s*480px\)/,
+  )?.[1];
+  assert.ok(mobileMedia, "the 720px responsive media block must exist");
+
+  const mobileHeroMeta = mobileMedia.match(
+    /\.hero-featured\.has-featured \.hero-meta\s*\{([^}]*)\}/,
+  )?.[1];
+  assert.ok(mobileHeroMeta, "the mobile featured hero meta override must exist");
+  assert.match(mobileHeroMeta, /position:\s*static/);
+  assert.match(mobileHeroMeta, /padding:\s*16px 18px 18px/);
+  assert.match(mobileHeroMeta, /background:\s*transparent/);
+  assert.match(mobileHeroMeta, /pointer-events:\s*none/);
+  assert.doesNotMatch(mobileHeroMeta, /bottom\s*:/);
+  assert.match(
+    css,
+    /\.hero-featured\.has-featured \.hero-meta\s*\{[^}]*position:\s*absolute[^}]*bottom:\s*72px/,
+  );
+});
+
 test("featured hero uses a fixed responsive 16:9 stage", () => {
   const css = readFileSync(new URL("../public/assets/main.css", import.meta.url), "utf8");
   const index = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");

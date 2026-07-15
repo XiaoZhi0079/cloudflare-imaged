@@ -439,8 +439,10 @@ button[disabled] {
   }
 
   .hero-featured.has-featured .hero-meta {
-    bottom: 68px;
-    padding: 0 18px;
+    position: static;
+    padding: 16px 18px 18px;
+    background: transparent;
+    pointer-events: none;
   }
 
   .gallery-grid {
