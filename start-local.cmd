@@ -15,6 +15,9 @@ if "%R2_BUCKET_NAME%"=="" set "R2_BUCKET_NAME=gallery"
 rem For local browser direct upload, keep R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, and R2_SECRET_ACCESS_KEY in .dev.vars.
 
 cd /d "%~dp0"
+call npx.cmd wrangler d1 migrations apply GALLERY_DB --local --persist-to ./.wrangler/state
+if errorlevel 1 exit /b 1
+
 call npx.cmd wrangler pages dev ./public ^
   --d1 GALLERY_DB ^
   --r2 GALLERY_BUCKET ^

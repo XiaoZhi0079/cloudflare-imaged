@@ -14,6 +14,8 @@ export HTTPS_PROXY=
 export ALL_PROXY=
 export NO_PROXY=127.0.0.1,localhost
 
+npx wrangler d1 migrations apply GALLERY_DB --local --persist-to ./.wrangler/state
+
 exec npx wrangler pages dev ./public \
   --d1 GALLERY_DB \
   --r2 GALLERY_BUCKET \

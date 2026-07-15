@@ -44,6 +44,26 @@ test("local launchers listen on loopback by default", () => {
   }
 });
 
+test("local launchers apply D1 migrations before starting Pages", () => {
+  const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
+  const windowsLauncher = readFileSync(new URL("../start-local.cmd", import.meta.url), "utf8");
+  const shellLauncher = readFileSync(new URL("../start-local.sh", import.meta.url), "utf8");
+  const migrationCommand = "npx wrangler d1 migrations apply GALLERY_DB --local --persist-to ./.wrangler/state";
+
+  assert.equal(packageJson.scripts["db:migrate:local"], migrationCommand);
+  assert.match(packageJson.scripts.dev, /^npm run db:migrate:local && /);
+
+  for (const launcher of [windowsLauncher, shellLauncher]) {
+    const migrationIndex = launcher.indexOf("wrangler d1 migrations apply GALLERY_DB");
+    const pagesIndex = launcher.indexOf("wrangler pages dev");
+    assert.notEqual(migrationIndex, -1, "launcher must apply migrations");
+    assert.ok(migrationIndex < pagesIndex, "migration must run before Pages");
+  }
+
+  assert.match(windowsLauncher, /if errorlevel 1 exit \/b 1/i);
+  assert.match(shellLauncher, /set -euo pipefail/);
+});
+
 test("advanced prototype uses portable committed demo assets", () => {
   const prototypeUrl = new URL(
     "../docs/prototypes/magazine/advanced-01-03.html",
