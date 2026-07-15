@@ -4,7 +4,7 @@ import { createDialogHost } from "./dialogs.js";
 import { createNotifier } from "./notifications.js";
 import { renderTaxonomyItem } from "./renderers/taxonomy-item.js";
 import { createSettingsState } from "./settings-state.js";
-import { createSiteSettingsController } from "./site-settings.js";
+import { createSiteSettingsController } from "./site-settings.js?v=20260715-featured-dimensions";
 import { createSortableList } from "./sortable-list.js";
 
 const elements = {

@@ -149,6 +149,16 @@ test("admin upload complete handler stores image category metadata", async () =>
         fileUrl: "https://gallery.example.com/file/sexy-beauty/campus-01.webp",
         width: 900,
         height: 1350,
+        featuredEligibility: {
+          dimensions: "900×1350",
+          isExactSixteenNine: false,
+          meetsMinimum: false,
+          eligible: false,
+          is4K: false,
+          qualityLabel: null,
+          statusLabel: "比例不符",
+          reason: "比例不符",
+        },
         tags: ["校园风情"],
         category: {
           id: category.id,

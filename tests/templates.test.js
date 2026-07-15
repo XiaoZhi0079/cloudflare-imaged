@@ -214,6 +214,36 @@ test("public entry assets share one cache-busting release version", () => {
   assert.equal(cssVersion[1], scriptVersion[1]);
 });
 
+test("changed admin assets share the featured dimensions cache-busting version", () => {
+  const libraryHtml = readFileSync(new URL("../public/admin/index.html", import.meta.url), "utf8");
+  const libraryEntry = readFileSync(
+    new URL("../public/assets/admin/library-page.js", import.meta.url),
+    "utf8",
+  );
+  const settingsHtml = readFileSync(new URL("../public/admin/settings.html", import.meta.url), "utf8");
+  const settingsEntry = readFileSync(
+    new URL("../public/assets/admin/settings-page.js", import.meta.url),
+    "utf8",
+  );
+  const expectedVersion = "20260715-featured-dimensions";
+  const references = [
+    [libraryHtml, /href="\/assets\/admin\/workbench\.css\?v=([^"]+)"/, "workbench.css"],
+    [libraryHtml, /src="\/assets\/admin\/library-page\.js\?v=([^"]+)"/, "library-page.js"],
+    [libraryEntry, /from "\.\/library-state\.js\?v=([^"]+)"/, "library-state.js"],
+    [libraryEntry, /from "\.\/renderers\/image-card\.js\?v=([^"]+)"/, "image-card.js"],
+    [settingsHtml, /href="\/assets\/admin\/settings\.css\?v=([^"]+)"/, "settings.css"],
+    [settingsHtml, /src="\/assets\/admin\/settings-page\.js\?v=([^"]+)"/, "settings-page.js"],
+    [settingsEntry, /from "\.\/site-settings\.js\?v=([^"]+)"/, "site-settings.js"],
+  ];
+  const versions = references.map(([source, pattern, asset]) => {
+    const match = source.match(pattern);
+    assert.ok(match, `${asset} must include a cache-busting release version`);
+    return match[1];
+  });
+
+  assert.deepEqual(versions, Array(references.length).fill(expectedVersion));
+});
+
 test("admin controls expose static accessibility contracts", () => {
   const library = readFileSync(new URL("../public/admin/index.html", import.meta.url), "utf8");
   const settings = readFileSync(new URL("../public/admin/settings.html", import.meta.url), "utf8");

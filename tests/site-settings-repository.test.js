@@ -58,6 +58,24 @@ test("setFeaturedImages stores ordered images and listFeaturedImages returns the
   assert.deepEqual(listed.map((image) => image.id), [third.id, first.id, second.id]);
 });
 
+test("listFeaturedImages preserves legacy ineligible featured rows", async () => {
+  const database = createTestDb();
+  const repository = createGalleryRepository(database);
+  const legacy = await createImage(repository, "legacy-too-small", {
+    width: 1280,
+    height: 720,
+  });
+  database
+    .prepare("INSERT INTO featured_images (image_id, sort_order) VALUES (?, ?)")
+    .run(legacy.id, 1);
+
+  const listed = await repository.listFeaturedImages();
+  assert.deepEqual(
+    listed.map(({ id, width, height }) => ({ id, width, height })),
+    [{ id: legacy.id, width: 1280, height: 720 }],
+  );
+});
+
 test("setFeaturedImages enforces featured image dimension rules without clearing selection", async () => {
   const repository = createGalleryRepository(createTestDb());
   const selected = await createImage(repository, "selected");
