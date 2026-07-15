@@ -1,7 +1,7 @@
 # D1 运行时初始化移除与标签切换性能设计
 
 日期：2026-07-15
-状态：已实施并完成本地验收，待合并与生产发布
+状态：已实施、合并并完成生产发布验收
 
 ## 背景与诊断证据
 
@@ -214,4 +214,13 @@ npx wrangler d1 migrations apply GALLERY_DB --remote
 - `npm run db:migrate:local` 返回“无待执行 migration”。真实 `npm run dev` 输出 D1 绑定为 `env.GALLERY_DB (gallery)`，不再出现 `local-GALLERY_DB`；公共 tags/site API 均返回 200。
 - 新增启动契约测试，禁止 `package.json`、Windows/Shell 启动器和演示提示再次加入 `pages dev --d1 GALLERY_DB`。
 - 新增 existing-schema 保全测试：基于 `schema.sql` 插入哨兵图片、标签、关联、精选和自定义设置，baseline 连续应用两次后全部保持原值。
-- 本轮只使用本地空库和合成元数据；未连接或写入生产 D1/R2。生产 preflight、remote migration、推送和部署仍是发布阶段任务。
+- 截至本地验收结束，只使用了本地空库和合成元数据，尚未连接或写入生产 D1/R2；后续生产结果记录在下一节。
+
+## 生产发布与性能验收证据（2026-07-16）
+
+- 功能代码首次发布 SHA `424dde2` 在当次本地 `main`、GitHub `main`、GitHub CI 与 Cloudflare Pages 生产部署中一致；后续只追加发布证据文档。
+- 生产只读 preflight 核对了 6 张表的完整 DDL/列/外键、7 个业务索引 SQL 和匿名排序连续性；所有约束匹配，标签和分类的 `sort_order_is_contiguous` 均为 1。
+- `0001_baseline.sql` 成功应用并恰好记录一次，应用后无待执行 migration；没有删除或覆盖业务记录。
+- 5 个标签的 15 次公开图片 API 请求全部为 200，TTFB 中位数 `128ms`、P95/最大值 `177.8ms`，低于 `400ms` 目标并相对根治前最低约 `1.2s` 基线改善约 89%。
+- 阻断图片的浏览器实测中，两次标签切换的 API/DOM 完成时间为 `148/150ms` 和 `187/190ms`，API 返回后的 DOM 更新约 `2–3ms`，低于 `20ms` 目标。
+- 发布验收未截图、未下载或分析图片；未输出业务名称、URL 或文案，未执行生产管理写操作或 R2 写入。

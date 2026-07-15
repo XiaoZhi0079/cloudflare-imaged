@@ -1,7 +1,7 @@
 # 前台轻品牌与大屏精选 — 变更与后续计划
 
 日期：2026-07-14
-状态：大屏精选基线已发布至 `gallery.140079.xyz`；精选分档/筛选分离与 D1 热路径根治已在功能分支实施并本地验证，尚未合并、迁移生产 D1、推送或部署
+状态：精选分档/筛选分离与 D1 热路径根治已合并、迁移并发布至 `gallery.140079.xyz`
 更新：2026-07-16
 
 ---
@@ -196,7 +196,7 @@ npm run seed:demo
 - 干净浏览器会话控制台无错误或警告
 - 未授权管理站点请求返回 401；未使用生产管理密钥执行写操作
 
-### 2.7 精选尺寸资格、筛选分离与固定 `16:9` Hero（已实施并验证，尚未推送/部署）
+### 2.7 精选尺寸资格、筛选分离与固定 `16:9` Hero（已发布）
 
 2026-07-15 在功能分支完成以下改造：
 
@@ -215,15 +215,27 @@ npm run seed:demo
 - 相对基线变更的 26 个 JavaScript 文件全部通过 `node --check`，`bash -n start-local.sh` 与 `git diff --check cada320` 均退出 0。
 - 隔离本地 D1 的 DOM 验收确认：图库无轮播筛选；标签交集有效；picker 的全部/4K/2K/1K 数量为 3/1/1/1；跨档勾选保持；legacy 项不会被静默删除，显式移除后保存为 200。
 - 浏览器在导航前阻断所有图片请求，共阻断 21 次、收到 0 个图片响应，所有图片自然尺寸均为 0；未截图、未查看或分析图片内容。
-- 未访问或写入生产 D1/R2，未推送或部署。
+- 本地实施与验收阶段未访问或写入生产 D1/R2；生产发布证据见 2.9。
 
-### 2.8 D1 请求热路径根治（已实施并验证，待生产 migration）
+### 2.8 D1 请求热路径根治（已发布）
 
 - 新增 `migrations/0001_baseline.sql`，统一创建 6 张业务表、7 个索引和幂等默认数据；Repository 请求路径已移除 PRAGMA、DDL、seed 和读时排序写入。
 - 公共 tags/images/site 的 SQL 边界测试证明读取只执行必要的业务 `SELECT`；空标签图片查询最多 1 条 SELECT，非空最多 2 条。
 - 本地启动先执行 `wrangler d1 migrations apply`，再由 `wrangler.toml` 提供 Pages 的 D1 身份；已移除会创建另一份 `local-GALLERY_DB` 空库的 `pages dev --d1 GALLERY_DB` 覆盖。
 - existing-schema 测试从 `schema.sql` 建库并写入哨兵图片、标签、关联、精选及自定义设置，baseline 连续应用两次后所有业务值保持不变。
 - 发布顺序固定为：本地合并最终 `main` SHA → 完整生产 D1 只读 preflight → remote migration → 推送同一 SHA → GitHub/Cloudflare 验收。
+
+### 2.9 生产发布与性能验收（已完成）
+
+2026-07-16 首次发布 SHA `424dde2`：
+
+- 生产 D1 只读 preflight 完整核对 6 张表的 `CREATE TABLE` SQL、列、外键、7 个业务索引和匿名排序连续性；未读取文件名、图片 URL、标签/分类名称或站点文案。
+- `0001_baseline.sql` 成功应用且仅登记 1 条 migration；随后 `wrangler d1 migrations list` 返回无待执行项。应用后的匿名计数为 5 个标签、3 个分类、2 张图片、2 组图片标签关联、2 条站点设置、0 条精选。
+- GitHub CI 在同一 SHA 上成功；Cloudflare Pages 项目 `cloudflare-imaged` 的生产部署 `fc87315d-e9e3-48c8-9cd5-50311d7d71f2` 使用同一 SHA，并绑定 `gallery.140079.xyz`。
+- 5 个标签共 15 次公开图片 API 采样全部返回 200：TTFB 中位数 `128ms`、P95/最大值 `177.8ms`，相对根治前约 `1.2s` 的最低基线改善约 89%。
+- 阻断图片请求的真实页面切换中，空标签 API/DOM 分别为 `148ms/150ms`，返回有内容标签为 `187ms/190ms`，API 后 DOM 更新约 `2–3ms`。
+- 生产图库 DOM 有 0 个轮播筛选/资格控件并保留标签筛选；设置入口和模块包含全部可用、4K、2K、1K/1080p 四档逻辑；未授权管理 API 返回 401。
+- 生产浏览器在首次导航前拦截全部 image 类型请求：4 次请求被阻断、图片响应为 0、自然尺寸为 0；未截图、未查看或分析图片内容，也未执行生产管理写操作。
 
 ---
 
@@ -238,11 +250,11 @@ npm run seed:demo
    - [x] 隔离运行 `seed:demo` → 前台大屏 / 管理站点 tab
    - [x] 清空精选、改文案、选择与排序后前台同步
 
-2. **生产库 schema 同步（旧基线已存在；正式 migration 待执行）**
+2. **生产库 schema 同步（已完成）**
    - [x] 当前生产 `/api/public/site` 与既有标签/图片读取正常
    - [x] baseline migration 的 fresh、重复应用、schema 一致性和已有数据保全测试通过
-   - [ ] 在最终 `main` SHA 上完成六表完整 `CREATE TABLE` SQL/列定义、全部外键、七索引 SQL、排序连续性聚合和待执行 migration 的只读 preflight
-   - [ ] 应用 `0001_baseline.sql` 到生产 D1，确认无待执行 migration，再推送同一 SHA
+   - [x] 在最终 `main` SHA 上完成六表完整 `CREATE TABLE` SQL/列定义、全部外键、七索引 SQL、排序连续性聚合和待执行 migration 的只读 preflight
+   - [x] 应用 `0001_baseline.sql` 到生产 D1，确认无待执行 migration，再推送同一 SHA
 
 ### P1 — 产品增强（可选）
 
@@ -340,7 +352,8 @@ npm run seed:demo
 - [x] 旧不合规精选保持只读兼容并可由用户手动移除
 - [x] Hero 使用响应式 `16:9` + `contain`；移动端透明文案在舞台下正常流
 - [x] Repository 公共读取路径不再执行运行时 DDL/DML；本地 migration 与 Pages 共用同一 D1 身份
-- [x] 当前功能分支全量测试通过（171 / 171；本改造尚未合并、迁移生产 D1、推送或部署）
+- [x] 最终分支与合并后 `main` 全量测试均通过（171 / 171），GitHub CI 与 Cloudflare Pages 部署成功
+- [x] 生产标签 API TTFB 中位数 `128ms`，浏览器标签切换完成于 `150–190ms`
 
 ---
 
@@ -349,4 +362,4 @@ npm run seed:demo
 - 管理鉴权仍是单密钥 + `localStorage`，与既有设计一致。
 - 演示 SVG 仅用于本地预览，不是生产内容，且已由 `.gitignore` 排除。
 - 本地浏览器验收在临时隔离副本中执行并已清理。
-- 旧版本生产验收只执行公开/管理未授权只读请求；本轮新改造尚未访问生产 D1/R2，也未执行生产管理写操作。
+- 本轮只对生产 D1 执行 schema/匿名聚合 preflight 和版本化 baseline migration；未读取业务文本或图片内容，未执行生产管理 API 写操作或 R2 写入。

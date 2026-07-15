@@ -7,7 +7,7 @@
 当前推荐架构：
 
 - GitHub 仓库作为代码源
-- Cloudflare Pages 直接连接 GitHub 仓库
+- Cloudflare Pages 项目 `cloudflare-imaged` 直接连接 GitHub 仓库
 - Cloudflare D1 作为图片与标签元数据数据库
 - Cloudflare R2 作为图片文件存储
 - GitHub Actions 只做 CI，不负责部署
@@ -119,6 +119,12 @@ git push -u origin main
 ```
 
 如果 Git 提示无法快进，应停止发布，获取并审查远端提交后重新执行整套验证和 D1 preflight；不得强推。推送成功后等待 GitHub CI 与 Cloudflare Pages 部署同一个 `$releaseSha`，再进行只读 API、DOM 和时序验收。
+
+当前项目可用以下命令核对 Pages 生产部署使用的提交：
+
+```powershell
+npx wrangler pages deployment list --project-name cloudflare-imaged
+```
 
 ## 第四步：在 Cloudflare 中连接 GitHub 仓库
 

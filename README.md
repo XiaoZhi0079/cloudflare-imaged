@@ -13,6 +13,8 @@ Independent public gallery frontend and lightweight admin surface managed entire
 
 This project is meant to be deployed by Cloudflare Pages through direct GitHub integration.
 
+The current Cloudflare Pages project is `cloudflare-imaged`; its custom production domain is `gallery.140079.xyz`.
+
 Recommended setup:
 
 1. Push the `gallery` repository to GitHub.
