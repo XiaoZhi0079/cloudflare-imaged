@@ -35,6 +35,26 @@ If Cloudflare shows Wrangler config detection, that is expected. This repository
 
 If you move this project to a different Cloudflare account, update `wrangler.toml` to use the target D1 database ID and bucket names for that account.
 
+## D1 Migrations
+
+The repository does not create or repair D1 tables inside request handlers. Apply the versioned migrations before starting a new environment or deploying code that depends on them.
+
+Local database:
+
+```bash
+npm run db:migrate:local
+```
+
+Production database, after a read-only schema check:
+
+```bash
+npx wrangler d1 migrations list GALLERY_DB --remote
+npx wrangler d1 migrations apply GALLERY_DB --remote
+npx wrangler d1 migrations list GALLERY_DB --remote
+```
+
+`migrations/0001_baseline.sql` is additive and idempotent: it creates missing current objects and inserts only missing defaults. It does not drop, delete, or overwrite gallery business data. Production migrations are an explicit release step; they are not part of the Pages build command or GitHub CI.
+
 ## Current Flow
 
 - Gallery admin requests presigned upload URLs from `/api/admin/images/upload/init`
@@ -105,6 +125,7 @@ If uploads fail in the browser while the admin API still works, the first thing 
 Before the first production deploy, confirm all of the following:
 
 - D1 database exists and is bound as `GALLERY_DB`
+- All remote D1 migrations have been applied
 - R2 bucket exists and is bound as `GALLERY_BUCKET`
 - Pages project secrets include the gallery admin key and R2 signing credentials
 - `GALLERY_PUBLIC_BASE_URL` points to your real deployed `/file` route
@@ -117,10 +138,10 @@ The older `CloudFlare-ImgBed` directory in the workspace is retained only as a l
 
 ## Local Development
 
-If you want to prepare the local database explicitly, you can run:
+Prepare the local database with the same migrations used by Cloudflare:
 
 ```bash
-npx wrangler d1 execute GALLERY_DB --local --file schema.sql --persist-to ./.wrangler/state
+npm run db:migrate:local
 ```
 
 For local direct uploads, copy .dev.vars.example to .dev.vars and fill in your real R2 signing credentials before starting preview.
@@ -128,8 +149,10 @@ For local direct uploads, copy .dev.vars.example to .dev.vars and fill in your r
 Start local preview:
 
 ```bash
-npx wrangler pages dev ./public --d1 GALLERY_DB --r2 GALLERY_BUCKET --compatibility-date 2026-03-02 --ip 0.0.0.0 --port 8788 --persist-to ./.wrangler/state
+npm run dev
 ```
+
+`npm run dev`, `start-local.cmd`, and `start-local.sh` all apply pending local migrations before Pages starts. A migration failure stops startup.
 
 Local URLs:
 
