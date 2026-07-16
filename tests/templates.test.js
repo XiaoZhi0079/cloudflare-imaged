@@ -259,12 +259,18 @@ test("featured hero uses a fixed responsive 16:9 stage", () => {
 
 test("public entry assets share one cache-busting release version", () => {
   const index = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
+  const gallery = readFileSync(new URL("../public/assets/gallery.js", import.meta.url), "utf8");
+  const albumPage = readFileSync(new URL("../public/assets/album-page.js", import.meta.url), "utf8");
   const cssVersion = index.match(/href="\/assets\/main\.css\?v=([^"]+)"/);
   const scriptVersion = index.match(/src="\/assets\/gallery\.js\?v=([^"]+)"/);
 
   assert.ok(cssVersion, "main.css must include a non-empty release version");
   assert.ok(scriptVersion, "gallery.js must include a non-empty release version");
   assert.equal(cssVersion[1], scriptVersion[1]);
+  for (const source of [gallery, albumPage]) {
+    assert.match(source, /templates\.js\?v=20260717-albums-gallery-redesign/);
+    assert.match(source, /public-data\.js\?v=20260717-albums-gallery-redesign/);
+  }
 });
 
 test("changed admin assets use targeted cache-busting versions", () => {
@@ -296,6 +302,9 @@ test("changed admin assets use targeted cache-busting versions", () => {
 
   const resolutionFilterVersion = "20260717-albums-gallery-redesign";
   const resolutionFilterReferences = [
+    [libraryHtml, /href="\/assets\/admin\/admin\.css\?v=([^"]+)"/, "admin.css"],
+    [settingsHtml, /href="\/assets\/admin\/admin\.css\?v=([^"]+)"/, "settings admin.css"],
+    [featuredHtml, /href="\/assets\/admin\/admin\.css\?v=([^"]+)"/, "featured admin.css"],
     [libraryHtml, /href="\/assets\/admin\/workbench\.css\?v=([^"]+)"/, "workbench.css"],
     [libraryHtml, /src="\/assets\/admin\/library-page\.js\?v=([^"]+)"/, "library-page.js"],
     [settingsHtml, /href="\/assets\/admin\/settings\.css\?v=([^"]+)"/, "settings.css"],

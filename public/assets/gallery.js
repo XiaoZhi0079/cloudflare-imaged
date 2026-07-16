@@ -1,5 +1,5 @@
-import { renderAlbumCards, renderGalleryCards, renderTagChips } from "./templates.js";
-import { fetchPublicJson, loadPublicBootstrapData } from "./public-data.js";
+import { renderAlbumCards, renderGalleryCards, renderTagChips } from "./templates.js?v=20260717-albums-gallery-redesign";
+import { fetchPublicJson, loadPublicBootstrapData } from "./public-data.js?v=20260717-albums-gallery-redesign";
 import { createHeroCarousel } from "./hero-carousel.js";
 
 const siteHero = document.querySelector("#site-hero");
