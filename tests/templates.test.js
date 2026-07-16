@@ -88,6 +88,23 @@ test("admin pages load page-specific modules and styles", () => {
   assert.match(settings, /\/assets\/admin\/settings-page\.js/);
 });
 
+test("labels and categories page excludes featured management", () => {
+  const html = readFileSync(new URL("../public/admin/settings.html", import.meta.url), "utf8");
+  assert.match(html, /<h1>标签与分类<\/h1>/);
+  assert.match(html, /data-settings-tab="tags"/);
+  assert.match(html, /data-settings-tab="categories"/);
+  assert.doesNotMatch(html, /data-settings-tab="site"|id="site-panel"/);
+  assert.doesNotMatch(html, /site-issue-name|site-hero-copy|site-featured-list/);
+});
+
+test("taxonomy entry has no featured or site mode", () => {
+  const source = readFileSync(new URL("../public/assets/admin/settings-page.js", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /site-settings\.js|createSiteSettingsController/);
+  assert.doesNotMatch(source, /isSiteTab|ensureSiteController|sitePanel|siteController/);
+  assert.doesNotMatch(source, /\/api\/admin\/site|\/api\/admin\/images/);
+  assert.match(source, /activeType === "tags" \? "新增标签" : "新增主分类"/);
+});
+
 test("image workbench exposes filtering details upload and bulk controls", () => {
   const html = readFileSync(new URL("../public/admin/index.html", import.meta.url), "utf8");
   for (const id of [
@@ -232,8 +249,9 @@ test("changed admin assets use targeted cache-busting versions", () => {
     "utf8",
   );
   const settingsHtml = readFileSync(new URL("../public/admin/settings.html", import.meta.url), "utf8");
-  const settingsEntry = readFileSync(
-    new URL("../public/assets/admin/settings-page.js", import.meta.url),
+  const featuredHtml = readFileSync(new URL("../public/admin/featured.html", import.meta.url), "utf8");
+  const featuredEntry = readFileSync(
+    new URL("../public/assets/admin/featured-page.js", import.meta.url),
     "utf8",
   );
   const filterSeparationVersion = "20260715-featured-filter-separation";
@@ -243,6 +261,7 @@ test("changed admin assets use targeted cache-busting versions", () => {
     [libraryEntry, /from "\.\/library-state\.js\?v=([^"]+)"/, "library-state.js"],
     [libraryEntry, /from "\.\/renderers\/image-card\.js\?v=([^"]+)"/, "image-card.js"],
     [settingsHtml, /href="\/assets\/admin\/settings\.css\?v=([^"]+)"/, "settings.css"],
+    [featuredHtml, /href="\/assets\/admin\/settings\.css\?v=([^"]+)"/, "featured settings.css"],
   ];
   const unchangedVersions = unchangedReferences.map(([source, pattern, asset]) => {
     const match = source.match(pattern);
@@ -254,10 +273,11 @@ test("changed admin assets use targeted cache-busting versions", () => {
     Array(unchangedReferences.length).fill(filterSeparationVersion),
   );
 
-  const featuredRatioVersion = "20260716-approximate-featured-ratio";
+  const featuredNavigationVersion = "20260716-admin-featured-navigation";
   const changedReferences = [
     [settingsHtml, /src="\/assets\/admin\/settings-page\.js\?v=([^"]+)"/, "settings-page.js"],
-    [settingsEntry, /from "\.\/site-settings\.js\?v=([^"]+)"/, "site-settings.js"],
+    [featuredHtml, /src="\/assets\/admin\/featured-page\.js\?v=([^"]+)"/, "featured-page.js"],
+    [featuredEntry, /from "\.\/site-settings\.js\?v=([^"]+)"/, "site-settings.js"],
   ];
   const changedVersions = changedReferences.map(([source, pattern, asset]) => {
     const match = source.match(pattern);
@@ -266,7 +286,7 @@ test("changed admin assets use targeted cache-busting versions", () => {
   });
   assert.deepEqual(
     changedVersions,
-    Array(changedReferences.length).fill(featuredRatioVersion),
+    Array(changedReferences.length).fill(featuredNavigationVersion),
   );
 });
 

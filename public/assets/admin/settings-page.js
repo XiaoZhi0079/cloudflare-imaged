@@ -4,7 +4,6 @@ import { createDialogHost } from "./dialogs.js";
 import { createNotifier } from "./notifications.js";
 import { renderTaxonomyItem } from "./renderers/taxonomy-item.js";
 import { createSettingsState } from "./settings-state.js";
-import { createSiteSettingsController } from "./site-settings.js?v=20260716-approximate-featured-ratio";
 import { createSortableList } from "./sortable-list.js";
 
 const elements = {
@@ -25,8 +24,6 @@ const elements = {
   save: document.querySelector("#taxonomy-save-order"),
   tagCount: document.querySelector("#tag-count"),
   categoryCount: document.querySelector("#category-count"),
-  taxonomyPanel: document.querySelector("#taxonomy-panel"),
-  sitePanel: document.querySelector("#site-panel"),
 };
 
 const keyStore = createAdminKeyStore();
@@ -36,7 +33,6 @@ let state = createSettingsState();
 let activeType = "tags";
 let sortable = null;
 let busy = false;
-let siteController = null;
 
 function showAuth(message = "") {
   elements.app.hidden = true;
@@ -63,24 +59,14 @@ function messageFor(error) {
   return error?.message || "操作失败，请稍后重试。";
 }
 
-function isSiteTab() {
-  return activeType === "site";
-}
-
 function setBusy(next) {
   busy = next;
-  elements.create.disabled = next || isSiteTab();
+  elements.create.disabled = next;
   elements.tabs.forEach((tab) => { tab.disabled = next; });
   updateOrderActions();
 }
 
 function updateOrderActions() {
-  if (isSiteTab()) {
-    elements.reset.disabled = true;
-    elements.save.disabled = true;
-    elements.status.textContent = "";
-    return;
-  }
   const dirty = state.isDirty(activeType);
   const filtering = Boolean(elements.search.value.trim());
   elements.reset.disabled = busy || !dirty;
@@ -107,7 +93,6 @@ function renderTaxonomy() {
     tab.classList.toggle("is-active", selected);
     tab.setAttribute("aria-selected", String(selected));
   });
-  elements.create.hidden = isSiteTab();
   elements.create.textContent = activeType === "tags" ? "新增标签" : "新增主分类";
   elements.search.placeholder = activeType === "tags" ? "搜索标签名称" : "搜索分类名称";
   elements.list.classList.toggle("is-filtering", filtering);
@@ -130,31 +115,12 @@ function renderTaxonomy() {
 }
 
 function render() {
-  const siteMode = isSiteTab();
-  elements.taxonomyPanel.hidden = siteMode;
-  elements.sitePanel.hidden = !siteMode;
-  elements.tabs.forEach((tab) => {
-    const selected = tab.dataset.settingsTab === activeType;
-    tab.classList.toggle("is-active", selected);
-    tab.setAttribute("aria-selected", String(selected));
-  });
-  elements.create.hidden = siteMode;
-  if (!siteMode) {
-    renderTaxonomy();
-    attachSortable();
-  } else {
-    sortable?.destroy();
-    sortable = null;
-    updateOrderActions();
-  }
+  renderTaxonomy();
+  attachSortable();
 }
 
 function attachSortable() {
   sortable?.destroy();
-  if (isSiteTab()) {
-    sortable = null;
-    return;
-  }
   sortable = createSortableList({
     container: elements.list,
     getItems: () => state.getItems(activeType),
@@ -166,19 +132,6 @@ function attachSortable() {
   });
 }
 
-async function ensureSiteController() {
-  if (siteController) return siteController;
-  siteController = createSiteSettingsController({
-    root: elements.sitePanel,
-    client,
-    dialogs,
-    notifier,
-    onBusyChange: (next) => setBusy(next),
-  });
-  siteController.bind();
-  return siteController;
-}
-
 async function authenticate(key) {
   keyStore.set(key);
   const tags = await verifyAdminKey(client);
@@ -186,11 +139,6 @@ async function authenticate(key) {
   state = createSettingsState({ tags, categories });
   showApp();
   render();
-  if (isSiteTab()) {
-    await (await ensureSiteController()).load();
-  } else {
-    attachSortable();
-  }
 }
 
 async function submitLogin(event) {
@@ -215,7 +163,6 @@ async function submitLogin(event) {
 }
 
 async function createItem() {
-  if (isSiteTab()) return;
   if (activeType === "tags") {
     const name = await dialogs.textInput({ title: "新增标签", label: "标签名称", confirmLabel: "新增" });
     if (!name) return;
@@ -313,7 +260,6 @@ async function deleteTag(item) {
 }
 
 async function saveOrder() {
-  if (isSiteTab()) return;
   const type = activeType;
   setBusy(true);
   try {
@@ -344,30 +290,20 @@ elements.logout.addEventListener("click", () => {
   state = createSettingsState();
   showAuth();
 });
-elements.tabs.forEach((tab) => tab.addEventListener("click", async () => {
+elements.tabs.forEach((tab) => tab.addEventListener("click", () => {
   activeType = tab.dataset.settingsTab;
   elements.search.value = "";
   render();
-  if (isSiteTab()) {
-    try {
-      await (await ensureSiteController()).load();
-    } catch (error) {
-      if (!(error instanceof AdminUnauthorizedError)) notifier.error(messageFor(error));
-    }
-  }
 }));
-elements.search.addEventListener("input", () => {
-  if (!isSiteTab()) render();
-});
+elements.search.addEventListener("input", render);
 elements.create.addEventListener("click", createItem);
 elements.reset.addEventListener("click", () => {
-  if (isSiteTab()) return;
   state.resetDraft(activeType);
   render();
 });
 elements.save.addEventListener("click", saveOrder);
 elements.list.addEventListener("click", (event) => {
-  if (busy || isSiteTab()) return;
+  if (busy) return;
   const action = event.target.closest("[data-action]")?.dataset.action;
   const row = event.target.closest("[data-sort-id]");
   if (!action || !row) return;
