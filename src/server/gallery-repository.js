@@ -373,6 +373,90 @@ function validateFeaturedImageIds(value) {
   return [...value];
 }
 
+function validateAlbumImageIds(value) {
+  if (!Array.isArray(value)) {
+    throw new TypeError("album imageIds must be an array");
+  }
+  if (value.some((imageId) => !Number.isInteger(imageId) || imageId <= 0)) {
+    throw new RangeError("album imageIds must contain positive integers");
+  }
+  if (new Set(value).size !== value.length) {
+    throw new RangeError("album imageIds must not contain duplicates");
+  }
+  return [...value];
+}
+
+async function nextAlbumSlug(database, name) {
+  const base = slugifyTagName(name) || "album";
+  let slug = base;
+  let suffix = 2;
+  while (await first(database, `SELECT id FROM albums WHERE slug = ?`, [slug])) {
+    slug = `${base}-${suffix}`;
+    suffix += 1;
+  }
+  return slug;
+}
+
+async function loadAlbums(database, whereSql = "", params = []) {
+  const rows = await all(
+    database,
+    `
+      SELECT id, name, slug, description, cover_image_id, is_home, sort_order
+      FROM albums
+      ${whereSql}
+      ORDER BY sort_order ASC, id ASC
+    `,
+    params,
+  );
+  if (!rows.length) return [];
+
+  const albumIds = rows.map((row) => Number(row.id));
+  const placeholders = albumIds.map(() => "?").join(", ");
+  const imageRows = await all(
+    database,
+    `
+      SELECT album_images.album_id AS albumId, album_images.sort_order AS albumSortOrder,
+             ${SELECT_IMAGE_COLUMNS}
+      FROM album_images
+      INNER JOIN images ON images.id = album_images.image_id
+      LEFT JOIN categories ON categories.id = images.category_id
+      WHERE album_images.album_id IN (${placeholders})
+      ORDER BY album_images.album_id, album_images.sort_order, album_images.image_id
+    `,
+    albumIds,
+  );
+  const images = attachTagNames(
+    imageRows.map((row) => ({ ...mapImageRow(row), albumId: Number(row.albumId) })),
+    await getImageTagRows(database, imageRows.map((row) => Number(row.id))),
+  );
+  const imagesByAlbum = new Map();
+  for (const image of images) {
+    const current = imagesByAlbum.get(image.albumId) ?? [];
+    const { albumId, ...record } = image;
+    current.push(record);
+    imagesByAlbum.set(albumId, current);
+  }
+
+  return rows.map((row) => {
+    const albumImages = imagesByAlbum.get(Number(row.id)) ?? [];
+    const coverImageId = Number.isInteger(Number(row.cover_image_id))
+      ? Number(row.cover_image_id)
+      : null;
+    return {
+      id: Number(row.id),
+      name: row.name,
+      slug: row.slug,
+      description: row.description ?? "",
+      coverImageId,
+      coverImage: albumImages.find((image) => Number(image.id) === coverImageId) ?? null,
+      isHome: Number(row.is_home) === 1,
+      sortOrder: Number(row.sort_order ?? 0),
+      imageCount: albumImages.length,
+      images: albumImages,
+    };
+  });
+}
+
 export function createGalleryRepository(database) {
   async function assertEligibleFeaturedImages(imageIds) {
     if (imageIds.length === 0) {
@@ -402,6 +486,82 @@ export function createGalleryRepository(database) {
   }
 
   return {
+    async listAlbums() {
+      return await loadAlbums(database);
+    },
+
+    async getAlbumById(albumId) {
+      return (await loadAlbums(database, `WHERE id = ?`, [albumId]))[0] ?? null;
+    },
+
+    async getAlbumBySlug(slug) {
+      return (await loadAlbums(database, `WHERE slug = ?`, [slug]))[0] ?? null;
+    },
+
+    async createAlbum({ name, description = "" } = {}) {
+      const normalizedName = String(name ?? "").trim();
+      if (!normalizedName) throw new RangeError("album name is required");
+      const slug = await nextAlbumSlug(database, normalizedName);
+      const order = await first(database, `SELECT COALESCE(MAX(sort_order), 0) + 1 AS nextOrder FROM albums`);
+      await run(
+        database,
+        `INSERT INTO albums (name, slug, description, sort_order) VALUES (?, ?, ?, ?)`,
+        [normalizedName, slug, String(description ?? "").trim(), Number(order?.nextOrder ?? 1)],
+      );
+      return await this.getAlbumBySlug(slug);
+    },
+
+    async updateAlbum(albumId, changes = {}) {
+      const current = await this.getAlbumById(albumId);
+      if (!current) return null;
+      const imageIds = changes.imageIds === undefined
+        ? current.images.map((image) => Number(image.id))
+        : validateAlbumImageIds(changes.imageIds);
+      if (imageIds.length) {
+        const placeholders = imageIds.map(() => "?").join(", ");
+        const existing = await all(database, `SELECT id FROM images WHERE id IN (${placeholders})`, imageIds);
+        if (existing.length !== imageIds.length) throw new RangeError("unknown album image ids");
+      }
+      const explicitCover = changes.coverImageId === null || changes.coverImageId === undefined
+        ? null
+        : Number(changes.coverImageId);
+      if (explicitCover !== null && !imageIds.includes(explicitCover)) {
+        throw new RangeError("cover image must belong to album");
+      }
+      const preservedCover = imageIds.includes(Number(current.coverImageId)) ? Number(current.coverImageId) : null;
+      const coverImageId = explicitCover ?? preservedCover ?? imageIds[0] ?? null;
+      const name = changes.name === undefined ? current.name : String(changes.name ?? "").trim();
+      if (!name) throw new RangeError("album name is required");
+      const description = changes.description === undefined
+        ? current.description
+        : String(changes.description ?? "").trim();
+      const sortOrder = changes.sortOrder === undefined ? current.sortOrder : Number(changes.sortOrder);
+      const isHome = changes.isHome === undefined ? current.isHome : changes.isHome === true;
+      const entries = [];
+      if (isHome) entries.push({ sql: `UPDATE albums SET is_home = 0 WHERE is_home = 1`, params: [] });
+      entries.push({
+        sql: `UPDATE albums SET name = ?, description = ?, cover_image_id = ?, is_home = ?, sort_order = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+        params: [name, description, coverImageId, isHome ? 1 : 0, sortOrder, albumId],
+      });
+      if (changes.imageIds !== undefined) {
+        entries.push({ sql: `DELETE FROM album_images WHERE album_id = ?`, params: [albumId] });
+        imageIds.forEach((imageId, index) => entries.push({
+          sql: `INSERT INTO album_images (album_id, image_id, sort_order) VALUES (?, ?, ?)`,
+          params: [albumId, imageId, index + 1],
+        }));
+      }
+      await runBatch(database, entries);
+      return await this.getAlbumById(albumId);
+    },
+
+    async deleteAlbum(albumId) {
+      const current = await this.getAlbumById(albumId);
+      if (!current) return false;
+      if (current.isHome) throw new RangeError("home album cannot be deleted");
+      const result = await run(database, `DELETE FROM albums WHERE id = ?`, [albumId]);
+      return Number(result?.meta?.changes ?? result?.changes ?? 0) > 0;
+    },
+
     async getSiteSettings() {
       const rows = await all(database, `SELECT key, value FROM site_settings`);
       return mapSiteSettings(rows);
@@ -840,6 +1000,7 @@ export function createGalleryRepository(database) {
     async deleteImage(imageId) {
       await run(database, `DELETE FROM image_tags WHERE image_id = ?`, [imageId]);
       await run(database, `DELETE FROM featured_images WHERE image_id = ?`, [imageId]);
+      await run(database, `DELETE FROM album_images WHERE image_id = ?`, [imageId]);
       const result = await run(database, `DELETE FROM images WHERE id = ?`, [imageId]);
 
       return Number(result?.meta?.changes ?? result?.changes ?? 0) > 0;
