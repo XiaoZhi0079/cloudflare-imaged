@@ -22,4 +22,9 @@ test("featured entry handles logout unauthorized and safe load failures", () => 
   assert.match(source, /notifier\.error\(messageFor\(error\)\)/);
   assert.match(source, /elements\.logout\.addEventListener/);
   assert.match(source, /keyStore\.get\(\)/);
+  assert.match(source, /retry:\s*document\.querySelector\("#featured-retry"\)/);
+  assert.match(source, /elements\.retry\.addEventListener\("click"/);
+  assert.match(source, /elements\.retry\.hidden = false/);
+  assert.match(source, /elements\.retry\.hidden = true/);
+  assert.match(source, /elements\.retry\.disabled = true/);
 });

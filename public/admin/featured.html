@@ -20,19 +20,20 @@
       <main class="settings-page">
         <header class="settings-heading">
           <div><p class="admin-eyebrow">Featured</p><h1>精选管理</h1></div>
+          <button id="featured-retry" type="button" hidden>重新加载</button>
         </header>
         <section id="featured-panel" class="settings-panel">
           <div class="site-form">
-            <label class="admin-field" for="site-issue-name"><span>本期名字</span><input id="site-issue-name" type="text" maxlength="40" /></label>
-            <label class="admin-field" for="site-hero-copy"><span>大屏文案</span><textarea id="site-hero-copy" rows="3" maxlength="240"></textarea></label>
+            <label class="admin-field" for="site-issue-name"><span>本期名字</span><input id="site-issue-name" type="text" maxlength="40" disabled /></label>
+            <label class="admin-field" for="site-hero-copy"><span>大屏文案</span><textarea id="site-hero-copy" rows="3" maxlength="240" disabled></textarea></label>
             <div class="site-featured-head">
               <div>
                 <h2>轮播精选</h2>
                 <p class="admin-muted">手动选择前台大屏展示的图片，顺序即轮播顺序。本期张数由精选数量自动得出。</p>
               </div>
               <div class="site-featured-actions">
-                <button id="site-add-featured" type="button">从图片库添加</button>
-                <button id="site-save" class="admin-button-primary" type="button">保存精选设置</button>
+                <button id="site-add-featured" type="button" disabled>从图片库添加</button>
+                <button id="site-save" class="admin-button-primary" type="button" disabled>保存精选设置</button>
               </div>
             </div>
             <p id="site-status" class="settings-status" aria-live="polite"></p>
@@ -42,6 +43,6 @@
       </main>
       <div id="admin-dialog-host"></div><div id="admin-toast-host" class="admin-toast-host" aria-live="polite"></div>
     </div>
-    <script type="module" src="/assets/admin/featured-page.js?v=20260716-admin-featured-navigation"></script>
+    <script type="module" src="/assets/admin/featured-page.js?v=20260716-featured-load-guard"></script>
   </body>
 </html>

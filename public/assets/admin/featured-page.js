@@ -2,7 +2,7 @@ import { createAdminApiClient, AdminUnauthorizedError } from "./api-client.js";
 import { createAdminKeyStore } from "./auth.js";
 import { createDialogHost } from "./dialogs.js";
 import { createNotifier } from "./notifications.js";
-import { createSiteSettingsController } from "./site-settings.js?v=20260716-admin-featured-navigation";
+import { createSiteSettingsController } from "./site-settings.js?v=20260716-featured-load-guard";
 
 const elements = {
   authView: document.querySelector("#admin-auth-view"),
@@ -13,6 +13,7 @@ const elements = {
   keyInput: document.querySelector("#admin-key"),
   passwordToggle: document.querySelector("[data-toggle-password]"),
   logout: document.querySelector("[data-admin-logout]"),
+  retry: document.querySelector("#featured-retry"),
   featuredPanel: document.querySelector("#featured-panel"),
 };
 
@@ -25,6 +26,8 @@ function showAuth(message = "") {
   elements.authView.hidden = false;
   elements.loginError.textContent = message;
   elements.keyInput.value = keyStore.get();
+  elements.retry.hidden = true;
+  elements.retry.disabled = false;
   requestAnimationFrame(() => elements.keyInput.focus());
 }
 
@@ -55,12 +58,17 @@ featuredController.bind();
 
 async function authenticate(key) {
   keyStore.set(key);
+  elements.retry.disabled = true;
   try {
     await featuredController.load();
+    elements.retry.hidden = true;
+    elements.retry.disabled = false;
     showApp();
   } catch (error) {
     if (error instanceof AdminUnauthorizedError) return;
     showApp();
+    elements.retry.hidden = false;
+    elements.retry.disabled = false;
     notifier.error(messageFor(error));
   }
 }
@@ -86,6 +94,10 @@ elements.passwordToggle.addEventListener("click", () => {
   elements.keyInput.type = visible ? "password" : "text";
   elements.passwordToggle.textContent = visible ? "显示" : "隐藏";
   elements.passwordToggle.setAttribute("aria-label", visible ? "显示管理密钥" : "隐藏管理密钥");
+});
+
+elements.retry.addEventListener("click", () => {
+  if (!elements.retry.disabled) authenticate(keyStore.get());
 });
 
 elements.logout.addEventListener("click", () => {

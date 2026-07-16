@@ -48,12 +48,17 @@ test("featured management page owns issue copy and carousel controls", () => {
   const html = readFileSync(pageUrl, "utf8");
   for (const id of [
     "featured-panel", "site-issue-name", "site-hero-copy",
-    "site-add-featured", "site-save", "site-featured-list",
+    "site-add-featured", "site-save", "site-featured-list", "featured-retry",
   ]) {
     assert.match(html, new RegExp(`id="${id}"`));
   }
   assert.match(html, />精选管理</);
   assert.match(html, />保存精选设置</);
+  assert.match(html, /id="site-issue-name"[^>]*disabled/);
+  assert.match(html, /id="site-hero-copy"[^>]*disabled/);
+  assert.match(html, /id="site-add-featured"[^>]*disabled/);
+  assert.match(html, /id="site-save"[^>]*disabled/);
+  assert.match(html, /id="featured-retry"[^>]*hidden/);
   assert.doesNotMatch(html, /data-settings-tab|taxonomy-list|taxonomy-create/);
 });
 
@@ -274,19 +279,32 @@ test("changed admin assets use targeted cache-busting versions", () => {
   );
 
   const featuredNavigationVersion = "20260716-admin-featured-navigation";
-  const changedReferences = [
+  const navigationReferences = [
     [settingsHtml, /src="\/assets\/admin\/settings-page\.js\?v=([^"]+)"/, "settings-page.js"],
-    [featuredHtml, /src="\/assets\/admin\/featured-page\.js\?v=([^"]+)"/, "featured-page.js"],
-    [featuredEntry, /from "\.\/site-settings\.js\?v=([^"]+)"/, "site-settings.js"],
   ];
-  const changedVersions = changedReferences.map(([source, pattern, asset]) => {
+  const navigationVersions = navigationReferences.map(([source, pattern, asset]) => {
     const match = source.match(pattern);
     assert.ok(match, `${asset} must include a cache-busting release version`);
     return match[1];
   });
   assert.deepEqual(
-    changedVersions,
-    Array(changedReferences.length).fill(featuredNavigationVersion),
+    navigationVersions,
+    Array(navigationReferences.length).fill(featuredNavigationVersion),
+  );
+
+  const featuredLoadGuardVersion = "20260716-featured-load-guard";
+  const guardReferences = [
+    [featuredHtml, /src="\/assets\/admin\/featured-page\.js\?v=([^"]+)"/, "featured-page.js"],
+    [featuredEntry, /from "\.\/site-settings\.js\?v=([^"]+)"/, "site-settings.js"],
+  ];
+  const guardVersions = guardReferences.map(([source, pattern, asset]) => {
+    const match = source.match(pattern);
+    assert.ok(match, `${asset} must include a cache-busting release version`);
+    return match[1];
+  });
+  assert.deepEqual(
+    guardVersions,
+    Array(guardReferences.length).fill(featuredLoadGuardVersion),
   );
 });
 
