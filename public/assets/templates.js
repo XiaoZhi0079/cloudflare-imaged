@@ -25,10 +25,9 @@ export function renderGalleryCards(images) {
   return images
     .map((image) => {
       const tagText = formatPublicTagText(image.tags);
-      const label = tagText || "查看图片";
-      const metaMarkup = tagText
-        ? `<span class="gallery-hover-meta"><span class="card-tags">${escapeHtml(tagText)}</span></span>`
-        : "";
+      const label = String(image.fileName ?? "").trim() || "未命名图片";
+      const tagMarkup = tagText ? `<span class="card-tags">${escapeHtml(tagText)}</span>` : "";
+      const metaMarkup = `<span class="gallery-hover-meta"><strong class="card-title">${escapeHtml(label)}</strong>${tagMarkup}</span>`;
 
       return `
         <article class="gallery-card" data-image-id="${escapeHtml(image.id)}">

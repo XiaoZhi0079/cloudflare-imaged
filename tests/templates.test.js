@@ -11,11 +11,11 @@ test("public renderers keep gallery behavior", () => {
   assert.match(cards, /loading="lazy"/);
   assert.match(cards, /gallery-hover-meta/);
   assert.match(cards, /人像/);
+  assert.match(cards, /private-name\.webp/);
+  assert.match(cards, /card-title/);
   assert.doesNotMatch(cards, /Portrait/);
   assert.match(cards, /\/file\/object-42/);
-  assert.doesNotMatch(cards, /private-name\.webp/);
   assert.doesNotMatch(cards, /未分配标签/);
-  assert.doesNotMatch(cards, /card-title/);
 });
 
 test("public gallery copy stays light-branded", () => {
@@ -27,6 +27,8 @@ test("public gallery copy stays light-branded", () => {
   assert.match(html, /id="hero-copy"/);
   assert.match(html, /id="hero-issue"/);
   assert.match(html, /id="hero-pause"[^>]*aria-pressed="false"/);
+  assert.match(html, /id="modal-title"/);
+  assert.match(html, /id="modal-tags"/);
   assert.doesNotMatch(html, /按标签浏览/);
   assert.doesNotMatch(html, /快速查看整理好的图片内容/);
   assert.match(gallery, /loadPublicBootstrapData/);
@@ -38,7 +40,7 @@ test("public gallery copy stays light-branded", () => {
   assert.match(publicData, /\/api\/public\/site/);
   assert.match(gallery, /这个标签下暂时还没有内容/);
   assert.match(gallery, /图集暂时打不开/);
-  assert.doesNotMatch(gallery, /image\.fileName/);
+  assert.match(gallery, /image\.fileName/);
   assert.doesNotMatch(gallery, /error\.message/);
 });
 

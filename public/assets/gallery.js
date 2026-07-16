@@ -7,7 +7,8 @@ const tagStrip = document.querySelector("#tag-strip");
 const galleryGrid = document.querySelector("#gallery-grid");
 const modal = document.querySelector("#image-modal");
 const modalImage = document.querySelector("#modal-image");
-const modalMeta = document.querySelector("#modal-meta");
+const modalTitle = document.querySelector("#modal-title");
+const modalTags = document.querySelector("#modal-tags");
 const modalClose = document.querySelector("#modal-close");
 const heroStage = document.querySelector("#hero-stage");
 const heroImage = document.querySelector("#hero-image");
@@ -45,10 +46,12 @@ function bindImageClicks() {
       }
 
       const tagText = (image.tags ?? []).filter(Boolean).join(" · ");
+      const imageName = String(image.fileName ?? "").trim() || "未命名图片";
       modalImage.src = image.fileUrl;
-      modalImage.alt = tagText || "图片预览";
-      modalMeta.textContent = tagText;
-      modalMeta.hidden = !tagText;
+      modalImage.alt = imageName;
+      modalTitle.textContent = imageName;
+      modalTags.textContent = tagText;
+      modalTags.hidden = !tagText;
       modal.classList.remove("hidden");
     });
   });
@@ -76,7 +79,7 @@ function showFeatured(index) {
   const normalizedIndex = ((Number(index) % featuredImages.length) + featuredImages.length)
     % featuredImages.length;
   const image = featuredImages[normalizedIndex];
-  const label = (image.tags ?? []).filter(Boolean).join(" · ") || "精彩图片";
+  const label = String(image.fileName ?? "").trim() || "精彩图片";
   heroImage.src = image.fileUrl;
   heroImage.alt = label;
 

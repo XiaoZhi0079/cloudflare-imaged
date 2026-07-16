@@ -363,13 +363,26 @@ button[disabled] {
   text-shadow: 0 1px 12px rgba(0, 0, 0, 0.32);
 }
 
+.card-title {
+  display: block;
+  color: #fff;
+  font-size: 15px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .modal-meta {
   margin-top: 14px;
+  display: grid;
+  gap: 5px;
   color: rgba(255, 248, 240, 0.82);
   font-size: 14px;
   letter-spacing: 0.04em;
   text-align: center;
 }
+
+.modal-meta strong { color: #fff; font-size: 16px; }
+.modal-meta span { color: rgba(255, 248, 240, 0.72); font-size: 13px; }
 
 .modal-meta:empty,
 .modal-meta[hidden] {
