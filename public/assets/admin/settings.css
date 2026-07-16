@@ -297,6 +297,10 @@ body.is-sorting { user-select:none; cursor:grabbing; }
   border-left-color: var(--admin-success);
 }
 
+.site-picker-card.is-other {
+  border-left-color: #a47a45;
+}
+
 .site-picker-card:has(input:checked) {
   outline: 2px solid var(--admin-accent);
   outline-offset: -2px;

@@ -12,17 +12,18 @@ function labelText(value, fallback) {
   return text || fallback;
 }
 
-const RESOLUTION_TIERS = new Set(["4k", "2k", "1k"]);
+const RESOLUTION_TIERS = new Set(["4k", "2k", "1k", "other"]);
 const TIER_LABELS = {
   "4k": "4K",
   "2k": "2K",
-  "1k": "HD+ / 900p+",
+  "1k": "1K",
+  other: "其他",
 };
 const PICKER_FILTERS = [
-  { value: "all", label: "全部可用" },
   { value: "4k", label: "4K" },
   { value: "2k", label: "2K" },
-  { value: "1k", label: "HD+ / 900p+" },
+  { value: "1k", label: "1K" },
+  { value: "other", label: "其他" },
 ];
 
 function featuredDisplay(image) {
@@ -111,7 +112,13 @@ export function renderFeaturedPickerCard(image, selected = false) {
 }
 
 export function filterFeaturedCandidates(images, tier = "all") {
-  const normalizedTier = RESOLUTION_TIERS.has(tier) ? tier : "all";
+  const normalizedTier = tier === "all"
+    ? "all"
+    : RESOLUTION_TIERS.has(tier)
+      ? tier
+      : null;
+  if (!normalizedTier) return [];
+
   return (Array.isArray(images) ? images : []).filter((image) => {
     const eligibility = image?.featuredEligibility;
     if (
@@ -273,7 +280,7 @@ export function createSiteSettingsController({
         <p class="site-picker-rule">接近 16:9（误差不超过 0.5%）且至少 1600×900 可加入轮播。当前已选但不合规的旧图片需在当前精选列表中移除。</p>
         <div class="site-picker-filters" role="group" aria-label="轮播候选分辨率">
           ${PICKER_FILTERS.map(({ value, label }) => `
-            <button class="site-picker-filter${value === "all" ? " is-active" : ""}" type="button" data-picker-tier="${value}" aria-pressed="${value === "all"}">
+            <button class="site-picker-filter${value === "4k" ? " is-active" : ""}" type="button" data-picker-tier="${value}" aria-pressed="${value === "4k"}">
               <span>${label}</span>
               <span class="site-picker-filter-count">${filterFeaturedCandidates(candidateImages, value).length}</span>
             </button>
@@ -283,7 +290,7 @@ export function createSiteSettingsController({
       `;
 
       const grid = body.querySelector(".site-picker-grid");
-      let activeTier = "all";
+      let activeTier = "4k";
 
       function renderCandidates() {
         for (const button of body.querySelectorAll("[data-picker-tier]")) {

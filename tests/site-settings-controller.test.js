@@ -13,12 +13,14 @@ const settingsCss = readFileSync(new URL("../public/assets/admin/settings.css", 
 
 function candidate(id, resolutionTier, overrides = {}) {
   const labels = {
-    "1k": "HD+ / 900p+",
+    other: "其他",
+    "1k": "1K",
     "2k": "2K",
     "4k": "4K",
   };
   const dimensions = {
-    "1k": "1672×941",
+    other: "1672×941",
+    "1k": "1920×1080",
     "2k": "2560×1440",
     "4k": "3840×2160",
   };
@@ -38,23 +40,25 @@ function candidate(id, resolutionTier, overrides = {}) {
   };
 }
 
-test("featured candidates exclude every invalid record and split into resolution tiers", () => {
-  assert.equal(typeof filterFeaturedCandidates, "function");
+test("featured candidates exclude invalid records and split into four resolution tiers", () => {
   const images = [
-    candidate(1, "1k"),
-    candidate(2, "2k"),
-    candidate(3, "4k"),
-    { id: 4, featuredEligibility: { eligible: false, resolutionTier: null, reason: "比例不符" } },
-    { id: 5, featuredEligibility: { eligible: false, resolutionTier: null, reason: "尺寸未知" } },
-    { id: 6, featuredEligibility: { eligible: true, resolutionTier: null } },
-    { id: 7 },
+    candidate(1, "other"),
+    candidate(2, "1k"),
+    candidate(3, "2k"),
+    candidate(4, "4k"),
+    { id: 5, featuredEligibility: { eligible: false, resolutionTier: null, reason: "比例不符" } },
+    { id: 6, featuredEligibility: { eligible: false, resolutionTier: null, reason: "尺寸未知" } },
+    { id: 7, featuredEligibility: { eligible: true, resolutionTier: null } },
+    { id: 8, featuredEligibility: { eligible: true, resolutionTier: "future" } },
+    { id: 9 },
   ];
 
-  assert.deepEqual(filterFeaturedCandidates(images, "all").map(({ id }) => id), [1, 2, 3]);
-  assert.deepEqual(filterFeaturedCandidates(images, "4k").map(({ id }) => id), [3]);
-  assert.deepEqual(filterFeaturedCandidates(images, "2k").map(({ id }) => id), [2]);
-  assert.deepEqual(filterFeaturedCandidates(images, "1k").map(({ id }) => id), [1]);
-  assert.deepEqual(filterFeaturedCandidates(images, "unsupported").map(({ id }) => id), [1, 2, 3]);
+  assert.deepEqual(filterFeaturedCandidates(images, "all").map(({ id }) => id), [1, 2, 3, 4]);
+  assert.deepEqual(filterFeaturedCandidates(images, "4k").map(({ id }) => id), [4]);
+  assert.deepEqual(filterFeaturedCandidates(images, "2k").map(({ id }) => id), [3]);
+  assert.deepEqual(filterFeaturedCandidates(images, "1k").map(({ id }) => id), [2]);
+  assert.deepEqual(filterFeaturedCandidates(images, "other").map(({ id }) => id), [1]);
+  assert.deepEqual(filterFeaturedCandidates(images, "unsupported"), []);
 });
 
 test("featured selection keeps existing order and appends candidates in library order", () => {
@@ -129,16 +133,15 @@ test("picker renderer returns only eligible tier cards without rejection text", 
   assert.doesNotMatch(eligibleHtml, /<script>/);
 });
 
-test("picker owns independent tier controls and cross-tier selection state", () => {
+test("picker exposes only four resolution controls and defaults to 4K", () => {
   assert.match(controllerSource, /接近 16:9（误差不超过 0\.5%）且至少 1600×900 可加入轮播/);
-  assert.match(controllerSource, /全部可用/);
   assert.match(controllerSource, /label: "4K"/);
   assert.match(controllerSource, /label: "2K"/);
-  assert.match(controllerSource, /label: "HD\+ \/ 900p\+"/);
+  assert.match(controllerSource, /label: "1K"/);
+  assert.match(controllerSource, /label: "其他"/);
+  assert.match(controllerSource, /let activeTier = "4k"/);
   assert.match(controllerSource, /selectedCandidateIds/);
-  assert.match(controllerSource, /filterFeaturedCandidates/);
-  assert.doesNotMatch(controllerSource, /1K \/ 1080p|仅精确 16:9/);
-  assert.doesNotMatch(controllerSource, /site-picker-card is-ineligible is-disabled/);
+  assert.doesNotMatch(controllerSource, /全部可用|HD\+ \/ 900p\+/);
 });
 
 test("loading preserves every server featured image without eligibility filtering", () => {
@@ -158,6 +161,7 @@ test("settings styles keep legacy warnings and add independent candidate filters
   assert.match(settingsCss, /\.site-picker-card\.is-4k/);
   assert.match(settingsCss, /\.site-picker-card\.is-2k/);
   assert.match(settingsCss, /\.site-picker-card\.is-1k/);
+  assert.match(settingsCss, /\.site-picker-card\.is-other/);
   assert.doesNotMatch(settingsCss, /\.site-picker-card\.is-ineligible/);
   assert.doesNotMatch(settingsCss, /\.site-picker-card\.is-disabled/);
   assert.match(settingsCss, /\.site-picker-card:has\(input:checked\)/);
