@@ -13,12 +13,12 @@ const settingsCss = readFileSync(new URL("../public/assets/admin/settings.css", 
 
 function candidate(id, resolutionTier, overrides = {}) {
   const labels = {
-    "1k": "1K / 1080p",
+    "1k": "HD+ / 900p+",
     "2k": "2K",
     "4k": "4K",
   };
   const dimensions = {
-    "1k": "1920×1080",
+    "1k": "1672×941",
     "2k": "2560×1440",
     "4k": "3840×2160",
   };
@@ -130,13 +130,14 @@ test("picker renderer returns only eligible tier cards without rejection text", 
 });
 
 test("picker owns independent tier controls and cross-tier selection state", () => {
-  assert.match(controllerSource, /仅精确 16:9 且至少 1920×1080可加入轮播|仅精确 16:9 且至少 1920×1080 可加入轮播/);
+  assert.match(controllerSource, /接近 16:9（误差不超过 0\.5%）且至少 1600×900 可加入轮播/);
   assert.match(controllerSource, /全部可用/);
   assert.match(controllerSource, /label: "4K"/);
   assert.match(controllerSource, /label: "2K"/);
-  assert.match(controllerSource, /label: "1K \/ 1080p"/);
+  assert.match(controllerSource, /label: "HD\+ \/ 900p\+"/);
   assert.match(controllerSource, /selectedCandidateIds/);
   assert.match(controllerSource, /filterFeaturedCandidates/);
+  assert.doesNotMatch(controllerSource, /1K \/ 1080p|仅精确 16:9/);
   assert.doesNotMatch(controllerSource, /site-picker-card is-ineligible is-disabled/);
 });
 

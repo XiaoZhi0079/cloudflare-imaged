@@ -211,7 +211,7 @@ test("public entry assets share one cache-busting release version", () => {
   assert.equal(cssVersion[1], scriptVersion[1]);
 });
 
-test("changed admin assets share the filter separation cache-busting version", () => {
+test("changed admin assets use targeted cache-busting versions", () => {
   const libraryHtml = readFileSync(new URL("../public/admin/index.html", import.meta.url), "utf8");
   const libraryEntry = readFileSync(
     new URL("../public/assets/admin/library-page.js", import.meta.url),
@@ -222,23 +222,38 @@ test("changed admin assets share the filter separation cache-busting version", (
     new URL("../public/assets/admin/settings-page.js", import.meta.url),
     "utf8",
   );
-  const expectedVersion = "20260715-featured-filter-separation";
-  const references = [
+  const filterSeparationVersion = "20260715-featured-filter-separation";
+  const unchangedReferences = [
     [libraryHtml, /href="\/assets\/admin\/workbench\.css\?v=([^"]+)"/, "workbench.css"],
     [libraryHtml, /src="\/assets\/admin\/library-page\.js\?v=([^"]+)"/, "library-page.js"],
     [libraryEntry, /from "\.\/library-state\.js\?v=([^"]+)"/, "library-state.js"],
     [libraryEntry, /from "\.\/renderers\/image-card\.js\?v=([^"]+)"/, "image-card.js"],
     [settingsHtml, /href="\/assets\/admin\/settings\.css\?v=([^"]+)"/, "settings.css"],
-    [settingsHtml, /src="\/assets\/admin\/settings-page\.js\?v=([^"]+)"/, "settings-page.js"],
-    [settingsEntry, /from "\.\/site-settings\.js\?v=([^"]+)"/, "site-settings.js"],
   ];
-  const versions = references.map(([source, pattern, asset]) => {
+  const unchangedVersions = unchangedReferences.map(([source, pattern, asset]) => {
     const match = source.match(pattern);
     assert.ok(match, `${asset} must include a cache-busting release version`);
     return match[1];
   });
+  assert.deepEqual(
+    unchangedVersions,
+    Array(unchangedReferences.length).fill(filterSeparationVersion),
+  );
 
-  assert.deepEqual(versions, Array(references.length).fill(expectedVersion));
+  const featuredRatioVersion = "20260716-approximate-featured-ratio";
+  const changedReferences = [
+    [settingsHtml, /src="\/assets\/admin\/settings-page\.js\?v=([^"]+)"/, "settings-page.js"],
+    [settingsEntry, /from "\.\/site-settings\.js\?v=([^"]+)"/, "site-settings.js"],
+  ];
+  const changedVersions = changedReferences.map(([source, pattern, asset]) => {
+    const match = source.match(pattern);
+    assert.ok(match, `${asset} must include a cache-busting release version`);
+    return match[1];
+  });
+  assert.deepEqual(
+    changedVersions,
+    Array(changedReferences.length).fill(featuredRatioVersion),
+  );
 });
 
 test("admin controls expose static accessibility contracts", () => {

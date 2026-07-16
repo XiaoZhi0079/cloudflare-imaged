@@ -16,13 +16,13 @@ const RESOLUTION_TIERS = new Set(["4k", "2k", "1k"]);
 const TIER_LABELS = {
   "4k": "4K",
   "2k": "2K",
-  "1k": "1K / 1080p",
+  "1k": "HD+ / 900p+",
 };
 const PICKER_FILTERS = [
   { value: "all", label: "全部可用" },
   { value: "4k", label: "4K" },
   { value: "2k", label: "2K" },
-  { value: "1k", label: "1K / 1080p" },
+  { value: "1k", label: "HD+ / 900p+" },
 ];
 
 function featuredDisplay(image) {
@@ -254,7 +254,7 @@ export function createSiteSettingsController({
       const body = document.createElement("div");
       body.className = "site-picker";
       body.innerHTML = `
-        <p class="site-picker-rule">仅精确 16:9 且至少 1920×1080 可加入轮播。当前已选但不合规的旧图片需在当前精选列表中移除。</p>
+        <p class="site-picker-rule">接近 16:9（误差不超过 0.5%）且至少 1600×900 可加入轮播。当前已选但不合规的旧图片需在当前精选列表中移除。</p>
         <div class="site-picker-filters" role="group" aria-label="轮播候选分辨率">
           ${PICKER_FILTERS.map(({ value, label }) => `
             <button class="site-picker-filter${value === "all" ? " is-active" : ""}" type="button" data-picker-tier="${value}" aria-pressed="${value === "all"}">
