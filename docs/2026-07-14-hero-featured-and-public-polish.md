@@ -254,6 +254,16 @@ npm run seed:demo
 - 自动验收只使用合成宽高、内存数据库与静态字符串；未打开、下载、解码、截图或分析任何图库图片。
 - 本地验收：4 个变更 JavaScript 文件全部通过 `node --check`；5 个重点测试文件为 52/52 通过；`npm test` 为 173/173 通过。
 
+### 2.11 后台精选管理独立页面（本地完成，待发布）
+
+- 顶栏调整为“图片库 / 精选管理 / 标签与分类”。
+- `/admin/featured.html` 统一管理本期名字、大屏文案、轮播图片与顺序，并通过现有站点 API 原子保存。
+- `/admin/settings.html` 只保留标签和主分类；其入口脚本不再导入精选控制器或请求站点配置。
+- 精选页首次加载只请求站点配置，打开候选选择器时才请求图片库；标签与分类页只加载标签和分类。
+- 设置 JavaScript 链使用 `20260716-admin-featured-navigation`，未变更图片库和 CSS 资产保持原缓存版本。
+- 本次没有 D1 migration、Repository 或公开页面改动，验收未访问任何图片内容。
+- 本地验收：3 个管理端 JavaScript 文件全部通过 `node --check`；4 个重点测试文件为 35/35 通过；`npm test` 为 178/178 通过。
+
 ---
 
 ## 3. 将要做 / 建议后续做的改变
@@ -332,7 +342,9 @@ npm run seed:demo
 - `public/assets/main.css`
 
 ### 管理端
+- `public/admin/featured.html`
 - `public/admin/settings.html`
+- `public/assets/admin/featured-page.js`
 - `public/assets/admin/settings-page.js`
 - `public/assets/admin/site-settings.js`
 - `public/assets/admin/settings.css`
@@ -357,15 +369,16 @@ npm run seed:demo
 
 ## 6. 验收清单
 
-- [x] 管理端「站点」可改本期名字与大屏文案并保存
-- [x] 管理端可手动选择/排序精选图
+- [x] 管理端顶栏统一为“图片库 / 精选管理 / 标签与分类”，三项分别指向独立职责页面
+- [x] `/admin/featured.html` 可改本期名字、大屏文案，并手动选择、排序和保存精选图
+- [x] `/admin/settings.html` 只管理标签和主分类，不加载站点配置或精选控制器
 - [x] 前台大屏展示精选图；文案与配置一致
 - [x] 前台显示「本期名字 · 本期 N 张」
 - [x] 无精选时不出现破图或空轮播
 - [x] 前台卡片/弹层不显示文件名（自动测试）
 - [x] 标签浏览流程不受影响（自动测试）
 - [x] 精选允许近似 `16:9`（相对误差不超过 `±0.5%`）且至少 `1600×900`；`1672×941` 可用
-- [x] 管理图片库只保留搜索与标签交集筛选；站点 picker 独立筛选全部可用、4K、2K、HD+ / 900p+
+- [x] 管理图片库只保留搜索与标签交集筛选；精选管理 picker 独立筛选全部可用、4K、2K、HD+ / 900p+
 - [x] 旧不合规精选保持只读兼容并可由用户手动移除
 - [x] Hero 使用响应式 `16:9` + `contain`；移动端透明文案在舞台下正常流
 - [x] Repository 公共读取路径不再执行运行时 DDL/DML；本地 migration 与 Pages 共用同一 D1 身份
