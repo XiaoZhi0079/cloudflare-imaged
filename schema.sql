@@ -54,6 +54,29 @@ CREATE TABLE IF NOT EXISTS featured_images (
   FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS albums (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE,
+  slug TEXT NOT NULL UNIQUE,
+  description TEXT NOT NULL DEFAULT '',
+  cover_image_id INTEGER,
+  is_home INTEGER NOT NULL DEFAULT 0,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (cover_image_id) REFERENCES images(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS album_images (
+  album_id INTEGER NOT NULL,
+  image_id INTEGER NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (album_id, image_id),
+  FOREIGN KEY (album_id) REFERENCES albums(id) ON DELETE CASCADE,
+  FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE
+);
+
 CREATE INDEX IF NOT EXISTS idx_tags_visible_order ON tags(is_visible, sort_order, name);
 CREATE INDEX IF NOT EXISTS idx_categories_order ON categories(sort_order, name);
 CREATE INDEX IF NOT EXISTS idx_images_file_id ON images(storage_key);
@@ -61,3 +84,7 @@ CREATE INDEX IF NOT EXISTS idx_images_category_id ON images(category_id);
 CREATE INDEX IF NOT EXISTS idx_image_tags_image_id ON image_tags(image_id);
 CREATE INDEX IF NOT EXISTS idx_image_tags_tag_id ON image_tags(tag_id);
 CREATE INDEX IF NOT EXISTS idx_featured_images_order ON featured_images(sort_order, image_id);
+CREATE INDEX IF NOT EXISTS idx_albums_order ON albums(sort_order, id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_albums_home ON albums(is_home) WHERE is_home = 1;
+CREATE INDEX IF NOT EXISTS idx_album_images_order ON album_images(album_id, sort_order, image_id);
+CREATE INDEX IF NOT EXISTS idx_album_images_image_id ON album_images(image_id, album_id);

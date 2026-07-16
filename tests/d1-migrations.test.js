@@ -4,9 +4,12 @@ import { existsSync, readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 
 const baselineUrl = new URL("../migrations/0001_baseline.sql", import.meta.url);
+const albumsUrl = new URL("../migrations/0002_albums.sql", import.meta.url);
 const schemaUrl = new URL("../schema.sql", import.meta.url);
 
 const BUSINESS_TABLES = [
+  "album_images",
+  "albums",
   "categories",
   "featured_images",
   "image_tags",
@@ -16,6 +19,10 @@ const BUSINESS_TABLES = [
 ];
 
 const BUSINESS_INDEXES = [
+  "idx_album_images_image_id",
+  "idx_album_images_order",
+  "idx_albums_home",
+  "idx_albums_order",
   "idx_categories_order",
   "idx_featured_images_order",
   "idx_image_tags_image_id",
@@ -49,18 +56,30 @@ function normalizedObjects(database) {
     }));
 }
 
-test("baseline migration prepares a fresh database and is idempotent", () => {
+test("migrations prepare a fresh database and are idempotent", () => {
   assert.equal(existsSync(baselineUrl), true, "baseline migration must exist");
   const baseline = readFileSync(baselineUrl, "utf8");
+  const albums = readFileSync(albumsUrl, "utf8");
   const database = new DatabaseSync(":memory:");
 
   database.exec(baseline);
+  database.exec(albums);
   database.exec(baseline);
+  database.exec(albums);
 
   assert.deepEqual(objectNames(database, "table"), BUSINESS_TABLES);
   assert.deepEqual(objectNames(database, "index"), BUSINESS_INDEXES);
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM categories").get().count, 3);
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM site_settings").get().count, 2);
+  assert.deepEqual(
+    { ...database.prepare("SELECT name, slug, description, is_home FROM albums").get() },
+    {
+      name: "图集",
+      slug: "home",
+      description: "慢慢看，挑一份喜欢的气质。本期以红调与侧光为主，适合夜色、轮廓与留白。",
+      is_home: 1,
+    },
+  );
 });
 
 test("schema snapshot and baseline migration define identical objects", () => {
@@ -69,14 +88,16 @@ test("schema snapshot and baseline migration define identical objects", () => {
   const snapshotDatabase = new DatabaseSync(":memory:");
 
   migrationDatabase.exec(readFileSync(baselineUrl, "utf8"));
+  migrationDatabase.exec(readFileSync(albumsUrl, "utf8"));
   snapshotDatabase.exec(readFileSync(schemaUrl, "utf8"));
 
   assert.deepEqual(normalizedObjects(migrationDatabase), normalizedObjects(snapshotDatabase));
 });
 
-test("baseline migration preserves an existing gallery and custom settings", () => {
+test("album migration preserves an existing gallery and converts featured order", () => {
   const database = new DatabaseSync(":memory:");
   const baseline = readFileSync(baselineUrl, "utf8");
+  const albums = readFileSync(albumsUrl, "utf8");
 
   database.exec("PRAGMA foreign_keys = ON");
   database.exec(readFileSync(schemaUrl, "utf8"));
@@ -106,7 +127,9 @@ test("baseline migration preserves an existing gallery and custom settings", () 
   `).run();
 
   database.exec(baseline);
+  database.exec(albums);
   database.exec(baseline);
+  database.exec(albums);
 
   assert.deepEqual(
     { ...database.prepare(`
@@ -124,6 +147,20 @@ test("baseline migration preserves an existing gallery and custom settings", () 
       note: "sentinel-note",
       category_id: 501,
     },
+  );
+  assert.deepEqual(
+    { ...database.prepare("SELECT name, slug, description, cover_image_id, is_home FROM albums").get() },
+    {
+      name: "custom-issue",
+      slug: "home",
+      description: "custom-copy",
+      cover_image_id: 503,
+      is_home: 1,
+    },
+  );
+  assert.deepEqual(
+    { ...database.prepare("SELECT image_id, sort_order FROM album_images").get() },
+    { image_id: 503, sort_order: 7 },
   );
   assert.deepEqual(
     { ...database.prepare("SELECT name, slug, sort_order, is_visible FROM tags WHERE id = 502").get() },

@@ -4,6 +4,9 @@ import { DatabaseSync } from "node:sqlite";
 export const BASELINE_SQL = readFileSync(
   new URL("../../migrations/0001_baseline.sql", import.meta.url),
   "utf8",
+) + "\n" + readFileSync(
+  new URL("../../migrations/0002_albums.sql", import.meta.url),
+  "utf8",
 );
 
 export function createTestDatabase() {
