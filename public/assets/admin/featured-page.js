@@ -2,7 +2,7 @@ import { createAdminApiClient, AdminUnauthorizedError } from "./api-client.js";
 import { createAdminKeyStore } from "./auth.js";
 import { createDialogHost } from "./dialogs.js";
 import { createNotifier } from "./notifications.js";
-import { createSiteSettingsController } from "./site-settings.js?v=20260717-featured-resolution-filters";
+import { createAlbumManagementController } from "./album-management.js?v=20260717-albums-gallery-redesign";
 
 const elements = {
   authView: document.querySelector("#admin-auth-view"),
@@ -14,7 +14,7 @@ const elements = {
   passwordToggle: document.querySelector("[data-toggle-password]"),
   logout: document.querySelector("[data-admin-logout]"),
   retry: document.querySelector("#featured-retry"),
-  featuredPanel: document.querySelector("#featured-panel"),
+  albumPanel: document.querySelector("#album-panel"),
 };
 
 const keyStore = createAdminKeyStore();
@@ -50,13 +50,13 @@ const client = createAdminApiClient({
   },
 });
 
-const featuredController = createSiteSettingsController({
-  root: elements.featuredPanel,
+const albumController = createAlbumManagementController({
+  root: elements.albumPanel,
   client,
   dialogs,
   notifier,
 });
-featuredController.bind();
+albumController.bind();
 
 async function authenticate(key) {
   const attempt = ++authAttempt;
@@ -64,7 +64,7 @@ async function authenticate(key) {
   elements.retry.disabled = true;
   elements.logout.disabled = true;
   try {
-    await featuredController.load();
+    await albumController.load();
     if (attempt !== authAttempt) return;
     elements.retry.hidden = true;
     elements.retry.disabled = false;

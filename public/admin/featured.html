@@ -3,9 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Gallery 精选管理</title>
+    <title>Gallery 图集管理</title>
     <link rel="stylesheet" href="/assets/admin/admin.css" />
-    <link rel="stylesheet" href="/assets/admin/settings.css?v=20260717-featured-resolution-filters" />
+    <link rel="stylesheet" href="/assets/admin/settings.css?v=20260717-albums-gallery-redesign" />
   </head>
   <body class="admin-body" data-admin-page="featured">
     <section id="admin-auth-view" class="admin-auth-view" hidden>
@@ -16,33 +16,28 @@
       </form>
     </section>
     <div id="admin-app" hidden>
-      <header class="admin-topbar"><a class="admin-brand" href="/admin/">Gallery 管理</a><nav class="admin-nav" aria-label="管理页面"><a href="/admin/">图片库</a><a class="is-active" href="/admin/featured.html">精选管理</a><a href="/admin/settings.html">标签与分类</a></nav><div class="admin-top-actions"><a href="/">查看前台</a><button type="button" data-admin-logout>退出</button></div></header>
+      <header class="admin-topbar"><a class="admin-brand" href="/admin/">Gallery 管理</a><nav class="admin-nav" aria-label="管理页面"><a href="/admin/">图片库</a><a class="is-active" href="/admin/featured.html">图集管理</a><a href="/admin/settings.html">标签与分类</a></nav><div class="admin-top-actions"><a href="/">查看前台</a><button type="button" data-admin-logout>退出</button></div></header>
       <main class="settings-page">
         <header class="settings-heading">
-          <div><p class="admin-eyebrow">Featured</p><h1>精选管理</h1></div>
-          <button id="featured-retry" type="button" hidden>重新加载</button>
+          <div><p class="admin-eyebrow">Albums</p><h1>图集管理</h1></div>
+          <div class="site-featured-actions"><button id="featured-retry" type="button" hidden>重新加载</button><button id="album-create" data-action="create-album" class="admin-button-primary" type="button" disabled>新建图集</button></div>
         </header>
-        <section id="featured-panel" class="settings-panel">
-          <div class="site-form">
-            <label class="admin-field" for="site-issue-name"><span>本期名字</span><input id="site-issue-name" type="text" maxlength="40" disabled /></label>
-            <label class="admin-field" for="site-hero-copy"><span>大屏文案</span><textarea id="site-hero-copy" rows="3" maxlength="240" disabled></textarea></label>
-            <div class="site-featured-head">
-              <div>
-                <h2>轮播精选</h2>
-                <p class="admin-muted">手动选择前台大屏展示的图片，顺序即轮播顺序。本期张数由精选数量自动得出。</p>
-              </div>
-              <div class="site-featured-actions">
-                <button id="site-add-featured" type="button" disabled>从图片库添加</button>
-                <button id="site-save" class="admin-button-primary" type="button" disabled>保存精选设置</button>
-              </div>
+        <section id="album-panel" class="settings-panel album-manager">
+          <aside id="album-list" class="album-list" aria-label="图集列表"></aside>
+          <div class="album-editor">
+            <div class="album-editor-grid">
+              <label class="admin-field" for="album-name"><span>图集名字</span><input id="album-name" maxlength="60" disabled /></label>
+              <label class="album-home-check"><input id="album-is-home" type="checkbox" disabled /><span>设为首页主图集</span></label>
+              <label class="admin-field album-description-field" for="album-description"><span>图集介绍</span><textarea id="album-description" rows="4" maxlength="500" disabled></textarea></label>
+              <label class="admin-field" for="album-cover"><span>图集封面</span><select id="album-cover" disabled></select></label>
             </div>
-            <p id="site-status" class="settings-status" aria-live="polite"></p>
-            <div id="site-featured-list" class="site-featured-list"></div>
+            <div class="site-featured-head"><div><h2>图集图片</h2><p id="album-status" class="admin-muted" aria-live="polite"></p></div><div class="site-featured-actions"><button id="album-add-images" data-action="add-images" type="button" disabled>从图片库添加</button><button id="album-delete" data-action="delete-album" class="admin-button-danger" type="button" disabled>删除图集</button><button id="album-save" data-action="save-album" class="admin-button-primary" type="button" disabled>保存图集</button></div></div>
+            <div id="album-members" class="site-featured-list"></div>
           </div>
         </section>
       </main>
       <div id="admin-dialog-host"></div><div id="admin-toast-host" class="admin-toast-host" aria-live="polite"></div>
     </div>
-    <script type="module" src="/assets/admin/featured-page.js?v=20260717-featured-resolution-filters"></script>
+    <script type="module" src="/assets/admin/featured-page.js?v=20260717-albums-gallery-redesign"></script>
   </body>
 </html>

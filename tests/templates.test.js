@@ -44,22 +44,19 @@ test("public gallery copy stays light-branded", () => {
   assert.doesNotMatch(gallery, /error\.message/);
 });
 
-test("featured management page owns issue copy and carousel controls", () => {
+test("featured management page becomes multi-album management", () => {
   const pageUrl = new URL("../public/admin/featured.html", import.meta.url);
   assert.equal(existsSync(pageUrl), true, "featured management page must exist");
   const html = readFileSync(pageUrl, "utf8");
   for (const id of [
-    "featured-panel", "site-issue-name", "site-hero-copy",
-    "site-add-featured", "site-save", "site-featured-list", "featured-retry",
+    "album-panel", "album-list", "album-name", "album-description",
+    "album-cover", "album-is-home", "album-members", "album-create",
+    "album-add-images", "album-save", "album-delete", "featured-retry",
   ]) {
     assert.match(html, new RegExp(`id="${id}"`));
   }
-  assert.match(html, />精选管理</);
-  assert.match(html, />保存精选设置</);
-  assert.match(html, /id="site-issue-name"[^>]*disabled/);
-  assert.match(html, /id="site-hero-copy"[^>]*disabled/);
-  assert.match(html, /id="site-add-featured"[^>]*disabled/);
-  assert.match(html, /id="site-save"[^>]*disabled/);
+  assert.match(html, />图集管理</);
+  assert.match(html, />保存图集</);
   assert.match(html, /id="featured-retry"[^>]*hidden/);
   assert.doesNotMatch(html, /data-settings-tab|taxonomy-list|taxonomy-create/);
 });
@@ -263,8 +260,6 @@ test("changed admin assets use targeted cache-busting versions", () => {
   );
   const filterSeparationVersion = "20260715-featured-filter-separation";
   const unchangedReferences = [
-    [libraryHtml, /href="\/assets\/admin\/workbench\.css\?v=([^"]+)"/, "workbench.css"],
-    [libraryHtml, /src="\/assets\/admin\/library-page\.js\?v=([^"]+)"/, "library-page.js"],
     [libraryEntry, /from "\.\/library-state\.js\?v=([^"]+)"/, "library-state.js"],
     [libraryEntry, /from "\.\/renderers\/image-card\.js\?v=([^"]+)"/, "image-card.js"],
   ];
@@ -278,12 +273,14 @@ test("changed admin assets use targeted cache-busting versions", () => {
     Array(unchangedReferences.length).fill(filterSeparationVersion),
   );
 
-  const resolutionFilterVersion = "20260717-featured-resolution-filters";
+  const resolutionFilterVersion = "20260717-albums-gallery-redesign";
   const resolutionFilterReferences = [
+    [libraryHtml, /href="\/assets\/admin\/workbench\.css\?v=([^"]+)"/, "workbench.css"],
+    [libraryHtml, /src="\/assets\/admin\/library-page\.js\?v=([^"]+)"/, "library-page.js"],
     [settingsHtml, /href="\/assets\/admin\/settings\.css\?v=([^"]+)"/, "settings.css"],
     [featuredHtml, /href="\/assets\/admin\/settings\.css\?v=([^"]+)"/, "featured settings.css"],
     [featuredHtml, /src="\/assets\/admin\/featured-page\.js\?v=([^"]+)"/, "featured-page.js"],
-    [featuredEntry, /from "\.\/site-settings\.js\?v=([^"]+)"/, "site-settings.js"],
+    [featuredEntry, /from "\.\/album-management\.js\?v=([^"]+)"/, "album-management.js"],
   ];
   const resolutionFilterVersions = resolutionFilterReferences.map(([source, pattern, asset]) => {
     const match = source.match(pattern);

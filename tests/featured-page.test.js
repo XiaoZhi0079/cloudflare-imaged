@@ -4,14 +4,14 @@ import { existsSync, readFileSync } from "node:fs";
 
 const entryUrl = new URL("../public/assets/admin/featured-page.js", import.meta.url);
 
-test("featured entry owns authentication and loads only featured settings", () => {
+test("featured entry owns authentication and loads album management", () => {
   assert.equal(existsSync(entryUrl), true, "featured entry module must exist");
   const source = readFileSync(entryUrl, "utf8");
   assert.match(source, /createAdminApiClient/);
   assert.match(source, /createAdminKeyStore/);
-  assert.match(source, /createSiteSettingsController/);
-  assert.match(source, /featuredController\.load\(\)/);
-  assert.match(source, /featuredController\.bind\(\)/);
+  assert.match(source, /createAlbumManagementController/);
+  assert.match(source, /albumController\.load\(\)/);
+  assert.match(source, /albumController\.bind\(\)/);
   assert.doesNotMatch(source, /verifyAdminKey|createSettingsState|\/api\/admin\/categories/);
 });
 
