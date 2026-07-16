@@ -20,6 +20,7 @@ const elements = {
 const keyStore = createAdminKeyStore();
 const dialogs = createDialogHost(document.querySelector("#admin-dialog-host"));
 const notifier = createNotifier(document.querySelector("#admin-toast-host"));
+let authAttempt = 0;
 
 function showAuth(message = "") {
   elements.app.hidden = true;
@@ -28,6 +29,7 @@ function showAuth(message = "") {
   elements.keyInput.value = keyStore.get();
   elements.retry.hidden = true;
   elements.retry.disabled = false;
+  elements.logout.disabled = false;
   requestAnimationFrame(() => elements.keyInput.focus());
 }
 
@@ -57,18 +59,24 @@ const featuredController = createSiteSettingsController({
 featuredController.bind();
 
 async function authenticate(key) {
+  const attempt = ++authAttempt;
   keyStore.set(key);
   elements.retry.disabled = true;
+  elements.logout.disabled = true;
   try {
     await featuredController.load();
+    if (attempt !== authAttempt) return;
     elements.retry.hidden = true;
     elements.retry.disabled = false;
+    elements.logout.disabled = false;
     showApp();
   } catch (error) {
+    if (attempt !== authAttempt) return;
     if (error instanceof AdminUnauthorizedError) return;
     showApp();
     elements.retry.hidden = false;
     elements.retry.disabled = false;
+    elements.logout.disabled = false;
     notifier.error(messageFor(error));
   }
 }
@@ -101,6 +109,7 @@ elements.retry.addEventListener("click", () => {
 });
 
 elements.logout.addEventListener("click", () => {
+  authAttempt += 1;
   keyStore.clear();
   showAuth();
 });

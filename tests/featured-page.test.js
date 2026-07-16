@@ -27,4 +27,17 @@ test("featured entry handles logout unauthorized and safe load failures", () => 
   assert.match(source, /elements\.retry\.hidden = false/);
   assert.match(source, /elements\.retry\.hidden = true/);
   assert.match(source, /elements\.retry\.disabled = true/);
+  assert.match(source, /elements\.logout\.disabled = true/);
+  assert.match(source, /elements\.logout\.disabled = false/);
+});
+
+test("featured entry ignores a pending reload after logout", () => {
+  const source = readFileSync(entryUrl, "utf8");
+  assert.match(source, /let authAttempt = 0/);
+  assert.match(source, /const attempt = \+\+authAttempt/);
+  assert.match(source, /if \(attempt !== authAttempt\) return/);
+  assert.match(
+    source,
+    /elements\.logout\.addEventListener[\s\S]*authAttempt \+= 1[\s\S]*keyStore\.clear\(\)/,
+  );
 });
