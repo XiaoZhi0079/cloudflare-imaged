@@ -265,8 +265,6 @@ test("changed admin assets use targeted cache-busting versions", () => {
     [libraryHtml, /src="\/assets\/admin\/library-page\.js\?v=([^"]+)"/, "library-page.js"],
     [libraryEntry, /from "\.\/library-state\.js\?v=([^"]+)"/, "library-state.js"],
     [libraryEntry, /from "\.\/renderers\/image-card\.js\?v=([^"]+)"/, "image-card.js"],
-    [settingsHtml, /href="\/assets\/admin\/settings\.css\?v=([^"]+)"/, "settings.css"],
-    [featuredHtml, /href="\/assets\/admin\/settings\.css\?v=([^"]+)"/, "featured settings.css"],
   ];
   const unchangedVersions = unchangedReferences.map(([source, pattern, asset]) => {
     const match = source.match(pattern);
@@ -276,6 +274,23 @@ test("changed admin assets use targeted cache-busting versions", () => {
   assert.deepEqual(
     unchangedVersions,
     Array(unchangedReferences.length).fill(filterSeparationVersion),
+  );
+
+  const resolutionFilterVersion = "20260717-featured-resolution-filters";
+  const resolutionFilterReferences = [
+    [settingsHtml, /href="\/assets\/admin\/settings\.css\?v=([^"]+)"/, "settings.css"],
+    [featuredHtml, /href="\/assets\/admin\/settings\.css\?v=([^"]+)"/, "featured settings.css"],
+    [featuredHtml, /src="\/assets\/admin\/featured-page\.js\?v=([^"]+)"/, "featured-page.js"],
+    [featuredEntry, /from "\.\/site-settings\.js\?v=([^"]+)"/, "site-settings.js"],
+  ];
+  const resolutionFilterVersions = resolutionFilterReferences.map(([source, pattern, asset]) => {
+    const match = source.match(pattern);
+    assert.ok(match, `${asset} must include a cache-busting release version`);
+    return match[1];
+  });
+  assert.deepEqual(
+    resolutionFilterVersions,
+    Array(resolutionFilterReferences.length).fill(resolutionFilterVersion),
   );
 
   const featuredNavigationVersion = "20260716-admin-featured-navigation";
@@ -292,20 +307,6 @@ test("changed admin assets use targeted cache-busting versions", () => {
     Array(navigationReferences.length).fill(featuredNavigationVersion),
   );
 
-  const featuredLoadGuardVersion = "20260716-featured-load-guard";
-  const guardReferences = [
-    [featuredHtml, /src="\/assets\/admin\/featured-page\.js\?v=([^"]+)"/, "featured-page.js"],
-    [featuredEntry, /from "\.\/site-settings\.js\?v=([^"]+)"/, "site-settings.js"],
-  ];
-  const guardVersions = guardReferences.map(([source, pattern, asset]) => {
-    const match = source.match(pattern);
-    assert.ok(match, `${asset} must include a cache-busting release version`);
-    return match[1];
-  });
-  assert.deepEqual(
-    guardVersions,
-    Array(guardReferences.length).fill(featuredLoadGuardVersion),
-  );
 });
 
 test("admin controls expose static accessibility contracts", () => {

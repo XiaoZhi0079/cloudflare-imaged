@@ -2,7 +2,7 @@ import { createAdminApiClient, AdminUnauthorizedError } from "./api-client.js";
 import { createAdminKeyStore } from "./auth.js";
 import { createDialogHost } from "./dialogs.js";
 import { createNotifier } from "./notifications.js";
-import { createSiteSettingsController } from "./site-settings.js?v=20260716-featured-load-guard";
+import { createSiteSettingsController } from "./site-settings.js?v=20260717-featured-resolution-filters";
 
 const elements = {
   authView: document.querySelector("#admin-auth-view"),
