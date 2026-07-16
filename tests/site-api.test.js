@@ -40,7 +40,7 @@ test("public site handler returns defaults and empty featured list", async () =>
   assert.deepEqual(payload.featuredImages, []);
 });
 
-test("public site keeps legacy ineligible featured rows without admin eligibility metadata", async () => {
+test("public site excludes ineligible members from the home album hero", async () => {
   const env = createTestEnv();
   const repository = createGalleryRepository(env.GALLERY_DB);
   const legacy = await createImage(repository, "legacy-wrong-ratio", null, {
@@ -48,7 +48,7 @@ test("public site keeps legacy ineligible featured rows without admin eligibilit
     height: 1200,
   });
   env.GALLERY_DB
-    .prepare("INSERT INTO featured_images (image_id, sort_order) VALUES (?, ?)")
+    .prepare("INSERT INTO album_images (album_id, image_id, sort_order) VALUES ((SELECT id FROM albums WHERE is_home = 1), ?, ?)")
     .run(legacy.id, 1);
 
   const response = await publicSiteHandler({
@@ -58,16 +58,7 @@ test("public site keeps legacy ineligible featured rows without admin eligibilit
 
   assert.equal(response.status, 200);
   const payload = await response.json();
-  assert.deepEqual(payload.featuredImages, [
-    {
-      id: legacy.id,
-      fileUrl: "https://gallery.example.com/file/legacy-wrong-ratio.webp",
-      width: 1920,
-      height: 1200,
-      tags: [],
-    },
-  ]);
-  assert.equal("featuredEligibility" in payload.featuredImages[0], false);
+  assert.deepEqual(payload.featuredImages, []);
 });
 
 test("admin site handler requires auth", async () => {
@@ -129,7 +120,7 @@ test("admin can patch site settings and featured order", async () => {
   assert.equal(publicPayload.issueName, "红调侧光");
   assert.equal(publicPayload.issueCount, 2);
   assert.deepEqual(publicPayload.featuredImages.map((image) => image.id), [second.id, first.id]);
-  assert.equal("fileName" in publicPayload.featuredImages[0], false);
+  assert.equal(publicPayload.featuredImages[0].fileName, "b.webp");
   assert.equal("category" in publicPayload.featuredImages[0], false);
   assert.equal("featuredEligibility" in publicPayload.featuredImages[0], false);
 });

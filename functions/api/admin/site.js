@@ -2,12 +2,13 @@ import { getRepository, requireAdminKey, toApiImage } from "./_shared.js";
 import { jsonResponse, parseRequestJson } from "../../../src/shared/http.js";
 
 async function buildSitePayload(repository) {
-  const settings = await repository.getSiteSettings();
-  const featuredImages = await repository.listFeaturedImages();
+  const albums = await repository.listAlbums();
+  const home = albums.find((album) => album.isHome) ?? null;
+  const featuredImages = home?.images ?? [];
 
   return {
-    issueName: settings.issueName,
-    heroCopy: settings.heroCopy,
+    issueName: home?.name ?? "图集",
+    heroCopy: home?.description ?? "",
     issueCount: featuredImages.length,
     featuredImages: featuredImages.map(toApiImage),
     featuredImageIds: featuredImages.map((image) => image.id),
@@ -42,6 +43,14 @@ export async function onRequest({ env, request }) {
         ...(hasHeroCopy ? { heroCopy: body.heroCopy } : {}),
         ...(hasFeatured ? { featuredImageIds: body.featuredImageIds } : {}),
       });
+      const home = (await repository.listAlbums()).find((album) => album.isHome);
+      if (home) {
+        await repository.updateAlbum(home.id, {
+          ...(hasIssueName ? { name: body.issueName } : {}),
+          ...(hasHeroCopy ? { description: body.heroCopy } : {}),
+          ...(hasFeatured ? { imageIds: body.featuredImageIds } : {}),
+        });
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (

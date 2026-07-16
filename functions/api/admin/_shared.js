@@ -105,10 +105,39 @@ export function toApiImage(image) {
 export function toPublicImage(image) {
   return {
     id: image.id,
+    fileName: image.fileName,
     fileUrl: image.fileUrl,
     width: image.width,
     height: image.height,
     tags: image.tags ?? [],
+  };
+}
+
+export function toApiAlbum(album) {
+  return {
+    id: album.id,
+    name: album.name,
+    slug: album.slug,
+    description: album.description,
+    coverImageId: album.coverImageId,
+    coverImage: album.coverImage ? toApiImage(album.coverImage) : null,
+    isHome: album.isHome,
+    sortOrder: album.sortOrder,
+    imageCount: album.imageCount,
+    images: (album.images ?? []).map(toApiImage),
+  };
+}
+
+export function toPublicAlbum(album) {
+  return {
+    id: album.id,
+    name: album.name,
+    slug: album.slug,
+    description: album.description,
+    isHome: album.isHome,
+    imageCount: album.imageCount,
+    coverImage: album.coverImage ? toPublicImage(album.coverImage) : null,
+    images: (album.images ?? []).map(toPublicImage),
   };
 }
 

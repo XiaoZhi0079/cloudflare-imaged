@@ -1,15 +1,17 @@
 import { getRepository, toPublicImage } from "../admin/_shared.js";
 import { jsonResponse } from "../../../src/shared/http.js";
+import { classifyFeaturedImage } from "../../../src/shared/featured-image-rules.js";
 
 export async function onRequest({ env }) {
   try {
     const repository = getRepository(env);
-    const settings = await repository.getSiteSettings();
-    const featuredImages = await repository.listFeaturedImages();
+    const albums = await repository.listAlbums();
+    const home = albums.find((album) => album.isHome) ?? null;
+    const featuredImages = (home?.images ?? []).filter((image) => classifyFeaturedImage(image).eligible);
 
     return jsonResponse({
-      issueName: settings.issueName,
-      heroCopy: settings.heroCopy,
+      issueName: home?.name ?? "图集",
+      heroCopy: home?.description ?? "",
       issueCount: featuredImages.length,
       featuredImages: featuredImages.map(toPublicImage),
     });
