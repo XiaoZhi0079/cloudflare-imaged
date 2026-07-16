@@ -176,10 +176,11 @@ test("admin upload complete handler stores image records after direct upload suc
         fileUrl: "https://gallery.example.com/file/gallery/campus-01.webp",
         width: 900,
         height: 1350,
-        featuredEligibility: {
-          dimensions: "900×1350",
-          isExactSixteenNine: false,
-          meetsMinimum: false,
+          featuredEligibility: {
+            dimensions: "900×1350",
+            isExactSixteenNine: false,
+            isApproximatelySixteenNine: false,
+            meetsMinimum: false,
           eligible: false,
           is4K: false,
           resolutionTier: null,

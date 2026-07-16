@@ -147,6 +147,7 @@ test("admin upload complete handler stores image category metadata", async () =>
         featuredEligibility: {
           dimensions: "900×1350",
           isExactSixteenNine: false,
+          isApproximatelySixteenNine: false,
           meetsMinimum: false,
           eligible: false,
           is4K: false,
