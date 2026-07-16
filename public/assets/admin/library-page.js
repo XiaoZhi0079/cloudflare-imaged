@@ -258,6 +258,8 @@ function openDetail(image, opener) {
   const preview = image.fileUrl
     ? createElement("img", { className: "detail-preview", src: image.fileUrl, alt: image.fileName })
     : createElement("div", { className: "detail-preview image-preview-fallback" }, "预览不可用");
+  const previewStage = createElement("div", { className: "detail-preview-stage" });
+  previewStage.append(preview);
   const dimensions = imageDimensionsDetail(image);
   const form = createElement("form", { className: "detail-form" });
   const nameLabel = createElement("label", { className: "admin-field" });
@@ -278,7 +280,13 @@ function openDetail(image, opener) {
   const save = createElement("button", { type: "submit", className: "admin-button-primary" }, "保存修改");
   form.append(nameLabel, categoryLabel, tags, error, save);
   form.addEventListener("submit", (event) => saveDetail(event, { fileName, category, tags, error, save }));
-  elements.detailDrawer.replaceChildren(header, preview, dimensions, form);
+  const previewPane = createElement("div", { className: "detail-preview-pane" });
+  previewPane.append(previewStage, dimensions);
+  const editPane = createElement("div", { className: "detail-edit-pane" });
+  editPane.append(form);
+  const workspace = createElement("div", { className: "admin-detail-workspace" });
+  workspace.append(previewPane, editPane);
+  elements.detailDrawer.replaceChildren(header, workspace);
   elements.detailDrawer.hidden = false;
   requestAnimationFrame(() => fileName.focus());
 }

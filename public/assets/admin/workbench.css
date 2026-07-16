@@ -49,10 +49,15 @@
 .admin-bulk-toolbar > div { display:flex; gap:7px; }
 .admin-bulk-toolbar button { min-height:40px; }
 .admin-detail-drawer { padding:20px; }
+#admin-detail-drawer { width:min(1040px,calc(100vw - 48px)); }
 .admin-detail-drawer header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
 .admin-detail-drawer h2 { margin:0; font-size:19px; }
-.detail-preview { width:100%; aspect-ratio:4/3; margin:18px 0; object-fit:contain; background:#e8e1d8; }
+.admin-detail-workspace { display:grid; grid-template-columns:minmax(0,1.4fr) minmax(320px,1fr); gap:22px; margin-top:18px; }
+.detail-preview-pane,.detail-edit-pane { min-width:0; }
+.detail-preview-stage { min-height:360px; height:calc(100dvh - 120px); max-height:760px; display:grid; place-items:center; overflow:hidden; border-radius:8px; background:#252321; }
+.detail-preview { max-width:100%; max-height:100%; width:auto; height:auto; display:block; object-fit:contain; }
 .detail-dimensions { min-width:0; display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:-8px 0 18px; padding:10px 12px; border:1px solid var(--admin-line); border-left:4px solid #77706a; border-radius:6px; background:var(--admin-surface); overflow-wrap:anywhere; }
+.detail-preview-stage + .detail-dimensions { margin:12px 0 0; }
 .detail-dimensions strong { font-size:13px; }
 .detail-dimensions span { color:var(--admin-muted); font-size:12px; }
 .detail-form { display:grid; gap:14px; }
@@ -79,6 +84,11 @@
 .detail-tags { display:flex; flex-wrap:wrap; gap:6px; margin:0; padding:10px; border:1px solid var(--admin-line); border-radius:6px; }
 .detail-tags legend { padding:0 5px; color:var(--admin-muted); font-size:12px; font-weight:750; }
 .choice-list { max-height:min(420px,55dvh); overflow:auto; }
+@media (max-width:900px) {
+  #admin-detail-drawer { width:100%; }
+  .admin-detail-workspace { grid-template-columns:1fr; }
+  .detail-preview-stage { height:min(60dvh,620px); }
+}
 @media (max-width:1099px) {
   .workbench-layout { grid-template-columns:1fr; }
   #admin-filter-toggle { display:block; }

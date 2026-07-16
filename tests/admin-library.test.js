@@ -220,3 +220,18 @@ test("library controller has no carousel filter and uses neutral image dimension
   assert.match(source, /image\.width/);
   assert.match(source, /image\.height/);
 });
+
+test("image detail uses a wide responsive two-column workspace", () => {
+  const source = readFileSync(new URL("../public/assets/admin/library-page.js", import.meta.url), "utf8");
+  const adminCss = readFileSync(new URL("../public/assets/admin/admin.css", import.meta.url), "utf8");
+  const workbenchCss = readFileSync(new URL("../public/assets/admin/workbench.css", import.meta.url), "utf8");
+  assert.match(source, /admin-detail-workspace/);
+  assert.match(source, /detail-preview-pane/);
+  assert.match(source, /detail-edit-pane/);
+  assert.match(workbenchCss, /#admin-detail-drawer\s*\{[^}]*width:\s*min\(1040px,\s*calc\(100vw - 48px\)\)/s);
+  assert.match(workbenchCss, /\.admin-detail-workspace\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1\.4fr\)\s+minmax\(320px,\s*1fr\)/s);
+  assert.match(workbenchCss, /\.detail-preview-stage\s*\{[^}]*height:\s*calc\(100dvh - 120px\)/s);
+  assert.match(workbenchCss, /\.detail-preview\s*\{[^}]*object-fit:\s*contain/s);
+  assert.match(adminCss, /\.admin-drawer/);
+  assert.match(workbenchCss, /@media \(max-width:900px\)[\s\S]*\.admin-detail-workspace\s*\{[^}]*grid-template-columns:\s*1fr/);
+});
