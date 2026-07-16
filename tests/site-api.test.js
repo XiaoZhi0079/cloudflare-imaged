@@ -117,7 +117,8 @@ test("admin can patch site settings and featured order", async () => {
   assert.equal(payload.featuredImages[0].featuredEligibility?.isExactSixteenNine, false);
   assert.equal(payload.featuredImages[0].featuredEligibility?.isApproximatelySixteenNine, true);
   assert.equal(payload.featuredImages[0].featuredEligibility?.eligible, true);
-  assert.equal(payload.featuredImages[0].featuredEligibility?.qualityLabel, "HD+ / 900p+");
+  assert.equal(payload.featuredImages[0].featuredEligibility?.resolutionTier, "other");
+  assert.equal(payload.featuredImages[0].featuredEligibility?.qualityLabel, "其他");
   assert.equal(payload.featuredImages[0].featuredEligibility?.reason, null);
 
   const publicResponse = await publicSiteHandler({

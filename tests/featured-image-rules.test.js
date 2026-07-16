@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { classifyFeaturedImage } from "../src/shared/featured-image-rules.js";
 
-test("featured eligibility accepts HD+ and larger near-16:9 images", () => {
+test("featured eligibility splits near-16:9 images into four resolution tiers", () => {
   assert.deepEqual(classifyFeaturedImage({ width: 1600, height: 900 }), {
     dimensions: "1600×900",
     isExactSixteenNine: true,
@@ -11,8 +11,8 @@ test("featured eligibility accepts HD+ and larger near-16:9 images", () => {
     meetsMinimum: true,
     eligible: true,
     is4K: false,
-    resolutionTier: "1k",
-    qualityLabel: "HD+ / 900p+",
+    resolutionTier: "other",
+    qualityLabel: "其他",
     statusLabel: "轮播可用",
     reason: null,
   });
@@ -21,9 +21,11 @@ test("featured eligibility accepts HD+ and larger near-16:9 images", () => {
   assert.equal(roundedExport.isExactSixteenNine, false);
   assert.equal(roundedExport.isApproximatelySixteenNine, true);
   assert.equal(roundedExport.eligible, true);
-  assert.equal(roundedExport.resolutionTier, "1k");
-  assert.equal(roundedExport.qualityLabel, "HD+ / 900p+");
+  assert.equal(roundedExport.resolutionTier, "other");
+  assert.equal(roundedExport.qualityLabel, "其他");
 
+  assert.equal(classifyFeaturedImage({ width: 1920, height: 1080 }).resolutionTier, "1k");
+  assert.equal(classifyFeaturedImage({ width: 1920, height: 1080 }).qualityLabel, "1K");
   assert.equal(classifyFeaturedImage({ width: 2560, height: 1440 }).resolutionTier, "2k");
   assert.equal(classifyFeaturedImage({ width: 3200, height: 1800 }).resolutionTier, "2k");
   assert.equal(classifyFeaturedImage({ width: 3840, height: 2160 }).resolutionTier, "4k");

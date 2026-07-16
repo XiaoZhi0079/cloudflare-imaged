@@ -35,15 +35,19 @@ export function classifyFeaturedImage(image = {}) {
       ? "4k"
       : width >= 2560 && height >= 1440
         ? "2k"
-        : "1k";
+        : width >= 1920 && height >= 1080
+          ? "1k"
+          : "other";
   const is4K = resolutionTier === "4k";
   const qualityLabel = resolutionTier === "4k"
     ? "4K"
     : resolutionTier === "2k"
       ? "2K"
       : resolutionTier === "1k"
-        ? "HD+ / 900p+"
-        : null;
+        ? "1K"
+        : resolutionTier === "other"
+          ? "其他"
+          : null;
   const reason = !hasDimensions
     ? "尺寸未知"
     : !isApproximatelySixteenNine
