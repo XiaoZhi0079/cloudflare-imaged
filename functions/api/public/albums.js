@@ -1,4 +1,4 @@
-import { getRepository, toPublicAlbum } from "../admin/_shared.js";
+import { getRepository, toPublicAlbum, toPublicAlbumSummary } from "../admin/_shared.js";
 import { jsonResponse } from "../../../src/shared/http.js";
 
 export async function onRequest({ env, request }) {
@@ -11,7 +11,7 @@ export async function onRequest({ env, request }) {
         ? jsonResponse({ album: toPublicAlbum(album) })
         : jsonResponse({ error: "Album not found" }, 404);
     }
-    return jsonResponse({ albums: (await repository.listAlbums()).map(toPublicAlbum) });
+    return jsonResponse({ albums: (await repository.listAlbums()).map(toPublicAlbumSummary) });
   } catch (error) {
     return jsonResponse({ error: String(error?.message ?? error) }, 500);
   }

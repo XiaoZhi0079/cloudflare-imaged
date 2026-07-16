@@ -52,8 +52,8 @@ test("public albums expose safe summaries and ordered detail", async () => {
   })).json();
   const summary = listPayload.albums.find((item) => item.slug === album.slug);
   assert.equal(summary.imageCount, 1);
-  assert.equal("storageKey" in summary.images[0], false);
-  assert.equal(summary.images[0].fileName, "a.webp");
+  assert.equal("images" in summary, false);
+  assert.equal(summary.coverImage.fileName, "a.webp");
 
   const detailResponse = await publicAlbums({
     env: state,

@@ -141,6 +141,18 @@ export function toPublicAlbum(album) {
   };
 }
 
+export function toPublicAlbumSummary(album) {
+  return {
+    id: album.id,
+    name: album.name,
+    slug: album.slug,
+    description: album.description,
+    isHome: album.isHome,
+    imageCount: album.imageCount,
+    coverImage: album.coverImage ? toPublicImage(album.coverImage) : null,
+  };
+}
+
 export function toAdminImage(image) {
   return {
     ...toApiImage(image),
