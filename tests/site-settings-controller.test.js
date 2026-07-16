@@ -169,3 +169,85 @@ test("featured controller uses task-specific settings language", () => {
   assert.match(controllerSource, /精选设置已保存/);
   assert.doesNotMatch(controllerSource, /站点设置已修改|站点设置已保存/);
 });
+
+function fakeElement(initial = {}) {
+  const listeners = new Map();
+  return {
+    disabled: false,
+    value: "",
+    textContent: "",
+    innerHTML: "",
+    ...initial,
+    addEventListener(type, listener) {
+      listeners.set(type, listener);
+    },
+    dispatch(type) {
+      listeners.get(type)?.({ target: this, closest: () => null });
+    },
+  };
+}
+
+function controllerHarness(responses) {
+  const elements = {
+    "#site-issue-name": fakeElement(),
+    "#site-hero-copy": fakeElement(),
+    "#site-status": fakeElement(),
+    "#site-featured-list": fakeElement(),
+    "#site-add-featured": fakeElement(),
+    "#site-save": fakeElement(),
+  };
+  const calls = [];
+  const errors = [];
+  const queue = [...responses];
+  const controller = siteSettings.createSiteSettingsController({
+    root: { querySelector: (selector) => elements[selector] },
+    client: {
+      async request(path, options) {
+        calls.push({ path, options });
+        const next = queue.shift();
+        if (next instanceof Error) throw next;
+        return next;
+      },
+    },
+    dialogs: {},
+    notifier: { error: (message) => errors.push(message), success() {} },
+  });
+  controller.bind();
+  return { controller, elements, calls, errors };
+}
+
+test("featured controller stays locked and cannot save after initial load failure", async () => {
+  const harness = controllerHarness([new Error("temporary site failure")]);
+  const { elements, controller, calls, errors } = harness;
+
+  for (const selector of [
+    "#site-issue-name", "#site-hero-copy", "#site-add-featured", "#site-save",
+  ]) {
+    assert.equal(elements[selector].disabled, true);
+  }
+
+  await assert.rejects(controller.load(), /temporary site failure/);
+  elements["#site-save"].dispatch("click");
+  elements["#site-add-featured"].dispatch("click");
+
+  assert.equal(calls.length, 1, "failed initialization must not allow image or save requests");
+  assert.match(errors.at(-1), /尚未加载/);
+  assert.equal(elements["#site-save"].disabled, true);
+  assert.equal(elements["#site-add-featured"].disabled, true);
+});
+
+test("featured controller unlocks only after a later load succeeds", async () => {
+  const payload = { issueName: "本期", heroCopy: "一句文案", featuredImages: [] };
+  const harness = controllerHarness([new Error("temporary"), payload]);
+  const { elements, controller } = harness;
+
+  await assert.rejects(controller.load(), /temporary/);
+  await controller.load();
+
+  assert.equal(elements["#site-issue-name"].value, "本期");
+  assert.equal(elements["#site-hero-copy"].value, "一句文案");
+  assert.equal(elements["#site-issue-name"].disabled, false);
+  assert.equal(elements["#site-hero-copy"].disabled, false);
+  assert.equal(elements["#site-add-featured"].disabled, false);
+  assert.equal(elements["#site-save"].disabled, true, "unchanged loaded data is not saveable");
+});

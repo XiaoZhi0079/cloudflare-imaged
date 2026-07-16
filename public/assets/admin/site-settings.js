@@ -167,12 +167,20 @@ export function createSiteSettingsController({
     featuredImages: [],
   };
   let busy = false;
+  let ready = false;
   let bound = false;
+
+  function updateAvailability() {
+    const locked = busy || !ready;
+    elements.issueName.disabled = locked;
+    elements.heroCopy.disabled = locked;
+    elements.add.disabled = locked;
+    elements.save.disabled = locked || !isDirty();
+  }
 
   function setBusy(next) {
     busy = next;
-    elements.add.disabled = next;
-    elements.save.disabled = next || !isDirty();
+    updateAvailability();
     onBusyChange?.(next);
   }
 
@@ -188,7 +196,7 @@ export function createSiteSettingsController({
     elements.status.textContent = isDirty()
       ? "精选设置已修改，保存后生效。"
       : `当前精选 ${draft.featuredImages.length} 张。`;
-    elements.save.disabled = busy || !isDirty();
+    elements.save.disabled = busy || !ready || !isDirty();
   }
 
   function renderFeatured() {
@@ -221,8 +229,15 @@ export function createSiteSettingsController({
   }
 
   async function load() {
-    const payload = await client.request("/api/admin/site");
-    applyPayload(payload);
+    ready = false;
+    setBusy(true);
+    try {
+      const payload = await client.request("/api/admin/site");
+      applyPayload(payload);
+      ready = true;
+    } finally {
+      setBusy(false);
+    }
   }
 
   function moveFeatured(imageId, offset) {
@@ -241,6 +256,7 @@ export function createSiteSettingsController({
   }
 
   async function openPicker() {
+    if (!ready) return;
     setBusy(true);
     try {
       const { images = [] } = await client.request("/api/admin/images");
@@ -325,6 +341,10 @@ export function createSiteSettingsController({
   }
 
   async function save() {
+    if (!ready) {
+      notifier.error("精选设置尚未加载，请重新加载后再试。");
+      return;
+    }
     const issueName = elements.issueName.value.trim();
     const heroCopy = elements.heroCopy.value.trim();
     if (!issueName || !heroCopy) {
@@ -354,6 +374,7 @@ export function createSiteSettingsController({
   function bind() {
     if (bound) return;
     bound = true;
+    updateAvailability();
 
     elements.issueName.addEventListener("input", () => {
       draft.issueName = elements.issueName.value.trim();
