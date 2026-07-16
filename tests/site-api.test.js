@@ -84,7 +84,10 @@ test("admin can patch site settings and featured order", async () => {
   const repository = createGalleryRepository(env.GALLERY_DB);
   const [category] = await repository.listCategories();
   const first = await createImage(repository, "a");
-  const second = await createImage(repository, "b", category.id);
+  const second = await createImage(repository, "b", category.id, {
+    width: 1672,
+    height: 941,
+  });
 
   const response = await adminSiteHandler({
     env,
@@ -110,8 +113,11 @@ test("admin can patch site settings and featured order", async () => {
   assert.deepEqual(payload.featuredImageIds, [second.id, first.id]);
   assert.deepEqual(payload.featuredImages.map((image) => image.id), [second.id, first.id]);
   assert.equal(payload.featuredImages[0].category.id, category.id);
-  assert.equal(payload.featuredImages[0].featuredEligibility?.dimensions, "1920×1080");
+  assert.equal(payload.featuredImages[0].featuredEligibility?.dimensions, "1672×941");
+  assert.equal(payload.featuredImages[0].featuredEligibility?.isExactSixteenNine, false);
+  assert.equal(payload.featuredImages[0].featuredEligibility?.isApproximatelySixteenNine, true);
   assert.equal(payload.featuredImages[0].featuredEligibility?.eligible, true);
+  assert.equal(payload.featuredImages[0].featuredEligibility?.qualityLabel, "HD+ / 900p+");
   assert.equal(payload.featuredImages[0].featuredEligibility?.reason, null);
 
   const publicResponse = await publicSiteHandler({
@@ -222,7 +228,7 @@ test("admin site patch rejects ineligible featured images atomically", async () 
 
   assert.equal(response.status, 400);
   const payload = await response.json();
-  assert.match(payload.error, /exact 16:9 and at least 1920x1080/);
+  assert.match(payload.error, /within 0\.5% of 16:9 and at least 1600x900/);
   assert.deepEqual(await repository.getSiteSettings(), {
     issueName: "原期名",
     heroCopy: "原文案",

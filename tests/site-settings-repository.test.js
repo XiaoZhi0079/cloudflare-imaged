@@ -72,6 +72,20 @@ test("listFeaturedImages preserves legacy ineligible featured rows", async () =>
   );
 });
 
+test("setFeaturedImages accepts a near-16:9 HD+ image", async () => {
+  const repository = createGalleryRepository(createTestDb());
+  const image = await createImage(repository, "rounded-export", {
+    width: 1672,
+    height: 941,
+  });
+
+  await repository.setFeaturedImages([image.id]);
+  assert.deepEqual(
+    (await repository.listFeaturedImages()).map(({ id, width, height }) => ({ id, width, height })),
+    [{ id: image.id, width: 1672, height: 941 }],
+  );
+});
+
 test("setFeaturedImages enforces featured image dimension rules without clearing selection", async () => {
   const repository = createGalleryRepository(createTestDb());
   const selected = await createImage(repository, "selected");
@@ -83,7 +97,7 @@ test("setFeaturedImages enforces featured image dimension rules without clearing
 
   await assert.rejects(
     () => repository.setFeaturedImages([ineligible.id]),
-    /exact 16:9 and at least 1920x1080/,
+    /within 0\.5% of 16:9 and at least 1600x900/,
   );
   assert.deepEqual(
     (await repository.listFeaturedImages()).map((image) => image.id),
@@ -148,7 +162,7 @@ test("updateSiteConfiguration rejects ineligible featured images atomically", as
       heroCopy: "也不应保存",
       featuredImageIds: [ineligible.id],
     }),
-    /exact 16:9 and at least 1920x1080/,
+    /within 0\.5% of 16:9 and at least 1600x900/,
   );
   assert.deepEqual(await repository.getSiteSettings(), {
     issueName: "原期名",

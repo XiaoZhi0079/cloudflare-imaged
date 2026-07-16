@@ -396,7 +396,7 @@ export function createGalleryRepository(database) {
     );
     if (invalidIds.length > 0) {
       throw new RangeError(
-        `featured images must be exact 16:9 and at least 1920x1080: ${invalidIds.join(", ")}`,
+        `featured images must be within 0.5% of 16:9 and at least 1600x900: ${invalidIds.join(", ")}`,
       );
     }
   }
