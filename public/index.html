@@ -4,10 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>图集</title>
-    <link rel="stylesheet" href="/assets/main.css?v=20260715-featured-dimensions" />
+    <link rel="stylesheet" href="/assets/main.css?v=20260717-albums-gallery-redesign" />
   </head>
   <body>
+    <header class="public-nav"><div><a class="public-brand" href="/">Cloud Gallery</a><nav><a href="#albums">图集</a><a href="#browse">标签浏览</a><a href="/admin/">管理</a></nav></div></header>
     <div class="app-shell">
+      <section class="editorial-intro"><p class="eyebrow">Personal Image Archive</p><h1>收藏你的视觉灵感。</h1><p>以图集整理主题，以标签发现细节。这里保存值得反复观看的画面。</p></section>
       <header class="hero hero-featured compact" id="site-hero">
         <div class="hero-stage" id="hero-stage" hidden>
           <img id="hero-image" class="hero-image" alt="" />
@@ -23,7 +25,8 @@
           <p class="hero-copy" id="hero-copy"></p>
         </div>
       </header>
-      <nav class="tag-strip" id="tag-strip" aria-label="标签导航"></nav>
+      <section class="album-section" id="albums"><div class="section-heading"><div><p class="eyebrow">Albums</p><h2>浏览图集</h2></div></div><div id="album-list" class="album-grid"></div></section>
+      <section id="browse" class="browse-section"><div class="section-heading"><div><p class="eyebrow">Browse</p><h2>按标签浏览</h2></div></div><nav class="tag-strip" id="tag-strip" aria-label="标签导航"></nav></section>
       <main>
         <section class="gallery-grid" id="gallery-grid" aria-live="polite"></section>
       </main>
@@ -33,6 +36,6 @@
       <img id="modal-image" alt="" />
       <div class="modal-meta"><strong id="modal-title"></strong><span id="modal-tags"></span></div>
     </div>
-    <script type="module" src="/assets/gallery.js?v=20260715-featured-dimensions"></script>
+    <script type="module" src="/assets/gallery.js?v=20260717-albums-gallery-redesign"></script>
   </body>
 </html>

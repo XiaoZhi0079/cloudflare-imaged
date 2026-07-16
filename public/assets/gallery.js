@@ -1,10 +1,11 @@
-import { renderGalleryCards, renderTagChips } from "./templates.js";
+import { renderAlbumCards, renderGalleryCards, renderTagChips } from "./templates.js";
 import { fetchPublicJson, loadPublicBootstrapData } from "./public-data.js";
 import { createHeroCarousel } from "./hero-carousel.js";
 
 const siteHero = document.querySelector("#site-hero");
 const tagStrip = document.querySelector("#tag-strip");
 const galleryGrid = document.querySelector("#gallery-grid");
+const albumList = document.querySelector("#album-list");
 const modal = document.querySelector("#image-modal");
 const modalImage = document.querySelector("#modal-image");
 const modalTitle = document.querySelector("#modal-title");
@@ -147,8 +148,9 @@ async function loadImages(tagSlug) {
 }
 
 async function bootstrap() {
-  const { site, tags: loadedTags } = await loadPublicBootstrapData();
+  const { site, tags: loadedTags, albums } = await loadPublicBootstrapData();
   renderHero(site);
+  albumList.innerHTML = albums.length ? renderAlbumCards(albums) : `<div class="panel empty-state">还没有公开图集。</div>`;
   tags = loadedTags;
   activeSlug = tags[0]?.slug ?? null;
   renderTags();

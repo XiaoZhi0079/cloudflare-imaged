@@ -21,6 +21,19 @@ export function renderTagChips(tags, activeSlug) {
     .join("");
 }
 
+export function renderAlbumCards(albums) {
+  return (albums ?? []).map((album) => {
+    const cover = album.coverImage;
+    const coverMarkup = cover?.fileUrl
+      ? `<img src="${escapeHtml(cover.fileUrl)}" alt="${escapeHtml(cover.fileName || album.name)}" loading="lazy" />`
+      : `<span class="album-cover-empty">暂无封面</span>`;
+    return `<a class="album-card" href="/album.html?slug=${encodeURIComponent(album.slug)}">
+      <span class="album-cover">${coverMarkup}</span>
+      <span class="album-card-copy"><strong>${escapeHtml(album.name)}</strong><span>${escapeHtml(album.description || "")}</span><small>${Number(album.imageCount ?? 0)} 张</small></span>
+    </a>`;
+  }).join("");
+}
+
 export function renderGalleryCards(images) {
   return images
     .map((image) => {

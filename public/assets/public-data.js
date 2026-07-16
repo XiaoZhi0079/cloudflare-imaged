@@ -20,10 +20,13 @@ export async function loadPublicBootstrapData(fetchImpl = globalThis.fetch) {
   const sitePromise = fetchPublicJson("/api/public/site", undefined, fetchImpl)
     .catch(() => ({ ...DEFAULT_PUBLIC_SITE, featuredImages: [] }));
   const tagsPromise = fetchPublicJson("/api/public/tags", undefined, fetchImpl);
-  const [site, tagsPayload] = await Promise.all([sitePromise, tagsPromise]);
+  const albumsPromise = fetchPublicJson("/api/public/albums", undefined, fetchImpl)
+    .catch(() => ({ albums: [] }));
+  const [site, tagsPayload, albumsPayload] = await Promise.all([sitePromise, tagsPromise, albumsPromise]);
 
   return {
     site,
     tags: Array.isArray(tagsPayload?.tags) ? tagsPayload.tags : [],
+    albums: Array.isArray(albumsPayload?.albums) ? albumsPayload.albums : [],
   };
 }

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 
-import { renderGalleryCards, renderTagChips } from "../src/shared/templates.js";
+import { renderAlbumCards, renderGalleryCards, renderTagChips } from "../src/shared/templates.js";
 
 test("public renderers keep gallery behavior", () => {
   const chips = renderTagChips([{ name: "人像", slug: "portrait" }], "portrait");
@@ -18,18 +18,29 @@ test("public renderers keep gallery behavior", () => {
   assert.doesNotMatch(cards, /未分配标签/);
 });
 
+test("public album cards expose name description count and detail link", () => {
+  const html = renderAlbumCards([{ name: "城市", slug: "city", description: "夜色与街道", imageCount: 3, coverImage: { fileUrl: "/file/cover", fileName: "cover.webp" } }]);
+  assert.match(html, /城市/);
+  assert.match(html, /夜色与街道/);
+  assert.match(html, /3 张/);
+  assert.match(html, /album\.html\?slug=city/);
+});
+
 test("public gallery copy stays light-branded", () => {
   const html = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
   const gallery = readFileSync(new URL("../public/assets/gallery.js", import.meta.url), "utf8");
   const publicData = readFileSync(new URL("../public/assets/public-data.js", import.meta.url), "utf8");
   assert.match(html, /id="site-hero"/);
+  assert.match(html, /class="public-nav"/);
+  assert.match(html, /id="album-list"/);
+  assert.match(html, /收藏你的视觉灵感/);
   assert.match(html, /id="hero-stage"/);
   assert.match(html, /id="hero-copy"/);
   assert.match(html, /id="hero-issue"/);
   assert.match(html, /id="hero-pause"[^>]*aria-pressed="false"/);
   assert.match(html, /id="modal-title"/);
   assert.match(html, /id="modal-tags"/);
-  assert.doesNotMatch(html, /按标签浏览/);
+  assert.match(html, /按标签浏览/);
   assert.doesNotMatch(html, /快速查看整理好的图片内容/);
   assert.match(gallery, /loadPublicBootstrapData/);
   assert.match(gallery, /createHeroCarousel/);
@@ -162,8 +173,18 @@ test("public assets contain only public gallery concerns", () => {
   const shared = readFileSync(new URL("../src/shared/templates.js", import.meta.url), "utf8");
   assert.doesNotMatch(css, /\.admin-/);
   for (const source of [runtime, shared]) {
-    assert.deepEqual([...source.matchAll(/export function (\w+)/g)].map((match) => match[1]), ["renderTagChips", "renderGalleryCards"]);
+    assert.deepEqual([...source.matchAll(/export function (\w+)/g)].map((match) => match[1]), ["renderTagChips", "renderAlbumCards", "renderGalleryCards"]);
   }
+});
+
+test("album detail page has safe public browsing contracts", () => {
+  const html = readFileSync(new URL("../public/album.html", import.meta.url), "utf8");
+  const source = readFileSync(new URL("../public/assets/album-page.js", import.meta.url), "utf8");
+  assert.match(html, /id="album-title"/);
+  assert.match(html, /id="album-gallery"/);
+  assert.match(source, /\/api\/public\/albums\?slug=/);
+  assert.match(source, /图集暂时打不开/);
+  assert.match(source, /renderGalleryCards/);
 });
 
 test("single-image hero controls have an explicit hidden override", () => {
@@ -232,8 +253,8 @@ test("featured hero uses a fixed responsive 16:9 stage", () => {
   ]) {
     assert.doesNotMatch(css, viewportHeightRule);
   }
-  assert.match(index, /main\.css\?v=20260715-featured-dimensions/);
-  assert.match(index, /gallery\.js\?v=20260715-featured-dimensions/);
+  assert.match(index, /main\.css\?v=20260717-albums-gallery-redesign/);
+  assert.match(index, /gallery\.js\?v=20260717-albums-gallery-redesign/);
 });
 
 test("public entry assets share one cache-busting release version", () => {

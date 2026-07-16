@@ -24,6 +24,17 @@ test("site response failure falls back without blocking public tags", async () =
 
   assert.deepEqual(result.site, DEFAULT_PUBLIC_SITE);
   assert.deepEqual(result.tags, [{ id: 1, name: "人像", slug: "portrait" }]);
+  assert.deepEqual(result.albums, []);
+});
+
+test("album summary failure falls back without blocking tags", async () => {
+  const fetchImpl = async (url) => {
+    if (url === "/api/public/site") return Response.json(DEFAULT_PUBLIC_SITE);
+    if (url === "/api/public/albums") return Response.json({ error: "albums unavailable" }, { status: 500 });
+    return Response.json({ tags: [] });
+  };
+  const result = await loadPublicBootstrapData(fetchImpl);
+  assert.deepEqual(result.albums, []);
 });
 
 test("public tag failure still rejects bootstrap", async () => {
