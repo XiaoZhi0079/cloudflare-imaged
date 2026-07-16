@@ -3,11 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Gallery 内容设置</title>
+    <title>Gallery 精选管理</title>
     <link rel="stylesheet" href="/assets/admin/admin.css" />
     <link rel="stylesheet" href="/assets/admin/settings.css?v=20260715-featured-filter-separation" />
   </head>
-  <body class="admin-body" data-admin-page="settings">
+  <body class="admin-body" data-admin-page="featured">
     <section id="admin-auth-view" class="admin-auth-view" hidden>
       <form id="admin-login-form" class="admin-login-panel" novalidate>
         <p class="admin-eyebrow">Gallery Admin</p><h1>进入管理台</h1><p class="admin-muted">输入管理密钥后继续，此浏览器会记住登录状态。</p>
@@ -16,42 +16,23 @@
       </form>
     </section>
     <div id="admin-app" hidden>
-      <header class="admin-topbar"><a class="admin-brand" href="/admin/">Gallery 管理</a><nav class="admin-nav" aria-label="管理页面"><a href="/admin/">图片库</a><a href="/admin/featured.html">精选管理</a><a class="is-active" href="/admin/settings.html">标签与分类</a></nav><div class="admin-top-actions"><a href="/">查看前台</a><button type="button" data-admin-logout>退出</button></div></header>
+      <header class="admin-topbar"><a class="admin-brand" href="/admin/">Gallery 管理</a><nav class="admin-nav" aria-label="管理页面"><a href="/admin/">图片库</a><a class="is-active" href="/admin/featured.html">精选管理</a><a href="/admin/settings.html">标签与分类</a></nav><div class="admin-top-actions"><a href="/">查看前台</a><button type="button" data-admin-logout>退出</button></div></header>
       <main class="settings-page">
         <header class="settings-heading">
-          <div><p class="admin-eyebrow">Settings</p><h1>内容设置</h1></div>
-          <button id="taxonomy-create" class="admin-button-primary" type="button">新增标签</button>
+          <div><p class="admin-eyebrow">Featured</p><h1>精选管理</h1></div>
         </header>
-        <div class="admin-segments" role="tablist">
-          <button class="is-active" type="button" data-settings-tab="tags" role="tab">标签 <span id="tag-count">0</span></button>
-          <button type="button" data-settings-tab="categories" role="tab">主分类 <span id="category-count">0</span></button>
-          <button type="button" data-settings-tab="site" role="tab">站点</button>
-        </div>
-
-        <section id="taxonomy-panel" class="settings-panel">
-          <div class="settings-tools">
-            <input id="taxonomy-search" type="search" placeholder="搜索名称" />
-            <div>
-              <button id="taxonomy-reset-order" type="button" disabled>取消排序</button>
-              <button id="taxonomy-save-order" class="admin-button-primary" type="button" disabled>保存排序</button>
-            </div>
-          </div>
-          <p id="taxonomy-status" class="settings-status" aria-live="polite"></p>
-          <div id="taxonomy-list" class="taxonomy-list"></div>
-        </section>
-
-        <section id="site-panel" class="settings-panel" hidden>
+        <section id="featured-panel" class="settings-panel">
           <div class="site-form">
             <label class="admin-field" for="site-issue-name"><span>本期名字</span><input id="site-issue-name" type="text" maxlength="40" /></label>
             <label class="admin-field" for="site-hero-copy"><span>大屏文案</span><textarea id="site-hero-copy" rows="3" maxlength="240"></textarea></label>
             <div class="site-featured-head">
               <div>
-                <h2>大屏精选</h2>
+                <h2>轮播精选</h2>
                 <p class="admin-muted">手动选择前台大屏展示的图片，顺序即轮播顺序。本期张数由精选数量自动得出。</p>
               </div>
               <div class="site-featured-actions">
                 <button id="site-add-featured" type="button">从图片库添加</button>
-                <button id="site-save" class="admin-button-primary" type="button">保存站点设置</button>
+                <button id="site-save" class="admin-button-primary" type="button">保存精选设置</button>
               </div>
             </div>
             <p id="site-status" class="settings-status" aria-live="polite"></p>
@@ -61,6 +42,6 @@
       </main>
       <div id="admin-dialog-host"></div><div id="admin-toast-host" class="admin-toast-host" aria-live="polite"></div>
     </div>
-    <script type="module" src="/assets/admin/settings-page.js?v=20260716-approximate-featured-ratio"></script>
+    <script type="module" src="/assets/admin/featured-page.js?v=20260716-admin-featured-navigation"></script>
   </body>
 </html>

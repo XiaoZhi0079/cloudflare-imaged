@@ -42,17 +42,27 @@ test("public gallery copy stays light-branded", () => {
   assert.doesNotMatch(gallery, /error\.message/);
 });
 
-test("settings page exposes site configuration tab", () => {
-  const html = readFileSync(new URL("../public/admin/settings.html", import.meta.url), "utf8");
-  assert.match(html, /data-settings-tab="site"/);
-  assert.match(html, /id="site-panel"/);
-  assert.match(html, /id="site-issue-name"/);
-  assert.match(html, /id="site-hero-copy"/);
-  assert.match(html, /id="site-featured-list"/);
+test("featured management page owns issue copy and carousel controls", () => {
+  const pageUrl = new URL("../public/admin/featured.html", import.meta.url);
+  assert.equal(existsSync(pageUrl), true, "featured management page must exist");
+  const html = readFileSync(pageUrl, "utf8");
+  for (const id of [
+    "featured-panel", "site-issue-name", "site-hero-copy",
+    "site-add-featured", "site-save", "site-featured-list",
+  ]) {
+    assert.match(html, new RegExp(`id="${id}"`));
+  }
+  assert.match(html, />精选管理</);
+  assert.match(html, />保存精选设置</);
+  assert.doesNotMatch(html, /data-settings-tab|taxonomy-list|taxonomy-create/);
 });
 
-test("both admin pages use the shared authentication gate", () => {
-  for (const path of ["../public/admin/index.html", "../public/admin/settings.html"]) {
+test("all admin pages use the shared authentication gate", () => {
+  for (const path of [
+    "../public/admin/index.html",
+    "../public/admin/featured.html",
+    "../public/admin/settings.html",
+  ]) {
     const html = readFileSync(new URL(path, import.meta.url), "utf8");
     assert.match(html, /id="admin-auth-view"[^>]*hidden/);
     assert.match(html, /id="admin-app"[^>]*hidden/);
@@ -60,6 +70,7 @@ test("both admin pages use the shared authentication gate", () => {
     assert.match(html, /id="admin-login"/);
     assert.match(html, /data-admin-logout/);
     assert.match(html, /href="\/admin\/"/);
+    assert.match(html, /href="\/admin\/featured\.html"/);
     assert.match(html, /href="\/admin\/settings\.html"/);
     assert.match(html, /\/assets\/admin\/admin\.css/);
   }
@@ -67,9 +78,12 @@ test("both admin pages use the shared authentication gate", () => {
 
 test("admin pages load page-specific modules and styles", () => {
   const library = readFileSync(new URL("../public/admin/index.html", import.meta.url), "utf8");
+  const featured = readFileSync(new URL("../public/admin/featured.html", import.meta.url), "utf8");
   const settings = readFileSync(new URL("../public/admin/settings.html", import.meta.url), "utf8");
   assert.match(library, /\/assets\/admin\/workbench\.css/);
   assert.match(library, /\/assets\/admin\/library-page\.js/);
+  assert.match(featured, /\/assets\/admin\/settings\.css/);
+  assert.match(featured, /\/assets\/admin\/featured-page\.js/);
   assert.match(settings, /\/assets\/admin\/settings\.css/);
   assert.match(settings, /\/assets\/admin\/settings-page\.js/);
 });

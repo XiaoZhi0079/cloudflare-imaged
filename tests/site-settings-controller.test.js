@@ -163,3 +163,9 @@ test("settings styles keep legacy warnings and add independent candidate filters
   assert.match(settingsCss, /\.site-picker-card:has\(input:checked\)/);
   assert.match(settingsCss, /overflow-wrap:\s*anywhere/);
 });
+
+test("featured controller uses task-specific settings language", () => {
+  assert.match(controllerSource, /精选设置已修改，保存后生效/);
+  assert.match(controllerSource, /精选设置已保存/);
+  assert.doesNotMatch(controllerSource, /站点设置已修改|站点设置已保存/);
+});

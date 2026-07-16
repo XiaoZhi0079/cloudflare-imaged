@@ -186,7 +186,7 @@ export function createSiteSettingsController({
 
   function updateStatus() {
     elements.status.textContent = isDirty()
-      ? "站点设置已修改，保存后生效。"
+      ? "精选设置已修改，保存后生效。"
       : `当前精选 ${draft.featuredImages.length} 张。`;
     elements.save.disabled = busy || !isDirty();
   }
@@ -343,7 +343,7 @@ export function createSiteSettingsController({
         }),
       });
       applyPayload(payload);
-      notifier.success("站点设置已保存");
+      notifier.success("精选设置已保存");
     } catch (error) {
       notifier.error(error?.message || "保存失败");
     } finally {
