@@ -17,7 +17,7 @@ test("public renderers keep gallery behavior", () => {
   assert.match(cards, /\/file\/object-42/);
   assert.match(cards, /srcset="\/img\/object-42\?w=320 320w,[^"]*\/img\/object-42\?w=960 960w"/);
   assert.match(cards, /sizes="[^"]+306px"/);
-  assert.match(cards, /width="1920" height="1080"/);
+  assert.doesNotMatch(cards, /width="1920" height="1080"/);
   assert.match(cards, /decoding="async"/);
   assert.doesNotMatch(cards, /未分配标签/);
 });
@@ -53,7 +53,10 @@ test("public gallery copy stays light-branded", () => {
   assert.match(html, /<p class="eyebrow">Albums<\/p>/i);
   assert.match(html, /<p class="eyebrow">Browse<\/p>/i);
   assert.doesNotMatch(html, /快速查看整理好的图片内容/);
-  assert.match(gallery, /loadPublicBootstrapData/);
+  assert.match(gallery, /const sitePromise = fetchPublicJson\("\/api\/public\/site"/);
+  assert.match(gallery, /const tagsPayload = await fetchPublicJson\("\/api\/public\/tags"/);
+  assert.match(gallery, /imagesPromise = loadImages\(activeSlug\)/);
+  assert.doesNotMatch(gallery, /loadPublicBootstrapData/);
   assert.match(gallery, /createHeroCarousel/);
   assert.match(gallery, /setPauseReason\("hover"/);
   assert.match(gallery, /prefers-reduced-motion/);
@@ -125,6 +128,11 @@ test("public pages share one immersive viewer with navigation and URL state", ()
   assert.match(css, /html\.viewer-open\s*\{[^}]*overflow:\s*hidden/);
   assert.match(css, /\.modal-nav\s*\{/);
   assert.match(css, /\.modal-counter\s*\{/);
+});
+
+test("gallery cards explicitly preserve their natural image height", () => {
+  const css = readFileSync(new URL("../public/assets/main.css", import.meta.url), "utf8");
+  assert.match(css, /\.gallery-card img\s*\{[^}]*width:\s*100%;[^}]*height:\s*auto;/s);
 });
 
 test("featured management page becomes multi-album management", () => {
@@ -231,7 +239,7 @@ test("runtime public templates stay aligned with shared templates", () => {
   const runtimeVariants = readFileSync(new URL("../public/assets/image-variants.js", import.meta.url), "utf8");
   const sharedVariants = readFileSync(new URL("../src/shared/image-variants.js", import.meta.url), "utf8");
   assert.equal(runtimeVariants, sharedVariants);
-  assert.match(runtime, /image-variants\.js\?v=20260717-cloudflare-image-performance/);
+  assert.match(runtime, /image-variants\.js\?v=20260717-gallery-list-fix/);
 });
 
 test("legacy admin pages and scripts are removed", () => {
@@ -329,8 +337,8 @@ test("featured hero uses a fixed responsive 16:9 stage", () => {
   ]) {
     assert.doesNotMatch(css, viewportHeightRule);
   }
-  assert.match(index, /main\.css\?v=20260717-cloudflare-image-performance/);
-  assert.match(index, /gallery\.js\?v=20260717-cloudflare-image-performance/);
+  assert.match(index, /main\.css\?v=20260717-gallery-list-fix/);
+  assert.match(index, /gallery\.js\?v=20260717-gallery-list-fix/);
 });
 
 test("public entry assets share one cache-busting release version", () => {
@@ -344,13 +352,13 @@ test("public entry assets share one cache-busting release version", () => {
   assert.ok(scriptVersion, "gallery.js must include a non-empty release version");
   assert.equal(cssVersion[1], scriptVersion[1]);
   for (const source of [gallery, albumPage]) {
-    assert.match(source, /templates\.js\?v=20260717-cloudflare-image-performance/);
-    assert.match(source, /public-data\.js\?v=20260717-cloudflare-image-performance/);
-    assert.match(source, /image-viewer\.js\?v=20260717-cloudflare-image-performance/);
+    assert.match(source, /templates\.js\?v=20260717-gallery-list-fix/);
+    assert.match(source, /public-data\.js\?v=20260717-gallery-list-fix/);
+    assert.match(source, /image-viewer\.js\?v=20260717-gallery-list-fix/);
   }
-  assert.match(gallery, /image-variants\.js\?v=20260717-cloudflare-image-performance/);
+  assert.match(gallery, /image-variants\.js\?v=20260717-gallery-list-fix/);
   const viewer = readFileSync(new URL("../public/assets/image-viewer.js", import.meta.url), "utf8");
-  assert.match(viewer, /image-variants\.js\?v=20260717-cloudflare-image-performance/);
+  assert.match(viewer, /image-variants\.js\?v=20260717-gallery-list-fix/);
 });
 
 test("hero and immersive viewer apply responsive Cloudflare variants", () => {

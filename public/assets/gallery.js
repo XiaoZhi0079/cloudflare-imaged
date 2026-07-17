@@ -1,7 +1,7 @@
-import { renderAlbumCards, renderGalleryCards, renderTagChips } from "./templates.js?v=20260717-cloudflare-image-performance";
-import { fetchPublicJson, loadPublicBootstrapData } from "./public-data.js?v=20260717-cloudflare-image-performance";
-import { createImageViewer } from "./image-viewer.js?v=20260717-cloudflare-image-performance";
-import { applyResponsiveImageAttributes } from "./image-variants.js?v=20260717-cloudflare-image-performance";
+import { renderAlbumCards, renderGalleryCards, renderTagChips } from "./templates.js?v=20260717-gallery-list-fix";
+import { DEFAULT_PUBLIC_SITE, fetchPublicJson } from "./public-data.js?v=20260717-gallery-list-fix";
+import { createImageViewer } from "./image-viewer.js?v=20260717-gallery-list-fix";
+import { applyResponsiveImageAttributes } from "./image-variants.js?v=20260717-gallery-list-fix";
 import { createHeroCarousel } from "./hero-carousel.js";
 
 const siteHero = document.querySelector("#site-hero");
@@ -154,10 +154,12 @@ async function loadImages(tagSlug) {
 }
 
 async function bootstrap() {
-  const { site, tags: loadedTags, albums } = await loadPublicBootstrapData();
-  renderHero(site);
-  albumList.innerHTML = albums.length ? renderAlbumCards(albums) : `<div class="panel empty-state">还没有公开图集。</div>`;
-  tags = loadedTags;
+  const sitePromise = fetchPublicJson("/api/public/site")
+    .catch(() => ({ ...DEFAULT_PUBLIC_SITE, featuredImages: [] }));
+  const albumsPromise = fetchPublicJson("/api/public/albums")
+    .catch(() => ({ albums: [] }));
+  const tagsPayload = await fetchPublicJson("/api/public/tags");
+  tags = Array.isArray(tagsPayload?.tags) ? tagsPayload.tags : [];
   const requestedSlug = new URL(location.href).searchParams.get("tag");
   activeSlug = tags.some((tag) => tag.slug === requestedSlug)
     ? requestedSlug
@@ -167,12 +169,22 @@ async function bootstrap() {
   }
   renderTags();
 
+  const contentPromise = Promise.all([sitePromise, albumsPromise]).then(([site, albumsPayload]) => {
+    renderHero(site);
+    const albums = Array.isArray(albumsPayload?.albums) ? albumsPayload.albums : [];
+    albumList.innerHTML = albums.length
+      ? renderAlbumCards(albums)
+      : `<div class="panel empty-state">还没有公开图集。</div>`;
+  });
+  let imagesPromise;
   if (activeSlug) {
-    await loadImages(activeSlug);
+    imagesPromise = loadImages(activeSlug);
   } else {
     renderImages();
     viewer.syncFromUrl();
+    imagesPromise = Promise.resolve();
   }
+  await Promise.all([contentPromise, imagesPromise]);
 }
 
 heroPrev?.addEventListener("click", () => {

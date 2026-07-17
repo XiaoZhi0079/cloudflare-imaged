@@ -1,4 +1,4 @@
-import { getResponsiveImageAttributes } from "./image-variants.js?v=20260717-cloudflare-image-performance";
+import { getResponsiveImageAttributes } from "./image-variants.js?v=20260717-gallery-list-fix";
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -9,15 +9,15 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
-function renderResponsiveImageAttributes(image, presetName) {
+function renderResponsiveImageAttributes(image, presetName, { includeDimensions = presetName !== "gallery" } = {}) {
   const attributes = getResponsiveImageAttributes(image, presetName);
   const parts = [`src="${escapeHtml(attributes.src)}"`];
   if (attributes.srcset) {
     parts.push(`srcset="${escapeHtml(attributes.srcset)}"`);
     parts.push(`sizes="${escapeHtml(attributes.sizes)}"`);
   }
-  if (attributes.width) parts.push(`width="${attributes.width}"`);
-  if (attributes.height) parts.push(`height="${attributes.height}"`);
+  if (includeDimensions && attributes.width) parts.push(`width="${attributes.width}"`);
+  if (includeDimensions && attributes.height) parts.push(`height="${attributes.height}"`);
   return parts.join(" ");
 }
 

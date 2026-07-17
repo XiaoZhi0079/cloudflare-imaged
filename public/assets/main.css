@@ -317,6 +317,7 @@ button[disabled] {
 
 .gallery-card img {
   width: 100%;
+  height: auto;
   display: block;
   transition: filter 240ms ease;
   will-change: filter;

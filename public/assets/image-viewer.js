@@ -1,4 +1,4 @@
-import { applyResponsiveImageAttributes } from "./image-variants.js?v=20260717-cloudflare-image-performance";
+import { applyResponsiveImageAttributes } from "./image-variants.js?v=20260717-gallery-list-fix";
 
 const SWIPE_THRESHOLD = 48;
 
