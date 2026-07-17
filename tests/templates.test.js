@@ -40,7 +40,8 @@ test("public gallery copy stays light-branded", () => {
   assert.match(html, /id="hero-pause"[^>]*aria-pressed="false"/);
   assert.match(html, /id="modal-title"/);
   assert.match(html, /id="modal-tags"/);
-  assert.match(html, /让光影在图集中成章，让细节在标签间相遇。愿每一次凝视，都能留住片刻心动。/);
+  assert.match(html, /收藏偶然落下的光，也收藏那些无法复刻的瞬间。愿每一次凝望，都能重新听见当时的心跳。/);
+  assert.doesNotMatch(html, /让光影在图集中成章，让细节在标签间相遇/);
   assert.match(html, /<nav><a href="#albums">图集<\/a><a href="#browse">标签<\/a><\/nav>/);
   assert.doesNotMatch(html, /href="\/admin\/"|标签浏览|浏览图集|按标签浏览/);
   assert.match(html, /<p class="eyebrow">Albums<\/p>/i);
