@@ -114,10 +114,10 @@ Expected: zero failures and no whitespace errors.
 
 Inspect text diffs only. Confirm there are no external source URLs, arbitrary transformation parameters, image downloads, screenshots, or changes to R2 object creation/deletion semantics.
 
-- [ ] **Step 3: Commit, fast-forward main and push normally**
+- [x] **Step 3: Commit, fast-forward main and push normally**
 
 Verify `origin/main` has not advanced, merge with `--ff-only`, rerun the full suite on the merged main workspace, and push without force.
 
-- [ ] **Step 4: Verify CI and production without real images**
+- [x] **Step 4: Verify CI and production without real images**
 
 Check the pushed SHA in GitHub Actions; fetch public HTML/JS text to confirm `srcset` and release versions; request an invalid-width `/img/*` for 400 and a nonexistent valid-width `/img/*` without following redirects for 307. Do not request or follow any real `/file/*` URL.
