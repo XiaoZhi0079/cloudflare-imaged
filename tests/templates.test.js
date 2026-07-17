@@ -356,8 +356,6 @@ test("changed admin assets use targeted cache-busting versions", () => {
   const albumsRedesignReferences = [
     [settingsHtml, /href="\/assets\/admin\/settings\.css\?v=([^"]+)"/, "settings.css"],
     [featuredHtml, /href="\/assets\/admin\/settings\.css\?v=([^"]+)"/, "featured settings.css"],
-    [featuredHtml, /src="\/assets\/admin\/featured-page\.js\?v=([^"]+)"/, "featured-page.js"],
-    [featuredEntry, /from "\.\/album-management\.js\?v=([^"]+)"/, "album-management.js"],
   ];
   const albumsRedesignVersions = albumsRedesignReferences.map(([source, pattern, asset]) => {
     const match = source.match(pattern);
@@ -367,6 +365,21 @@ test("changed admin assets use targeted cache-busting versions", () => {
   assert.deepEqual(
     albumsRedesignVersions,
     Array(albumsRedesignReferences.length).fill(albumsRedesignVersion),
+  );
+
+  const albumDraftVersion = "20260717-album-draft-persistence";
+  const albumDraftReferences = [
+    [featuredHtml, /src="\/assets\/admin\/featured-page\.js\?v=([^"]+)"/, "featured-page.js"],
+    [featuredEntry, /from "\.\/album-management\.js\?v=([^"]+)"/, "album-management.js"],
+  ];
+  const albumDraftVersions = albumDraftReferences.map(([source, pattern, asset]) => {
+    const match = source.match(pattern);
+    assert.ok(match, `${asset} must include a cache-busting release version`);
+    return match[1];
+  });
+  assert.deepEqual(
+    albumDraftVersions,
+    Array(albumDraftReferences.length).fill(albumDraftVersion),
   );
 
   const featuredNavigationVersion = "20260716-admin-featured-navigation";

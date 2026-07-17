@@ -27,9 +27,15 @@ test("admin albums require auth and support create update delete", async () => {
   const created = (await createdResponse.json()).album;
   assert.equal(created.name, "城市");
 
-  const updatedResponse = await adminAlbums({ env: state, request: adminRequest("PATCH", { id: created.id, isHome: true }) });
+  const updatedResponse = await adminAlbums({
+    env: state,
+    request: adminRequest("PATCH", { id: created.id, name: "新城市", description: "新夜色", isHome: true }),
+  });
   assert.equal(updatedResponse.status, 200);
-  assert.equal((await updatedResponse.json()).album.isHome, true);
+  const updated = (await updatedResponse.json()).album;
+  assert.equal(updated.name, "新城市");
+  assert.equal(updated.description, "新夜色");
+  assert.equal(updated.isHome, true);
 
   const home = (await createGalleryRepository(state.GALLERY_DB).listAlbums()).find((album) => album.slug === "home");
   const deletedResponse = await adminAlbums({ env: state, request: adminRequest("DELETE", { id: home.id }) });

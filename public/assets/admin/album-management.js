@@ -31,11 +31,34 @@ export function createAlbumManagementController({ root, client, dialogs, notifie
   let draft = null;
   let library = null;
   let busy = false;
+  let dirty = false;
 
   function current() { return albums.find((album) => Number(album.id) === Number(selectedId)) ?? null; }
+  function deleteProtected() { return current()?.isHome === true || draft?.isHome === true; }
   function setDisabled(value) {
-    for (const element of [elements.name, elements.description, elements.cover, elements.isHome, elements.add, elements.save, elements.delete]) element.disabled = value;
+    for (const element of [elements.name, elements.description, elements.cover, elements.isHome, elements.add, elements.delete]) element.disabled = value;
+    elements.save.disabled = value || !draft || !dirty;
     elements.create.disabled = busy;
+  }
+  function renderStatus() {
+    if (!draft) { elements.status.textContent = ""; return; }
+    const heroCount = draft.images.filter((image) => image?.featuredEligibility?.eligible === true).length;
+    elements.status.textContent = `图集共 ${draft.images.length} 张，轮播可用 ${heroCount} 张${dirty ? " · 有未保存修改" : ""}。`;
+  }
+  function syncDraftFromEditor() {
+    if (!draft) return;
+    draft.name = elements.name.value;
+    draft.description = elements.description.value;
+    draft.isHome = elements.isHome.checked;
+    draft.coverImageId = Number(elements.cover.value) || null;
+  }
+  function markEditorDirty() {
+    if (!draft || busy) return;
+    syncDraftFromEditor();
+    dirty = true;
+    renderStatus();
+    elements.save.disabled = false;
+    elements.delete.disabled = deleteProtected();
   }
   function renderList() {
     elements.list.innerHTML = albums.map((album) => `<button type="button" data-album-id="${album.id}" class="album-list-item${album.id === selectedId ? " is-active" : ""}"><strong>${escapeHtml(album.name)}</strong><span>${album.imageCount} 张${album.isHome ? " · 首页" : ""}</span></button>`).join("");
@@ -52,16 +75,31 @@ export function createAlbumManagementController({ root, client, dialogs, notifie
     elements.members.innerHTML = draft.images.length
       ? draft.images.map((image, index) => renderMember(image, index, draft.images.length)).join("")
       : `<div class="admin-empty">这个图集还没有图片</div>`;
-    const heroCount = draft.images.filter((image) => image?.featuredEligibility?.eligible === true).length;
-    elements.status.textContent = `图集共 ${draft.images.length} 张，轮播可用 ${heroCount} 张。`;
+    renderStatus();
     setDisabled(busy);
-    elements.delete.disabled = busy || draft.isHome;
+    elements.delete.disabled = busy || deleteProtected();
   }
   function select(albumId) {
     selectedId = Number(albumId);
     const album = current();
     draft = album ? { ...album, images: [...album.images] } : null;
+    dirty = false;
     renderEditor();
+  }
+  async function confirmDiscard() {
+    if (!dirty) return true;
+    return await dialogs.confirm({
+      title: "放弃未保存修改？",
+      message: "切换或新建图集会丢失当前尚未保存的修改。",
+      confirmLabel: "放弃并继续",
+      danger: true,
+    });
+  }
+  async function requestSelect(albumId) {
+    const nextId = Number(albumId);
+    if (nextId === selectedId) return;
+    if (!await confirmDiscard()) return;
+    select(nextId);
   }
   async function load() {
     busy = true; setDisabled(true);
@@ -72,7 +110,8 @@ export function createAlbumManagementController({ root, client, dialogs, notifie
     } finally { busy = false; renderEditor(); }
   }
   async function createAlbum() {
-    busy = true; renderEditor();
+    if (!await confirmDiscard()) return;
+    busy = true; setDisabled(true);
     try {
       const payload = await client.request("/api/admin/albums", { method: "POST", body: JSON.stringify({ name: `新图集 ${albums.length + 1}` }) });
       albums.push(payload.album); select(payload.album.id); notifier.success("图集已创建");
@@ -80,20 +119,33 @@ export function createAlbumManagementController({ root, client, dialogs, notifie
   }
   async function saveAlbum() {
     if (!draft) return;
-    busy = true; renderEditor();
+    syncDraftFromEditor();
+    const submission = {
+      id: draft.id,
+      name: draft.name.trim(),
+      description: draft.description.trim(),
+      isHome: draft.isHome,
+      coverImageId: draft.coverImageId,
+      imageIds: draft.images.map((image) => image.id),
+    };
+    if (!submission.name) {
+      elements.status.textContent = "图集名字不能为空。";
+      elements.name.focus();
+      return;
+    }
+    draft = { ...draft, ...submission };
+    busy = true;
+    elements.status.textContent = "正在保存图集...";
+    setDisabled(true);
     try {
-      const payload = await client.request("/api/admin/albums", { method: "PATCH", body: JSON.stringify({
-        id: draft.id, name: elements.name.value.trim(), description: elements.description.value.trim(),
-        isHome: elements.isHome.checked, coverImageId: Number(elements.cover.value) || null,
-        imageIds: draft.images.map((image) => image.id),
-      }) });
+      const payload = await client.request("/api/admin/albums", { method: "PATCH", body: JSON.stringify(submission) });
       albums = albums.map((album) => album.id === payload.album.id ? payload.album : { ...album, isHome: payload.album.isHome ? false : album.isHome });
       select(payload.album.id); notifier.success("图集已保存");
     } catch (error) { notifier.error(error?.message || "保存失败"); } finally { busy = false; renderEditor(); }
   }
   async function deleteAlbum() {
-    if (!draft || draft.isHome) return;
-    busy = true; renderEditor();
+    if (!draft || deleteProtected()) return;
+    busy = true; setDisabled(true);
     try {
       await client.request("/api/admin/albums", { method: "DELETE", body: JSON.stringify({ id: draft.id }) });
       albums = albums.filter((album) => album.id !== draft.id); select(albums[0]?.id ?? null); notifier.success("图集已删除");
@@ -116,20 +168,26 @@ export function createAlbumManagementController({ root, client, dialogs, notifie
     const existingIds = new Set(existing.map((image) => Number(image.id)));
     draft.images = [...existing, ...library.filter((image) => selected.has(Number(image.id)) && !existingIds.has(Number(image.id)))];
     draft.coverImageId = draft.images.some((image) => Number(image.id) === Number(draft.coverImageId)) ? draft.coverImageId : draft.images[0]?.id ?? null;
+    dirty = true;
     renderEditor();
   }
   function bind() {
-    elements.list.addEventListener("click", (event) => { const button = event.target.closest("[data-album-id]"); if (button && !busy) select(button.dataset.albumId); });
-    elements.create.addEventListener("click", () => !busy && createAlbum());
-    elements.add.addEventListener("click", () => !busy && addImages());
-    elements.save.addEventListener("click", () => !busy && saveAlbum());
-    elements.delete.addEventListener("click", () => !busy && deleteAlbum());
+    elements.list.addEventListener("click", async (event) => { const button = event.target.closest("[data-album-id]"); if (button && !busy) await requestSelect(button.dataset.albumId); });
+    elements.name.addEventListener("input", markEditorDirty);
+    elements.description.addEventListener("input", markEditorDirty);
+    elements.isHome.addEventListener("change", markEditorDirty);
+    elements.cover.addEventListener("change", markEditorDirty);
+    elements.create.addEventListener("click", async () => { if (!busy) await createAlbum(); });
+    elements.add.addEventListener("click", async () => { if (!busy) await addImages(); });
+    elements.save.addEventListener("click", async () => { if (!busy) await saveAlbum(); });
+    elements.delete.addEventListener("click", async () => { if (!busy) await deleteAlbum(); });
     elements.members.addEventListener("click", (event) => {
       const action = event.target.closest("[data-action]")?.dataset.action; const row = event.target.closest("[data-member-id]"); if (!action || !row || !draft) return;
       const index = draft.images.findIndex((image) => Number(image.id) === Number(row.dataset.memberId));
       if (action === "remove") draft.images.splice(index, 1);
       if (action === "move-up" && index > 0) [draft.images[index - 1], draft.images[index]] = [draft.images[index], draft.images[index - 1]];
       if (action === "move-down" && index < draft.images.length - 1) [draft.images[index + 1], draft.images[index]] = [draft.images[index], draft.images[index + 1]];
+      dirty = true;
       renderEditor();
     });
   }
