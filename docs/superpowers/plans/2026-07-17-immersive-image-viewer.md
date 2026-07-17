@@ -109,10 +109,10 @@ Expected: zero test failures and no whitespace errors.
 
 Run `git status --short`, `git diff --stat`, and inspect only text diffs. Confirm there are no image requests, screenshots, binary files, unrelated admin changes, or public image-by-id enumeration endpoints.
 
-- [ ] **Step 3: Commit and integrate**
+- [x] **Step 3: Commit and integrate**
 
 Commit the phase-1 docs and implementation on `feat/immersive-image-viewer`, push the branch, fast-forward `main`, and push `origin/main` without overwriting remote history.
 
-- [ ] **Step 4: Verify GitHub and Cloudflare using text only**
+- [x] **Step 4: Verify GitHub and Cloudflare using text only**
 
 Verify the pushed SHA, deployment checks, public HTML/CSS/JS release version, shared viewer imports, controls, and history code. Do not request `/file/` URLs and do not capture screenshots.
