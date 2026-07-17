@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>图集</title>
-    <link rel="stylesheet" href="/assets/main.css?v=20260717-centered-viewer-admin-modal" />
+    <link rel="stylesheet" href="/assets/main.css?v=20260717-immersive-image-viewer" />
   </head>
   <body>
     <header class="public-nav"><div><a class="public-brand" href="/">Cloud Gallery</a><nav><a href="#albums">图集</a><a href="#browse">标签</a></nav></div></header>
@@ -31,13 +31,15 @@
         <section class="gallery-grid" id="gallery-grid" aria-live="polite"></section>
       </main>
     </div>
-    <div class="modal hidden" id="image-modal" role="dialog" aria-modal="true">
-      <button class="modal-close" id="modal-close" type="button">&#x00D7;</button>
+    <div class="modal hidden" id="image-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-describedby="modal-tags">
+      <button class="modal-close" id="modal-close" type="button" aria-label="关闭大图">&#x00D7;</button>
       <div class="modal-stage">
+        <button class="modal-nav modal-prev" id="modal-prev" type="button" aria-label="上一张" hidden>‹</button>
         <img id="modal-image" alt="" />
-        <div class="modal-meta"><strong id="modal-title"></strong><span id="modal-tags"></span></div>
+        <button class="modal-nav modal-next" id="modal-next" type="button" aria-label="下一张" hidden>›</button>
+        <div class="modal-meta"><strong id="modal-title"></strong><span id="modal-tags"></span><small class="modal-counter" id="modal-counter"></small></div>
       </div>
     </div>
-    <script type="module" src="/assets/gallery.js?v=20260717-centered-viewer-admin-modal"></script>
+    <script type="module" src="/assets/gallery.js?v=20260717-immersive-image-viewer"></script>
   </body>
 </html>

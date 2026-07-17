@@ -68,7 +68,7 @@ test("public image viewer centers the image with transparent in-image metadata",
   for (const html of [index, album]) {
     assert.match(
       html,
-      /<div class="modal-stage">\s*<img id="modal-image"[^>]*\/>\s*<div class="modal-meta">/s,
+      /<div class="modal-stage">[\s\S]*?<img id="modal-image"[^>]*\/>[\s\S]*?<div class="modal-meta">/,
     );
   }
   const modalBlock = css.match(/\.modal\s*\{([^}]*)\}/s)?.[1];
@@ -87,6 +87,38 @@ test("public image viewer centers the image with transparent in-image metadata",
     /\.public-nav nav a:last-child\s*\{[^}]*display:\s*none/,
     "the mobile layout must keep the Tags navigation link visible",
   );
+});
+
+test("public pages share one immersive viewer with navigation and URL state", () => {
+  const index = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
+  const album = readFileSync(new URL("../public/album.html", import.meta.url), "utf8");
+  const gallery = readFileSync(new URL("../public/assets/gallery.js", import.meta.url), "utf8");
+  const albumPage = readFileSync(new URL("../public/assets/album-page.js", import.meta.url), "utf8");
+  const viewer = readFileSync(new URL("../public/assets/image-viewer.js", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../public/assets/main.css", import.meta.url), "utf8");
+
+  for (const html of [index, album]) {
+    assert.match(html, /id="image-modal"[^>]*aria-labelledby="modal-title"[^>]*aria-describedby="modal-tags"/);
+    assert.match(html, /id="modal-prev"[^>]*aria-label="上一张"/);
+    assert.match(html, /id="modal-next"[^>]*aria-label="下一张"/);
+    assert.match(html, /id="modal-counter"/);
+  }
+  for (const source of [gallery, albumPage]) {
+    assert.match(source, /createImageViewer/);
+    assert.match(source, /viewer\.bindCards/);
+    assert.match(source, /viewer\.syncFromUrl/);
+    assert.doesNotMatch(source, /modalImage\.src|modal\.classList\.(?:add|remove)/);
+  }
+  assert.match(gallery, /searchParams\.get\("tag"\)/);
+  assert.match(gallery, /searchParams\.set\("tag"/);
+  assert.match(gallery, /searchParams\.delete\("image"\)/);
+  assert.match(gallery, /history\.replaceState/);
+  assert.match(viewer, /addEventListener\("popstate"/);
+  assert.match(viewer, /addEventListener\("keydown"/);
+  assert.match(viewer, /addEventListener\("touchstart"/);
+  assert.match(css, /html\.viewer-open\s*\{[^}]*overflow:\s*hidden/);
+  assert.match(css, /\.modal-nav\s*\{/);
+  assert.match(css, /\.modal-counter\s*\{/);
 });
 
 test("featured management page becomes multi-album management", () => {
@@ -287,8 +319,8 @@ test("featured hero uses a fixed responsive 16:9 stage", () => {
   ]) {
     assert.doesNotMatch(css, viewportHeightRule);
   }
-  assert.match(index, /main\.css\?v=20260717-centered-viewer-admin-modal/);
-  assert.match(index, /gallery\.js\?v=20260717-centered-viewer-admin-modal/);
+  assert.match(index, /main\.css\?v=20260717-immersive-image-viewer/);
+  assert.match(index, /gallery\.js\?v=20260717-immersive-image-viewer/);
 });
 
 test("public entry assets share one cache-busting release version", () => {
@@ -302,8 +334,9 @@ test("public entry assets share one cache-busting release version", () => {
   assert.ok(scriptVersion, "gallery.js must include a non-empty release version");
   assert.equal(cssVersion[1], scriptVersion[1]);
   for (const source of [gallery, albumPage]) {
-    assert.match(source, /templates\.js\?v=20260717-centered-viewer-admin-modal/);
-    assert.match(source, /public-data\.js\?v=20260717-centered-viewer-admin-modal/);
+    assert.match(source, /templates\.js\?v=20260717-immersive-image-viewer/);
+    assert.match(source, /public-data\.js\?v=20260717-immersive-image-viewer/);
+    assert.match(source, /image-viewer\.js\?v=20260717-immersive-image-viewer/);
   }
 });
 

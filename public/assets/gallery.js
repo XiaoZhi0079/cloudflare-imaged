@@ -1,16 +1,12 @@
-import { renderAlbumCards, renderGalleryCards, renderTagChips } from "./templates.js?v=20260717-centered-viewer-admin-modal";
-import { fetchPublicJson, loadPublicBootstrapData } from "./public-data.js?v=20260717-centered-viewer-admin-modal";
+import { renderAlbumCards, renderGalleryCards, renderTagChips } from "./templates.js?v=20260717-immersive-image-viewer";
+import { fetchPublicJson, loadPublicBootstrapData } from "./public-data.js?v=20260717-immersive-image-viewer";
+import { createImageViewer } from "./image-viewer.js?v=20260717-immersive-image-viewer";
 import { createHeroCarousel } from "./hero-carousel.js";
 
 const siteHero = document.querySelector("#site-hero");
 const tagStrip = document.querySelector("#tag-strip");
 const galleryGrid = document.querySelector("#gallery-grid");
 const albumList = document.querySelector("#album-list");
-const modal = document.querySelector("#image-modal");
-const modalImage = document.querySelector("#modal-image");
-const modalTitle = document.querySelector("#modal-title");
-const modalTags = document.querySelector("#modal-tags");
-const modalClose = document.querySelector("#modal-close");
 const heroStage = document.querySelector("#hero-stage");
 const heroImage = document.querySelector("#hero-image");
 const heroControls = document.querySelector("#hero-controls");
@@ -28,32 +24,36 @@ let images = [];
 let featuredImages = [];
 let heroCarousel = null;
 
+const viewer = createImageViewer({
+  elements: {
+    modal: document.querySelector("#image-modal"),
+    image: document.querySelector("#modal-image"),
+    title: document.querySelector("#modal-title"),
+    tags: document.querySelector("#modal-tags"),
+    close: document.querySelector("#modal-close"),
+    previous: document.querySelector("#modal-prev"),
+    next: document.querySelector("#modal-next"),
+    counter: document.querySelector("#modal-counter"),
+    stage: document.querySelector(".modal-stage"),
+  },
+  getImages: () => images,
+});
+
+function replaceTagUrl(tagSlug, { clearImage = false } = {}) {
+  const url = new URL(location.href);
+  if (tagSlug) url.searchParams.set("tag", tagSlug);
+  else url.searchParams.delete("tag");
+  if (clearImage) url.searchParams.delete("image");
+  history.replaceState(history.state, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
 function bindTagClicks() {
   tagStrip.querySelectorAll("[data-tag-slug]").forEach((button) => {
     button.addEventListener("click", async () => {
       activeSlug = button.dataset.tagSlug;
+      replaceTagUrl(activeSlug, { clearImage: true });
       renderTags();
       await loadImages(activeSlug);
-    });
-  });
-}
-
-function bindImageClicks() {
-  galleryGrid.querySelectorAll("[data-image-id]").forEach((card) => {
-    card.querySelector("[data-action='open-image']").addEventListener("click", () => {
-      const image = images.find((item) => String(item.id) === card.dataset.imageId);
-      if (!image) {
-        return;
-      }
-
-      const tagText = (image.tags ?? []).filter(Boolean).join(" · ");
-      const imageName = String(image.fileName ?? "").trim() || "未命名图片";
-      modalImage.src = image.fileUrl;
-      modalImage.alt = imageName;
-      modalTitle.textContent = imageName;
-      modalTags.textContent = tagText;
-      modalTags.hidden = !tagText;
-      modal.classList.remove("hidden");
     });
   });
 }
@@ -69,7 +69,7 @@ function renderImages() {
   galleryGrid.innerHTML = hasImages
     ? renderGalleryCards(images)
     : `<div class="panel empty-state">这个标签下暂时还没有内容，换一个看看。</div>`;
-  bindImageClicks();
+  viewer.bindCards(galleryGrid);
 }
 
 function showFeatured(index) {
@@ -145,6 +145,7 @@ async function loadImages(tagSlug) {
   const payload = await fetchPublicJson(`/api/public/images?tag=${encodeURIComponent(tagSlug)}`);
   images = payload.images;
   renderImages();
+  viewer.syncFromUrl();
 }
 
 async function bootstrap() {
@@ -152,13 +153,20 @@ async function bootstrap() {
   renderHero(site);
   albumList.innerHTML = albums.length ? renderAlbumCards(albums) : `<div class="panel empty-state">还没有公开图集。</div>`;
   tags = loadedTags;
-  activeSlug = tags[0]?.slug ?? null;
+  const requestedSlug = new URL(location.href).searchParams.get("tag");
+  activeSlug = tags.some((tag) => tag.slug === requestedSlug)
+    ? requestedSlug
+    : tags[0]?.slug ?? null;
+  if (activeSlug && requestedSlug !== activeSlug) {
+    replaceTagUrl(activeSlug);
+  }
   renderTags();
 
   if (activeSlug) {
     await loadImages(activeSlug);
   } else {
     renderImages();
+    viewer.syncFromUrl();
   }
 }
 
@@ -192,13 +200,6 @@ document.addEventListener("visibilitychange", () => {
 });
 reducedMotionQuery?.addEventListener?.("change", (event) => {
   heroCarousel?.setReducedMotion(event.matches);
-});
-
-modalClose.addEventListener("click", () => modal.classList.add("hidden"));
-modal.addEventListener("click", (event) => {
-  if (event.target === modal) {
-    modal.classList.add("hidden");
-  }
 });
 
 bootstrap().catch(() => {
