@@ -1,6 +1,7 @@
-import { renderAlbumCards, renderGalleryCards, renderTagChips } from "./templates.js?v=20260717-immersive-image-viewer";
-import { fetchPublicJson, loadPublicBootstrapData } from "./public-data.js?v=20260717-immersive-image-viewer";
-import { createImageViewer } from "./image-viewer.js?v=20260717-immersive-image-viewer";
+import { renderAlbumCards, renderGalleryCards, renderTagChips } from "./templates.js?v=20260717-cloudflare-image-performance";
+import { fetchPublicJson, loadPublicBootstrapData } from "./public-data.js?v=20260717-cloudflare-image-performance";
+import { createImageViewer } from "./image-viewer.js?v=20260717-cloudflare-image-performance";
+import { applyResponsiveImageAttributes } from "./image-variants.js?v=20260717-cloudflare-image-performance";
 import { createHeroCarousel } from "./hero-carousel.js";
 
 const siteHero = document.querySelector("#site-hero");
@@ -81,7 +82,7 @@ function showFeatured(index) {
     % featuredImages.length;
   const image = featuredImages[normalizedIndex];
   const label = String(image.fileName ?? "").trim() || "精彩图片";
-  heroImage.src = image.fileUrl;
+  applyResponsiveImageAttributes(heroImage, image, "hero");
   heroImage.alt = label;
 
   heroDots.querySelectorAll("[data-hero-dot]").forEach((dot) => {
@@ -116,6 +117,10 @@ function renderHero(site) {
     heroControls.hidden = true;
     heroDots.innerHTML = "";
     heroImage.removeAttribute("src");
+    heroImage.removeAttribute("srcset");
+    heroImage.removeAttribute("sizes");
+    heroImage.removeAttribute("width");
+    heroImage.removeAttribute("height");
     renderHeroCarouselState({ manualPaused: false });
     return;
   }

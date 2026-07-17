@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>图集</title>
-    <link rel="stylesheet" href="/assets/main.css?v=20260717-immersive-image-viewer" />
+    <link rel="stylesheet" href="/assets/main.css?v=20260717-cloudflare-image-performance" />
   </head>
   <body>
     <header class="public-nav"><div><a class="public-brand" href="/">Cloud Gallery</a><nav><a href="#albums">图集</a><a href="#browse">标签</a></nav></div></header>
@@ -12,7 +12,7 @@
       <section class="editorial-intro"><p class="eyebrow">Personal Image Archive</p><h1>收藏你的视觉灵感。</h1><p>收藏偶然落下的光，也收藏那些无法复刻的瞬间。愿每一次凝望，都能重新听见当时的心跳。</p></section>
       <header class="hero hero-featured compact" id="site-hero">
         <div class="hero-stage" id="hero-stage" hidden>
-          <img id="hero-image" class="hero-image" alt="" />
+          <img id="hero-image" class="hero-image" alt="" decoding="async" />
           <div class="hero-controls" id="hero-controls" hidden>
             <button type="button" id="hero-prev" aria-label="上一张">‹</button>
             <div class="hero-dots" id="hero-dots"></div>
@@ -40,6 +40,6 @@
         <div class="modal-meta"><strong id="modal-title"></strong><span id="modal-tags"></span><small class="modal-counter" id="modal-counter"></small></div>
       </div>
     </div>
-    <script type="module" src="/assets/gallery.js?v=20260717-immersive-image-viewer"></script>
+    <script type="module" src="/assets/gallery.js?v=20260717-cloudflare-image-performance"></script>
   </body>
 </html>

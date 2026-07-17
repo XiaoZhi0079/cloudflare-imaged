@@ -6,7 +6,7 @@ import { renderAlbumCards, renderGalleryCards, renderTagChips } from "../src/sha
 
 test("public renderers keep gallery behavior", () => {
   const chips = renderTagChips([{ name: "人像", slug: "portrait" }], "portrait");
-  const cards = renderGalleryCards([{ id: 1, fileName: "private-name.webp", fileUrl: "/file/object-42", tags: ["人像"], category: { name: "Portrait" } }]);
+  const cards = renderGalleryCards([{ id: 1, fileName: "private-name.webp", fileUrl: "/file/object-42", width: 1920, height: 1080, tags: ["人像"], category: { name: "Portrait" } }]);
   assert.match(chips, /tag-chip active/);
   assert.match(cards, /loading="lazy"/);
   assert.match(cards, /gallery-hover-meta/);
@@ -15,15 +15,21 @@ test("public renderers keep gallery behavior", () => {
   assert.match(cards, /card-title/);
   assert.doesNotMatch(cards, /Portrait/);
   assert.match(cards, /\/file\/object-42/);
+  assert.match(cards, /srcset="\/img\/object-42\?w=320 320w,[^"]*\/img\/object-42\?w=960 960w"/);
+  assert.match(cards, /sizes="[^"]+306px"/);
+  assert.match(cards, /width="1920" height="1080"/);
+  assert.match(cards, /decoding="async"/);
   assert.doesNotMatch(cards, /未分配标签/);
 });
 
 test("public album cards expose name description count and detail link", () => {
-  const html = renderAlbumCards([{ name: "城市", slug: "city", description: "夜色与街道", imageCount: 3, coverImage: { fileUrl: "/file/cover", fileName: "cover.webp" } }]);
+  const html = renderAlbumCards([{ name: "城市", slug: "city", description: "夜色与街道", imageCount: 3, coverImage: { fileUrl: "/file/cover", fileName: "cover.webp", width: 3840, height: 2160 } }]);
   assert.match(html, /城市/);
   assert.match(html, /夜色与街道/);
   assert.match(html, /3 张/);
   assert.match(html, /album\.html\?slug=city/);
+  assert.match(html, /srcset="\/img\/cover\?w=480 480w,[^"]*\/img\/cover\?w=1280 1280w"/);
+  assert.match(html, /width="3840" height="2160"/);
 });
 
 test("public gallery copy stays light-branded", () => {
@@ -222,6 +228,10 @@ test("runtime public templates stay aligned with shared templates", () => {
   const runtime = readFileSync(new URL("../public/assets/templates.js", import.meta.url), "utf8");
   const shared = readFileSync(new URL("../src/shared/templates.js", import.meta.url), "utf8");
   assert.equal(runtime, shared);
+  const runtimeVariants = readFileSync(new URL("../public/assets/image-variants.js", import.meta.url), "utf8");
+  const sharedVariants = readFileSync(new URL("../src/shared/image-variants.js", import.meta.url), "utf8");
+  assert.equal(runtimeVariants, sharedVariants);
+  assert.match(runtime, /image-variants\.js\?v=20260717-cloudflare-image-performance/);
 });
 
 test("legacy admin pages and scripts are removed", () => {
@@ -319,8 +329,8 @@ test("featured hero uses a fixed responsive 16:9 stage", () => {
   ]) {
     assert.doesNotMatch(css, viewportHeightRule);
   }
-  assert.match(index, /main\.css\?v=20260717-immersive-image-viewer/);
-  assert.match(index, /gallery\.js\?v=20260717-immersive-image-viewer/);
+  assert.match(index, /main\.css\?v=20260717-cloudflare-image-performance/);
+  assert.match(index, /gallery\.js\?v=20260717-cloudflare-image-performance/);
 });
 
 test("public entry assets share one cache-busting release version", () => {
@@ -334,10 +344,24 @@ test("public entry assets share one cache-busting release version", () => {
   assert.ok(scriptVersion, "gallery.js must include a non-empty release version");
   assert.equal(cssVersion[1], scriptVersion[1]);
   for (const source of [gallery, albumPage]) {
-    assert.match(source, /templates\.js\?v=20260717-immersive-image-viewer/);
-    assert.match(source, /public-data\.js\?v=20260717-immersive-image-viewer/);
-    assert.match(source, /image-viewer\.js\?v=20260717-immersive-image-viewer/);
+    assert.match(source, /templates\.js\?v=20260717-cloudflare-image-performance/);
+    assert.match(source, /public-data\.js\?v=20260717-cloudflare-image-performance/);
+    assert.match(source, /image-viewer\.js\?v=20260717-cloudflare-image-performance/);
   }
+  assert.match(gallery, /image-variants\.js\?v=20260717-cloudflare-image-performance/);
+  const viewer = readFileSync(new URL("../public/assets/image-viewer.js", import.meta.url), "utf8");
+  assert.match(viewer, /image-variants\.js\?v=20260717-cloudflare-image-performance/);
+});
+
+test("hero and immersive viewer apply responsive Cloudflare variants", () => {
+  const gallery = readFileSync(new URL("../public/assets/gallery.js", import.meta.url), "utf8");
+  const viewer = readFileSync(new URL("../public/assets/image-viewer.js", import.meta.url), "utf8");
+  assert.match(gallery, /applyResponsiveImageAttributes\(heroImage, image, "hero"\)/);
+  assert.doesNotMatch(gallery, /heroImage\.src\s*=\s*image\.fileUrl/);
+  assert.match(viewer, /applyResponsiveImageAttributes\(image, current, "viewer"\)/);
+  assert.match(viewer, /applyResponsiveImageAttributes\(preloadImage, adjacent, "viewer"\)/);
+  assert.match(viewer, /removeAttribute\("srcset"\)/);
+  assert.match(viewer, /removeAttribute\("sizes"\)/);
 });
 
 test("changed admin assets use targeted cache-busting versions", () => {

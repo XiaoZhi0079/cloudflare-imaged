@@ -1,6 +1,6 @@
-import { fetchPublicJson } from "./public-data.js?v=20260717-immersive-image-viewer";
-import { renderGalleryCards } from "./templates.js?v=20260717-immersive-image-viewer";
-import { createImageViewer } from "./image-viewer.js?v=20260717-immersive-image-viewer";
+import { fetchPublicJson } from "./public-data.js?v=20260717-cloudflare-image-performance";
+import { renderGalleryCards } from "./templates.js?v=20260717-cloudflare-image-performance";
+import { createImageViewer } from "./image-viewer.js?v=20260717-cloudflare-image-performance";
 
 const title = document.querySelector("#album-title");
 const description = document.querySelector("#album-description");

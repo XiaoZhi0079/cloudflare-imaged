@@ -1,3 +1,5 @@
+import { getResponsiveImageAttributes } from "./image-variants.js?v=20260717-cloudflare-image-performance";
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -5,6 +7,18 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function renderResponsiveImageAttributes(image, presetName) {
+  const attributes = getResponsiveImageAttributes(image, presetName);
+  const parts = [`src="${escapeHtml(attributes.src)}"`];
+  if (attributes.srcset) {
+    parts.push(`srcset="${escapeHtml(attributes.srcset)}"`);
+    parts.push(`sizes="${escapeHtml(attributes.sizes)}"`);
+  }
+  if (attributes.width) parts.push(`width="${attributes.width}"`);
+  if (attributes.height) parts.push(`height="${attributes.height}"`);
+  return parts.join(" ");
 }
 
 function formatPublicTagText(tags) {
@@ -25,7 +39,7 @@ export function renderAlbumCards(albums) {
   return (albums ?? []).map((album) => {
     const cover = album.coverImage;
     const coverMarkup = cover?.fileUrl
-      ? `<img src="${escapeHtml(cover.fileUrl)}" alt="${escapeHtml(cover.fileName || album.name)}" loading="lazy" />`
+      ? `<img ${renderResponsiveImageAttributes(cover, "cover")} alt="${escapeHtml(cover.fileName || album.name)}" loading="lazy" decoding="async" />`
       : `<span class="album-cover-empty">暂无封面</span>`;
     return `<a class="album-card" href="/album.html?slug=${encodeURIComponent(album.slug)}">
       <span class="album-cover">${coverMarkup}</span>
@@ -46,7 +60,7 @@ export function renderGalleryCards(images) {
         <article class="gallery-card" data-image-id="${escapeHtml(image.id)}">
           <button type="button" data-action="open-image" aria-label="${escapeHtml(label)}">
             <span class="gallery-image-stage">
-              <img src="${escapeHtml(image.fileUrl)}" alt="${escapeHtml(label)}" loading="lazy" />
+              <img ${renderResponsiveImageAttributes(image, "gallery")} alt="${escapeHtml(label)}" loading="lazy" decoding="async" />
               <span class="gallery-hover-shade" aria-hidden="true"></span>
               ${metaMarkup}
             </span>

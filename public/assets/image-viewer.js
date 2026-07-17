@@ -1,3 +1,5 @@
+import { applyResponsiveImageAttributes } from "./image-variants.js?v=20260717-cloudflare-image-performance";
+
 const SWIPE_THRESHOLD = 48;
 
 export function wrapViewerIndex(index, length) {
@@ -92,8 +94,10 @@ export function createImageViewer({
     for (const url of getAdjacentImageUrls(currentItems, index)) {
       if (preloadedUrls.has(url)) continue;
       preloadedUrls.add(url);
+      const adjacent = currentItems.find((item) => item?.fileUrl === url);
+      if (!adjacent) continue;
       const preloadImage = createPreloadImage();
-      preloadImage.src = url;
+      applyResponsiveImageAttributes(preloadImage, adjacent, "viewer");
     }
   }
 
@@ -123,7 +127,7 @@ export function createImageViewer({
     const imageName = String(current?.fileName ?? "").trim() || "未命名图片";
     const tagText = (current?.tags ?? []).filter(Boolean).join(" · ");
     currentIndex = normalizedIndex;
-    image.src = current.fileUrl;
+    applyResponsiveImageAttributes(image, current, "viewer");
     image.alt = imageName;
     title.textContent = imageName;
     tags.textContent = tagText;
@@ -144,6 +148,10 @@ export function createImageViewer({
     modal.classList.add("hidden");
     documentObject.documentElement.classList.remove("viewer-open");
     image.removeAttribute("src");
+    image.removeAttribute("srcset");
+    image.removeAttribute("sizes");
+    image.removeAttribute("width");
+    image.removeAttribute("height");
     currentIndex = -1;
     touchStart = null;
     if (wasOpen && restoreFocus && opener?.focus) {

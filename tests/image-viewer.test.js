@@ -53,7 +53,8 @@ class FakeTarget {
   }
 
   focus() { this.focusCalls += 1; }
-  removeAttribute(name) { if (name === "src") this.src = ""; }
+  setAttribute(name, value) { this[name] = String(value); }
+  removeAttribute(name) { this[name] = ""; }
 }
 
 function createViewerHarness(initialUrl = "https://gallery.example/?tag=portrait") {
@@ -88,6 +89,7 @@ function createViewerHarness(initialUrl = "https://gallery.example/?tag=portrait
   };
   const documentObject = { documentElement: new FakeTarget() };
   const preloaded = [];
+  const preloadAttributes = [];
   const images = [
     { id: 1, fileName: "one.webp", fileUrl: "/file/one", tags: ["光"] },
     { id: 2, fileName: "two.webp", fileUrl: "/file/two", tags: ["影"] },
@@ -100,7 +102,16 @@ function createViewerHarness(initialUrl = "https://gallery.example/?tag=portrait
     documentObject,
     locationObject,
     historyObject,
-    createPreloadImage: () => ({ set src(value) { preloaded.push(value); } }),
+    createPreloadImage: () => {
+      const attributes = {};
+      return {
+        set srcset(value) { attributes.srcset = value; },
+        set sizes(value) { attributes.sizes = value; },
+        set src(value) { attributes.src = value; preloaded.push(value); preloadAttributes.push({ ...attributes }); },
+        setAttribute() {},
+        removeAttribute() {},
+      };
+    },
   });
   return {
     viewer,
@@ -112,6 +123,7 @@ function createViewerHarness(initialUrl = "https://gallery.example/?tag=portrait
     historyObject,
     historyCalls,
     preloaded,
+    preloadAttributes,
   };
 }
 
@@ -170,6 +182,8 @@ test("viewer opens by id, renders metadata, pushes one URL and preloads neighbor
 
   assert.equal(harness.elements.modal.classList.contains("hidden"), false);
   assert.equal(harness.elements.image.src, "/file/two");
+  assert.match(harness.elements.image.srcset, /\/img\/two\?w=640 640w/);
+  assert.equal(harness.elements.image.sizes, "(max-width: 1391px) 92vw, 1280px");
   assert.equal(harness.elements.image.alt, "two.webp");
   assert.equal(harness.elements.title.textContent, "two.webp");
   assert.equal(harness.elements.tags.textContent, "影");
@@ -182,6 +196,8 @@ test("viewer opens by id, renders metadata, pushes one URL and preloads neighbor
     "/?tag=portrait&image=2",
   ]);
   assert.deepEqual(harness.preloaded, ["/file/one", "/file/three"]);
+  assert.match(harness.preloadAttributes[0].srcset, /\/img\/one\?w=640 640w/);
+  assert.equal(harness.preloadAttributes[0].sizes, "(max-width: 1391px) 92vw, 1280px");
 });
 
 test("viewer next and previous wrap and replace the current viewer URL", () => {
