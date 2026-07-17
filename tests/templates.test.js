@@ -40,7 +40,11 @@ test("public gallery copy stays light-branded", () => {
   assert.match(html, /id="hero-pause"[^>]*aria-pressed="false"/);
   assert.match(html, /id="modal-title"/);
   assert.match(html, /id="modal-tags"/);
-  assert.match(html, /按标签浏览/);
+  assert.match(html, /让光影在图集中成章，让细节在标签间相遇。愿每一次凝视，都能留住片刻心动。/);
+  assert.match(html, /<nav><a href="#albums">图集<\/a><a href="#browse">标签<\/a><\/nav>/);
+  assert.doesNotMatch(html, /href="\/admin\/"|标签浏览|浏览图集|按标签浏览/);
+  assert.match(html, /<p class="eyebrow">Albums<\/p>/i);
+  assert.match(html, /<p class="eyebrow">Browse<\/p>/i);
   assert.doesNotMatch(html, /快速查看整理好的图片内容/);
   assert.match(gallery, /loadPublicBootstrapData/);
   assert.match(gallery, /createHeroCarousel/);
@@ -53,6 +57,35 @@ test("public gallery copy stays light-branded", () => {
   assert.match(gallery, /图集暂时打不开/);
   assert.match(gallery, /image\.fileName/);
   assert.doesNotMatch(gallery, /error\.message/);
+});
+
+test("public image viewer centers the image with transparent in-image metadata", () => {
+  const index = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
+  const album = readFileSync(new URL("../public/album.html", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../public/assets/main.css", import.meta.url), "utf8");
+
+  for (const html of [index, album]) {
+    assert.match(
+      html,
+      /<div class="modal-stage">\s*<img id="modal-image"[^>]*\/>\s*<div class="modal-meta">/s,
+    );
+  }
+  const modalBlock = css.match(/\.modal\s*\{([^}]*)\}/s)?.[1];
+  assert.ok(modalBlock, "the modal style block must exist");
+  assert.match(modalBlock, /display:\s*grid/);
+  assert.match(modalBlock, /place-items:\s*center/);
+  assert.match(modalBlock, /z-index:\s*100/);
+  assert.match(css, /\.modal-stage\s*\{[^}]*position:\s*relative;[^}]*display:\s*grid;[^}]*place-items:\s*center;/s);
+  assert.match(css, /\.modal-stage img\s*\{[^}]*max-width:[^}]*max-height:[^}]*object-fit:\s*contain;/s);
+  assert.match(
+    css,
+    /\.modal-meta\s*\{[^}]*position:\s*absolute;[^}]*inset:\s*auto 0 0;[^}]*background:\s*transparent;[^}]*text-shadow:/s,
+  );
+  assert.doesNotMatch(
+    css,
+    /\.public-nav nav a:last-child\s*\{[^}]*display:\s*none/,
+    "the mobile layout must keep the Tags navigation link visible",
+  );
 });
 
 test("featured management page becomes multi-album management", () => {
@@ -125,7 +158,7 @@ test("image workbench exposes filtering details upload and bulk controls", () =>
   for (const id of [
     "admin-search", "admin-sort", "admin-density", "tag-filter-list",
     "image-list", "admin-load-more", "admin-upload-open", "admin-upload-dialog",
-    "admin-detail-drawer", "admin-bulk-toolbar", "bulk-assign-tags",
+    "admin-detail-overlay", "admin-bulk-toolbar", "bulk-assign-tags",
     "bulk-assign-category", "bulk-delete", "admin-dialog-host", "admin-toast-host",
   ]) {
     assert.match(html, new RegExp(`id="${id}"`));
@@ -253,8 +286,8 @@ test("featured hero uses a fixed responsive 16:9 stage", () => {
   ]) {
     assert.doesNotMatch(css, viewportHeightRule);
   }
-  assert.match(index, /main\.css\?v=20260717-albums-gallery-redesign/);
-  assert.match(index, /gallery\.js\?v=20260717-albums-gallery-redesign/);
+  assert.match(index, /main\.css\?v=20260717-centered-viewer-admin-modal/);
+  assert.match(index, /gallery\.js\?v=20260717-centered-viewer-admin-modal/);
 });
 
 test("public entry assets share one cache-busting release version", () => {
@@ -268,8 +301,8 @@ test("public entry assets share one cache-busting release version", () => {
   assert.ok(scriptVersion, "gallery.js must include a non-empty release version");
   assert.equal(cssVersion[1], scriptVersion[1]);
   for (const source of [gallery, albumPage]) {
-    assert.match(source, /templates\.js\?v=20260717-albums-gallery-redesign/);
-    assert.match(source, /public-data\.js\?v=20260717-albums-gallery-redesign/);
+    assert.match(source, /templates\.js\?v=20260717-centered-viewer-admin-modal/);
+    assert.match(source, /public-data\.js\?v=20260717-centered-viewer-admin-modal/);
   }
 });
 
@@ -300,26 +333,39 @@ test("changed admin assets use targeted cache-busting versions", () => {
     Array(unchangedReferences.length).fill(filterSeparationVersion),
   );
 
-  const resolutionFilterVersion = "20260717-albums-gallery-redesign";
-  const resolutionFilterReferences = [
+  const centeredModalVersion = "20260717-centered-viewer-admin-modal";
+  const centeredModalReferences = [
     [libraryHtml, /href="\/assets\/admin\/admin\.css\?v=([^"]+)"/, "admin.css"],
     [settingsHtml, /href="\/assets\/admin\/admin\.css\?v=([^"]+)"/, "settings admin.css"],
     [featuredHtml, /href="\/assets\/admin\/admin\.css\?v=([^"]+)"/, "featured admin.css"],
     [libraryHtml, /href="\/assets\/admin\/workbench\.css\?v=([^"]+)"/, "workbench.css"],
     [libraryHtml, /src="\/assets\/admin\/library-page\.js\?v=([^"]+)"/, "library-page.js"],
-    [settingsHtml, /href="\/assets\/admin\/settings\.css\?v=([^"]+)"/, "settings.css"],
-    [featuredHtml, /href="\/assets\/admin\/settings\.css\?v=([^"]+)"/, "featured settings.css"],
-    [featuredHtml, /src="\/assets\/admin\/featured-page\.js\?v=([^"]+)"/, "featured-page.js"],
-    [featuredEntry, /from "\.\/album-management\.js\?v=([^"]+)"/, "album-management.js"],
   ];
-  const resolutionFilterVersions = resolutionFilterReferences.map(([source, pattern, asset]) => {
+  const centeredModalVersions = centeredModalReferences.map(([source, pattern, asset]) => {
     const match = source.match(pattern);
     assert.ok(match, `${asset} must include a cache-busting release version`);
     return match[1];
   });
   assert.deepEqual(
-    resolutionFilterVersions,
-    Array(resolutionFilterReferences.length).fill(resolutionFilterVersion),
+    centeredModalVersions,
+    Array(centeredModalReferences.length).fill(centeredModalVersion),
+  );
+
+  const albumsRedesignVersion = "20260717-albums-gallery-redesign";
+  const albumsRedesignReferences = [
+    [settingsHtml, /href="\/assets\/admin\/settings\.css\?v=([^"]+)"/, "settings.css"],
+    [featuredHtml, /href="\/assets\/admin\/settings\.css\?v=([^"]+)"/, "featured settings.css"],
+    [featuredHtml, /src="\/assets\/admin\/featured-page\.js\?v=([^"]+)"/, "featured-page.js"],
+    [featuredEntry, /from "\.\/album-management\.js\?v=([^"]+)"/, "album-management.js"],
+  ];
+  const albumsRedesignVersions = albumsRedesignReferences.map(([source, pattern, asset]) => {
+    const match = source.match(pattern);
+    assert.ok(match, `${asset} must include a cache-busting release version`);
+    return match[1];
+  });
+  assert.deepEqual(
+    albumsRedesignVersions,
+    Array(albumsRedesignReferences.length).fill(albumsRedesignVersion),
   );
 
   const featuredNavigationVersion = "20260716-admin-featured-navigation";
@@ -347,9 +393,14 @@ test("admin controls expose static accessibility contracts", () => {
     assert.match(html, /data-toggle-password[^>]*aria-label="[^"]+"[^>]*title="[^"]+"/);
     assert.match(html, /admin-toast-host[^>]*aria-live="polite"/);
   }
-  assert.match(library, /admin-detail-drawer[^>]*role="dialog"[^>]*aria-modal="true"/);
+  assert.match(library, /id="admin-detail-overlay"[^>]*class="admin-overlay admin-detail-overlay"[^>]*hidden/);
+  assert.doesNotMatch(library, /admin-detail-drawer|admin-drawer/);
   assert.match(dialogs, /role="dialog"/);
   assert.match(dialogs, /aria-modal="true"/);
+  assert.match(controller, /className: "admin-detail-dialog"/);
+  assert.match(controller, /role: "dialog"/);
+  assert.match(controller, /"aria-modal": "true"/);
+  assert.match(controller, /"aria-labelledby": "detail-title"/);
   assert.match(controller, /createElement\("label"[^\n]*admin-field/);
   assert.match(controller, /type: "file"/);
 });

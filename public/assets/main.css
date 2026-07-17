@@ -382,17 +382,23 @@ button[disabled] {
 }
 
 .modal-meta {
-  margin-top: 14px;
+  position: absolute;
+  inset: auto 0 0;
   display: grid;
   gap: 5px;
+  padding: 56px 22px 20px;
+  background: transparent;
   color: rgba(255, 248, 240, 0.82);
   font-size: 14px;
+  line-height: 1.4;
   letter-spacing: 0.04em;
-  text-align: center;
+  text-align: left;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9), 0 3px 18px rgba(0, 0, 0, 0.72);
+  pointer-events: none;
 }
 
-.modal-meta strong { color: #fff; font-size: 16px; }
-.modal-meta span { color: rgba(255, 248, 240, 0.72); font-size: 13px; }
+.modal-meta strong { color: #fff; font-size: 16px; overflow-wrap: anywhere; }
+.modal-meta span { color: rgba(255, 248, 240, 0.86); font-size: 13px; overflow-wrap: anywhere; }
 
 .modal-meta:empty,
 .modal-meta[hidden] {
@@ -412,19 +418,36 @@ button[disabled] {
 .modal {
   position: fixed;
   inset: 0;
+  z-index: 100;
   background: rgba(23, 17, 13, 0.8);
   display: grid;
   place-items: center;
   padding: 30px;
+  overflow: auto;
 }
 
 .modal.hidden {
   display: none;
 }
 
-.modal img {
-  max-width: min(92vw, 1080px);
-  max-height: 78vh;
+.modal-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: fit-content;
+  max-width: min(92vw, 1280px);
+  max-height: 86dvh;
+  line-height: 0;
+}
+
+.modal-stage img {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 86dvh;
+  display: block;
+  object-fit: contain;
+  object-position: center;
   border-radius: 22px;
 }
 
@@ -448,7 +471,7 @@ button[disabled] {
 }
 
 @media (max-width: 720px) {
-  .public-nav > div { width:calc(100vw - 28px); min-height:56px; }.public-nav nav a:last-child { display:none; }
+  .public-nav > div { width:calc(100vw - 28px); min-height:56px; }
   .editorial-intro { padding:28px 0 24px; }.editorial-intro h1 { font-size:46px; }
   .album-grid { grid-template-columns:1fr 1fr; gap:12px; }.album-card { border-radius:16px; }.album-card-copy { padding:12px; }
   .app-shell {
@@ -473,6 +496,24 @@ button[disabled] {
 
   .gallery-grid {
     column-count: 2;
+  }
+
+  .modal {
+    padding: 16px;
+  }
+
+  .modal-stage {
+    max-width: 94vw;
+    max-height: 84dvh;
+  }
+
+  .modal-stage img {
+    max-height: 84dvh;
+    border-radius: 16px;
+  }
+
+  .modal-meta {
+    padding: 44px 16px 15px;
   }
 
 

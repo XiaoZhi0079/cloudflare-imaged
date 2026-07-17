@@ -4,8 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Gallery 图片工作台</title>
-    <link rel="stylesheet" href="/assets/admin/admin.css?v=20260717-albums-gallery-redesign" />
-    <link rel="stylesheet" href="/assets/admin/workbench.css?v=20260717-albums-gallery-redesign" />
+    <link rel="stylesheet" href="/assets/admin/admin.css?v=20260717-centered-viewer-admin-modal" />
+    <link rel="stylesheet" href="/assets/admin/workbench.css?v=20260717-centered-viewer-admin-modal" />
   </head>
   <body class="admin-body" data-admin-page="library">
     <section id="admin-auth-view" class="admin-auth-view" hidden>
@@ -38,9 +38,9 @@
       </main>
       <section id="admin-bulk-toolbar" class="admin-bulk-toolbar" hidden><strong id="bulk-selected-count">已选择 0 张</strong><div><button id="bulk-assign-tags" type="button">设置标签</button><button id="bulk-assign-category" type="button">移动分类</button><button id="bulk-delete" class="admin-button-danger" type="button">删除</button><button id="bulk-clear-selection" type="button">取消选择</button></div></section>
       <section id="admin-upload-dialog" class="admin-overlay" hidden aria-label="上传图片"></section>
-      <section id="admin-detail-drawer" class="admin-drawer" hidden role="dialog" aria-modal="true" aria-labelledby="detail-title"></section>
+      <section id="admin-detail-overlay" class="admin-overlay admin-detail-overlay" hidden></section>
       <div id="admin-dialog-host"></div><div id="admin-toast-host" class="admin-toast-host" aria-live="polite"></div>
     </div>
-    <script type="module" src="/assets/admin/library-page.js?v=20260717-albums-gallery-redesign"></script>
+    <script type="module" src="/assets/admin/library-page.js?v=20260717-centered-viewer-admin-modal"></script>
   </body>
 </html>

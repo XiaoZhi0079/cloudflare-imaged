@@ -1,5 +1,5 @@
-import { fetchPublicJson } from "./public-data.js?v=20260717-albums-gallery-redesign";
-import { renderGalleryCards } from "./templates.js?v=20260717-albums-gallery-redesign";
+import { fetchPublicJson } from "./public-data.js?v=20260717-centered-viewer-admin-modal";
+import { renderGalleryCards } from "./templates.js?v=20260717-centered-viewer-admin-modal";
 
 const title = document.querySelector("#album-title");
 const description = document.querySelector("#album-description");

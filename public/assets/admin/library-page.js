@@ -29,7 +29,7 @@ const elements = {
   loadMore: document.querySelector("#admin-load-more"),
   uploadOpen: document.querySelector("#admin-upload-open"),
   uploadDialog: document.querySelector("#admin-upload-dialog"),
-  detailDrawer: document.querySelector("#admin-detail-drawer"),
+  detailOverlay: document.querySelector("#admin-detail-overlay"),
   bulkToolbar: document.querySelector("#admin-bulk-toolbar"),
   bulkCount: document.querySelector("#bulk-selected-count"),
   bulkTags: document.querySelector("#bulk-assign-tags"),
@@ -220,8 +220,8 @@ async function submitLogin(event) {
 }
 
 function closeDetail({ restoreFocus = true } = {}) {
-  elements.detailDrawer.hidden = true;
-  elements.detailDrawer.replaceChildren();
+  elements.detailOverlay.hidden = true;
+  elements.detailOverlay.replaceChildren();
   detailImageId = null;
   if (restoreFocus) detailOpener?.focus();
   detailOpener = null;
@@ -286,8 +286,15 @@ function openDetail(image, opener) {
   editPane.append(form);
   const workspace = createElement("div", { className: "admin-detail-workspace" });
   workspace.append(previewPane, editPane);
-  elements.detailDrawer.replaceChildren(header, workspace);
-  elements.detailDrawer.hidden = false;
+  const dialog = createElement("section", {
+    className: "admin-detail-dialog",
+    role: "dialog",
+    "aria-modal": "true",
+    "aria-labelledby": "detail-title",
+  });
+  dialog.append(header, workspace);
+  elements.detailOverlay.replaceChildren(dialog);
+  elements.detailOverlay.hidden = false;
   requestAnimationFrame(() => fileName.focus());
 }
 
@@ -672,10 +679,13 @@ elements.bulkTags.addEventListener("click", bulkAssignTags);
 elements.bulkCategory.addEventListener("click", bulkAssignCategory);
 elements.bulkDelete.addEventListener("click", bulkDelete);
 elements.uploadOpen.addEventListener("click", openUploadDialog);
+elements.detailOverlay.addEventListener("click", (event) => {
+  if (event.target === elements.detailOverlay) closeDetail();
+});
 document.addEventListener("keydown", (event) => {
   if (event.key === "Tab") {
     if (uploadSession) trapFocus(event, uploadSession.panel);
-    else if (detailImageId !== null) trapFocus(event, elements.detailDrawer);
+    else if (detailImageId !== null) trapFocus(event, elements.detailOverlay);
     return;
   }
   if (event.key === "Escape") {

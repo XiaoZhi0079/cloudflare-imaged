@@ -15,17 +15,17 @@
 **Files:**
 - Modify: `tests/templates.test.js`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add assertions that both public pages wrap `#modal-image` and `.modal-meta` in `.modal-stage`, that the stage is centered, that metadata is absolutely positioned with a transparent background and text shadow, and that the new navigation/copy contracts are present while removed text is absent.
 
-- [ ] **Step 2: Run the public template tests and verify RED**
+- [x] **Step 2: Run the public template tests and verify RED**
 
 Run: `node --test --test-name-pattern="public image viewer|public gallery copy" tests/templates.test.js`
 
 Expected: FAIL because `.modal-stage`, the new copy, and the simplified navigation do not exist yet.
 
-- [ ] **Step 3: Implement the public markup and CSS**
+- [x] **Step 3: Implement the public markup and CSS**
 
 In `public/index.html` and `public/album.html`, use:
 
@@ -49,7 +49,7 @@ In `public/assets/main.css`, make `.modal-stage` relative and shrink-wrapped, ke
 
 Update the homepage navigation, remove both Chinese section headings, and replace the intro paragraph with the approved poetic copy.
 
-- [ ] **Step 4: Update public cache versions and verify GREEN**
+- [x] **Step 4: Update public cache versions and verify GREEN**
 
 Use `20260717-centered-viewer-admin-modal` in `public/index.html`, `public/album.html`, `public/assets/gallery.js`, and `public/assets/album-page.js`, then rerun the focused test command and expect PASS.
 
@@ -59,17 +59,17 @@ Use `20260717-centered-viewer-admin-modal` in `public/index.html`, `public/album
 - Modify: `tests/admin-library.test.js`
 - Modify: `tests/templates.test.js`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Assert that the library HTML exposes `#admin-detail-overlay` with overlay classes, the controller builds `.admin-detail-dialog` with dialog semantics and closes on backdrop clicks, the CSS defines a centered 1180px panel, retains the desktop two-column workspace, switches to one column below 900px, and becomes full-screen below 720px. Assert that drawer selectors and names are absent.
 
-- [ ] **Step 2: Run focused admin tests and verify RED**
+- [x] **Step 2: Run focused admin tests and verify RED**
 
 Run: `node --test --test-name-pattern="image detail uses|admin controls expose" tests/admin-library.test.js tests/templates.test.js`
 
 Expected: FAIL because the current implementation still uses `admin-detail-drawer` and `.admin-drawer`.
 
-- [ ] **Step 3: Implement the centered responsive dialog**
+- [x] **Step 3: Implement the centered responsive dialog**
 
 Rename the static host to `#admin-detail-overlay` with `admin-overlay admin-detail-overlay`. In `openDetail`, create:
 
@@ -86,7 +86,7 @@ elements.detailOverlay.replaceChildren(dialog);
 
 Retarget close, focus trap, Escape, and focus restoration logic to `detailOverlay`, and add backdrop-click closure.
 
-- [ ] **Step 4: Implement responsive modal CSS and verify GREEN**
+- [x] **Step 4: Implement responsive modal CSS and verify GREEN**
 
 Define the dialog at `width:min(1180px,calc(100vw - 40px))` and `max-height:calc(100dvh - 40px)`, preserve contained previews, use one column below 900px, and a borderless full-screen panel below 720px. Update the image-library asset versions to `20260717-centered-viewer-admin-modal`, then rerun the focused test command and expect PASS.
 
@@ -95,13 +95,13 @@ Define the dialog at `width:min(1180px,calc(100vw - 40px))` and `max-height:calc
 **Files:**
 - Modify: `docs/superpowers/plans/2026-07-17-centered-viewer-admin-modal.md`
 
-- [ ] **Step 1: Run the full test suite**
+- [x] **Step 1: Run the full test suite**
 
 Run: `npm test`
 
 Expected: all tests pass with zero failures.
 
-- [ ] **Step 2: Review the complete diff**
+- [x] **Step 2: Review the complete diff**
 
 Run: `git diff --check` and `git diff --stat && git diff`.
 
@@ -114,4 +114,3 @@ Commit the implementation, then fast-forward `origin/main` from the isolated bra
 - [ ] **Step 4: Verify deployment without images**
 
 Check GitHub Actions and request only public HTML/CSS/JS text from `https://gallery.140079.xyz`. Confirm the new release version, copy, modal-stage rules, admin dialog rules, and absence of the removed navigation labels. Do not request image URLs or screenshots.
-
