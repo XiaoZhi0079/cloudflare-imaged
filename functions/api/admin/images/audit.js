@@ -9,7 +9,8 @@ function requireAuditAccess(request, env) {
   const adminFailure = requireAdminKey(request, env);
   if (!adminFailure) return null;
   const auditKey = request.headers.get("x-gallery-audit-key");
-  return env.GALLERY_AUDIT_KEY && auditKey === env.GALLERY_AUDIT_KEY
+  const configuredAuditKey = String(env.GALLERY_AUDIT_KEY ?? "").trim();
+  return configuredAuditKey && auditKey === configuredAuditKey
     ? null
     : adminFailure;
 }

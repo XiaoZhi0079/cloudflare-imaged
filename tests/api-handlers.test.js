@@ -755,7 +755,7 @@ test("admin image audit finds and repairs a unique D1 to R2 name mismatch", asyn
 test("admin image audit accepts an isolated maintenance key without replacing admin auth", async () => {
   const env = {
     ...createTestEnv(),
-    GALLERY_AUDIT_KEY: "one-time-audit-key",
+    GALLERY_AUDIT_KEY: "one-time-audit-key\r\n",
   };
   const response = await adminImagesAuditHandler({
     env,
