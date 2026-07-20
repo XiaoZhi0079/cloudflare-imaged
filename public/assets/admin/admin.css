@@ -22,10 +22,10 @@ a { color:inherit; text-decoration:none; }
 .admin-password-control { display:grid; grid-template-columns:minmax(0,1fr) auto; }
 .admin-password-control input { border-radius:6px 0 0 6px; }
 .admin-password-control button { border-left:0; border-radius:0 6px 6px 0; }
-.admin-topbar { min-height:58px; display:grid; grid-template-columns:minmax(160px,1fr) auto minmax(160px,1fr); align-items:center; gap:16px; padding:0 24px; border-bottom:1px solid var(--admin-line); background:var(--admin-panel); }
+.admin-topbar { min-height:66px; display:grid; grid-template-columns:minmax(160px,1fr) auto minmax(160px,1fr); align-items:center; gap:16px; padding:0 24px; border-bottom:1px solid var(--admin-line); background:var(--admin-panel); }
 .admin-brand { font-weight:850; }
 .admin-nav,.admin-top-actions { display:flex; align-items:center; gap:5px; }
-.admin-nav a { padding:9px 13px; border-radius:6px; color:var(--admin-muted); font-size:13px; font-weight:750; }
+.admin-nav a { min-height:44px; display:inline-flex; align-items:center; justify-content:center; padding:0 18px; border-radius:6px; color:var(--admin-muted); font-size:15px; font-weight:750; line-height:1.2; }
 .admin-nav a.is-active { background:var(--admin-accent); color:#fff; }
 .admin-top-actions { justify-self:end; font-size:13px; }
 .admin-top-actions button { min-height:36px; border:0; background:transparent; }

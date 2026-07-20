@@ -416,7 +416,7 @@ test("changed admin assets use targeted cache-busting versions", () => {
     Array(unchangedReferences.length).fill(filterSeparationVersion),
   );
 
-  const centeredModalVersion = "20260717-centered-viewer-admin-modal";
+  const centeredModalVersion = "20260721-admin-layout";
   const centeredModalReferences = [
     [libraryHtml, /href="\/assets\/admin\/admin\.css\?v=([^"]+)"/, "admin.css"],
     [settingsHtml, /href="\/assets\/admin\/admin\.css\?v=([^"]+)"/, "settings admin.css"],
@@ -448,7 +448,7 @@ test("changed admin assets use targeted cache-busting versions", () => {
     Array(libraryCardTagsReferences.length).fill(libraryCardTagsVersion),
   );
 
-  const albumsRedesignVersion = "20260720-tag-tree";
+  const albumsRedesignVersion = "20260721-admin-layout";
   const albumsRedesignReferences = [
     [settingsHtml, /href="\/assets\/admin\/settings\.css\?v=([^"]+)"/, "settings.css"],
     [featuredHtml, /href="\/assets\/admin\/settings\.css\?v=([^"]+)"/, "featured settings.css"],
