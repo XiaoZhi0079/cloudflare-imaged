@@ -2,20 +2,30 @@ import { createAdminApiClient, AdminUnauthorizedError } from "./api-client.js";
 import { createAdminKeyStore, fetchAdminTaxonomy } from "./auth.js";
 import { createDialogHost } from "./dialogs.js";
 import { createNotifier } from "./notifications.js";
-import { renderTaxonomyItem } from "./renderers/taxonomy-item.js";
+import { renderTagTreeGroup, renderTaxonomyItem } from "./renderers/taxonomy-item.js";
 import { createSettingsState } from "./settings-state.js";
 import { createSortableList } from "./sortable-list.js";
 
 const elements = {
-  authView: document.querySelector("#admin-auth-view"), app: document.querySelector("#admin-app"),
-  loginForm: document.querySelector("#admin-login-form"), loginButton: document.querySelector("#admin-login"),
-  loginError: document.querySelector("#admin-login-error"), keyInput: document.querySelector("#admin-key"),
-  passwordToggle: document.querySelector("[data-toggle-password]"), logout: document.querySelector("[data-admin-logout]"),
-  tabs: [...document.querySelectorAll("[data-settings-tab]")], create: document.querySelector("#taxonomy-create"),
-  search: document.querySelector("#taxonomy-search"), list: document.querySelector("#taxonomy-list"),
-  status: document.querySelector("#taxonomy-status"), reset: document.querySelector("#taxonomy-reset-order"),
-  save: document.querySelector("#taxonomy-save-order"), tagCount: document.querySelector("#tag-count"),
-  tagGroupCount: document.querySelector("#tag-group-count"), categoryCount: document.querySelector("#category-count"),
+  authView: document.querySelector("#admin-auth-view"),
+  app: document.querySelector("#admin-app"),
+  loginForm: document.querySelector("#admin-login-form"),
+  loginButton: document.querySelector("#admin-login"),
+  loginError: document.querySelector("#admin-login-error"),
+  keyInput: document.querySelector("#admin-key"),
+  passwordToggle: document.querySelector("[data-toggle-password]"),
+  logout: document.querySelector("[data-admin-logout]"),
+  tabs: [...document.querySelectorAll("[data-settings-tab]")],
+  create: document.querySelector("#taxonomy-create"),
+  createGroup: document.querySelector("#tag-group-create"),
+  search: document.querySelector("#taxonomy-search"),
+  list: document.querySelector("#taxonomy-list"),
+  status: document.querySelector("#taxonomy-status"),
+  reset: document.querySelector("#taxonomy-reset-order"),
+  save: document.querySelector("#taxonomy-save-order"),
+  tagCount: document.querySelector("#tag-count"),
+  tagGroupCount: document.querySelector("#tag-group-count"),
+  categoryCount: document.querySelector("#category-count"),
 };
 
 const keyStore = createAdminKeyStore();
@@ -25,155 +35,541 @@ let state = createSettingsState();
 let activeType = "tags";
 let sortable = null;
 let busy = false;
+let draggedTagId = null;
+const expandedGroups = new Set();
 
 function showAuth(message = "") {
-  elements.app.hidden = true; elements.authView.hidden = false; elements.loginError.textContent = message;
-  elements.keyInput.value = keyStore.get(); requestAnimationFrame(() => elements.keyInput.focus());
+  elements.app.hidden = true;
+  elements.authView.hidden = false;
+  elements.loginError.textContent = message;
+  elements.keyInput.value = keyStore.get();
+  requestAnimationFrame(() => elements.keyInput.focus());
 }
 
-function showApp() { elements.authView.hidden = true; elements.app.hidden = false; }
+function showApp() {
+  elements.authView.hidden = true;
+  elements.app.hidden = false;
+}
 
 const client = createAdminApiClient({
   getKey: () => keyStore.get(),
-  onUnauthorized: () => { keyStore.clear(); showAuth("登录状态已失效，请重新输入管理密钥。"); },
+  onUnauthorized: () => {
+    keyStore.clear();
+    showAuth("登录状态已失效，请重新输入管理密钥。");
+  },
 });
 
-function messageFor(error) { return error?.message || "操作失败，请稍后重试。"; }
+function messageFor(error) {
+  return error?.message || "操作失败，请稍后重试。";
+}
+
+function orderType() {
+  return activeType === "tags" ? "tagGroups" : "categories";
+}
 
 function setBusy(next) {
-  busy = next; elements.create.disabled = next; elements.tabs.forEach((tab) => { tab.disabled = next; }); updateOrderActions();
-}
-
-function updateOrderActions() {
-  const dirty = state.isDirty(activeType); const filtering = Boolean(elements.search.value.trim());
-  elements.reset.disabled = busy || !dirty; elements.save.disabled = busy || !dirty;
-  elements.status.textContent = dirty ? "顺序已调整，保存后生效。" : filtering ? "清除搜索后可调整顺序。" : "";
-}
-
-function visibleItems() {
-  const query = elements.search.value.trim().toLocaleLowerCase("zh-CN");
-  const items = state.getItems(activeType);
-  return query ? items.filter((item) => item.name.toLocaleLowerCase("zh-CN").includes(query)) : items;
-}
-
-function renderTaxonomy() {
-  const items = visibleItems(); const allItems = state.getItems(activeType); const filtering = Boolean(elements.search.value.trim());
-  const tags = state.getItems("tags");
-  elements.tagCount.textContent = tags.length;
-  elements.tagGroupCount.textContent = state.getItems("tagGroups").length;
-  elements.categoryCount.textContent = state.getItems("categories").length;
-  elements.tabs.forEach((tab) => { const selected = tab.dataset.settingsTab === activeType; tab.classList.toggle("is-active", selected); tab.setAttribute("aria-selected", String(selected)); });
-  const labels = { tags: ["新增标签", "搜索标签名称"], tagGroups: ["新增标签分类", "搜索标签分类名称"], categories: ["新增主分类", "搜索分类名称"] };
-  elements.create.textContent = labels[activeType][0]; elements.search.placeholder = labels[activeType][1]; elements.list.classList.toggle("is-filtering", filtering);
-  elements.list.innerHTML = items.length ? items.map((item) => {
-    const index = allItems.findIndex((current) => current.id === item.id);
-    const enriched = activeType === "tagGroups" ? { ...item, tagCount: tags.filter((tag) => Number(tag.groupId ?? tag.group_id) === Number(item.id)).length } : item;
-    return renderTaxonomyItem({ ...enriched, sortOrder: index + 1 }, activeType, { canMoveUp: !filtering && index > 0, canMoveDown: !filtering && index < allItems.length - 1 });
-  }).join("") : `<div class="admin-empty">${elements.search.value ? "没有匹配结果" : "暂无内容"}</div>`;
-  if (filtering) elements.list.querySelectorAll("[data-sort-handle]").forEach((handle) => { handle.disabled = true; handle.title = "清除搜索后可调整顺序"; });
+  busy = next;
+  elements.create.disabled = next;
+  elements.createGroup.disabled = next;
+  elements.tabs.forEach((tab) => { tab.disabled = next; });
   updateOrderActions();
 }
 
-function render() { renderTaxonomy(); sortable?.destroy(); sortable = createSortableList({
-  container: elements.list, getItems: () => state.getItems(activeType), setItems: (items) => state.setDraft(activeType, items),
-  onChange: (_items, { phase }) => { if (phase === "preview") updateOrderActions(); if (phase === "end" || phase === "cancel") render(); },
-}); }
+function updateOrderActions() {
+  const dirty = state.isDirty(orderType());
+  const filtering = Boolean(elements.search.value.trim());
+  elements.reset.disabled = busy || !dirty;
+  elements.save.disabled = busy || !dirty;
+  elements.status.textContent = dirty
+    ? "顺序已调整，保存后生效。"
+    : filtering ? "清除搜索后可调整顺序。" : "";
+}
+
+function tagGroupId(tag) {
+  return Number(tag.groupId ?? tag.group?.id);
+}
+
+function groupedTags() {
+  const tagsByGroup = new Map();
+  for (const tag of state.getItems("tags")) {
+    const id = tagGroupId(tag);
+    const tags = tagsByGroup.get(id) ?? [];
+    tags.push(tag);
+    tagsByGroup.set(id, tags);
+  }
+  return state.getItems("tagGroups").map((group) => ({
+    ...group,
+    tags: tagsByGroup.get(Number(group.id)) ?? [],
+  }));
+}
+
+function filteredTagGroups() {
+  const query = elements.search.value.trim().toLocaleLowerCase("zh-CN");
+  return groupedTags().map((group) => {
+    if (!query || group.name.toLocaleLowerCase("zh-CN").includes(query)) return group;
+    return { ...group, tags: group.tags.filter((tag) => tag.name.toLocaleLowerCase("zh-CN").includes(query)) };
+  }).filter((group) => !query || group.name.toLocaleLowerCase("zh-CN").includes(query) || group.tags.length);
+}
+
+function visibleCategoryItems() {
+  const query = elements.search.value.trim().toLocaleLowerCase("zh-CN");
+  const items = state.getItems("categories");
+  return query ? items.filter((item) => item.name.toLocaleLowerCase("zh-CN").includes(query)) : items;
+}
+
+function renderTags() {
+  const groups = filteredTagGroups();
+  const allGroups = state.getItems("tagGroups");
+  elements.list.classList.remove("is-filtering");
+  elements.list.innerHTML = groups.length
+    ? `<div class="tag-tree-list">${groups.map((group) => {
+      const index = allGroups.findIndex((item) => Number(item.id) === Number(group.id));
+      const expanded = elements.search.value.trim()
+        ? true
+        : expandedGroups.has(Number(group.id));
+      return renderTagTreeGroup({ ...group, sortOrder: index + 1 }, group.tags, {
+        expanded,
+        canMoveUp: !elements.search.value.trim() && index > 0,
+        canMoveDown: !elements.search.value.trim() && index < allGroups.length - 1,
+      });
+    }).join("")}</div>`
+    : `<div class="admin-empty">${elements.search.value ? "没有匹配结果" : "暂无标签分类"}</div>`;
+}
+
+function renderCategories() {
+  const items = visibleCategoryItems();
+  const allItems = state.getItems("categories");
+  const filtering = Boolean(elements.search.value.trim());
+  elements.list.classList.toggle("is-filtering", filtering);
+  elements.list.innerHTML = items.length
+    ? items.map((item) => {
+      const index = allItems.findIndex((current) => current.id === item.id);
+      return renderTaxonomyItem({ ...item, sortOrder: index + 1 }, "categories", {
+        canMoveUp: !filtering && index > 0,
+        canMoveDown: !filtering && index < allItems.length - 1,
+      });
+    }).join("")
+    : `<div class="admin-empty">${elements.search.value ? "没有匹配结果" : "暂无内容"}</div>`;
+  if (filtering) {
+    elements.list.querySelectorAll("[data-sort-handle]").forEach((handle) => {
+      handle.disabled = true;
+      handle.title = "清除搜索后可调整顺序";
+    });
+  }
+}
+
+function renderTaxonomy() {
+  elements.tagCount.textContent = state.getItems("tags").length;
+  elements.tagGroupCount.textContent = `${state.getItems("tagGroups").length} 类`;
+  elements.categoryCount.textContent = state.getItems("categories").length;
+  elements.tabs.forEach((tab) => {
+    const selected = tab.dataset.settingsTab === activeType;
+    tab.classList.toggle("is-active", selected);
+    tab.setAttribute("aria-selected", String(selected));
+  });
+  document.body.dataset.settingsType = activeType;
+  elements.create.textContent = activeType === "tags" ? "新增标签" : "新增主分类";
+  elements.search.placeholder = activeType === "tags" ? "搜索标签或分类" : "搜索分类名称";
+  if (activeType === "tags") renderTags(); else renderCategories();
+  updateOrderActions();
+}
+
+function render() {
+  sortable?.destroy();
+  sortable = null;
+  renderTaxonomy();
+  if (activeType === "categories") {
+    sortable = createSortableList({
+      container: elements.list,
+      getItems: () => state.getItems("categories"),
+      setItems: (items) => state.setDraft("categories", items),
+      onChange: (_items, { phase }) => {
+        if (phase === "preview") updateOrderActions();
+        if (phase === "end" || phase === "cancel") render();
+      },
+    });
+  }
+}
 
 async function authenticate(key) {
   keyStore.set(key);
-  const [taxonomy, { categories = [] }] = await Promise.all([fetchAdminTaxonomy(client), client.request("/api/admin/categories")]);
-  state = createSettingsState({ ...taxonomy, categories }); showApp(); render();
+  const [taxonomy, { categories = [] }] = await Promise.all([
+    fetchAdminTaxonomy(client),
+    client.request("/api/admin/categories"),
+  ]);
+  state = createSettingsState({ ...taxonomy, categories });
+  expandedGroups.clear();
+  for (const group of taxonomy.tagGroups) expandedGroups.add(Number(group.id));
+  showApp();
+  render();
 }
 
 async function submitLogin(event) {
-  event.preventDefault(); const key = elements.keyInput.value.trim();
-  if (!key) { elements.loginError.textContent = "请输入管理密钥。"; return; }
-  elements.loginButton.disabled = true; elements.loginError.textContent = "";
-  try { await authenticate(key); } catch (error) { keyStore.clear(); if (!(error instanceof AdminUnauthorizedError)) showAuth(messageFor(error)); }
-  finally { elements.loginButton.disabled = false; }
+  event.preventDefault();
+  const key = elements.keyInput.value.trim();
+  if (!key) {
+    elements.loginError.textContent = "请输入管理密钥。";
+    return;
+  }
+  elements.loginButton.disabled = true;
+  elements.loginError.textContent = "";
+  try {
+    await authenticate(key);
+  } catch (error) {
+    keyStore.clear();
+    if (!(error instanceof AdminUnauthorizedError)) showAuth(messageFor(error));
+  } finally {
+    elements.loginButton.disabled = false;
+  }
 }
 
-async function tagFormDialog(item = null) {
-  const body = document.createElement("div"); body.className = "site-form";
-  const nameLabel = document.createElement("label"); nameLabel.className = "admin-field";
-  const name = document.createElement("input"); name.value = item?.name ?? ""; name.required = true;
+async function tagFormDialog(item = null, initialGroupId = null) {
+  const body = document.createElement("div");
+  body.className = "site-form";
+  const nameLabel = document.createElement("label");
+  nameLabel.className = "admin-field";
+  const name = document.createElement("input");
+  name.value = item?.name ?? "";
+  name.required = true;
   nameLabel.append(Object.assign(document.createElement("span"), { textContent: "标签名称" }), name);
-  const groupLabel = document.createElement("label"); groupLabel.className = "admin-field";
+  const groupLabel = document.createElement("label");
+  groupLabel.className = "admin-field";
   const group = document.createElement("select");
-  for (const tagGroup of state.getItems("tagGroups")) { const option = new Option(tagGroup.name, tagGroup.id); option.selected = Number(tagGroup.id) === Number(item?.groupId ?? item?.group?.id); group.append(option); }
+  const selectedGroupId = item?.groupId ?? item?.group?.id ?? initialGroupId;
+  for (const tagGroup of state.getItems("tagGroups")) {
+    const option = new Option(tagGroup.name, tagGroup.id);
+    option.selected = Number(tagGroup.id) === Number(selectedGroupId);
+    group.append(option);
+  }
   groupLabel.append(Object.assign(document.createElement("span"), { textContent: "标签分类" }), group);
   body.append(nameLabel, groupLabel);
-  return dialogs.open({ title: item ? "编辑标签" : "新增标签", body, confirmLabel: item ? "保存" : "新增", valueReader: () => ({ name: name.value.trim(), groupId: Number(group.value) }) });
+  return dialogs.open({
+    title: item ? "编辑标签" : "新增标签",
+    body,
+    confirmLabel: item ? "保存" : "新增",
+    valueReader: () => ({ name: name.value.trim(), groupId: Number(group.value) }),
+  });
 }
 
-async function createItem() {
-  if (activeType === "tags") {
-    if (!state.getItems("tagGroups").length) { notifier.error("请先创建标签分类。"); return; }
-    const values = await tagFormDialog(); if (!values?.name || !values.groupId) return;
-    setBusy(true);
-    try { const { tag } = await client.request("/api/admin/tags", { method: "POST", body: JSON.stringify({ ...values, sortOrder: state.getItems("tags").length + 1, isVisible: true }) }); state.appendItem("tags", tag); render(); notifier.success(`已新增标签：${tag.name}`); }
-    catch (error) { if (!(error instanceof AdminUnauthorizedError)) notifier.error(messageFor(error)); } finally { setBusy(false); }
+async function createTag(initialGroupId = null) {
+  if (!state.getItems("tagGroups").length) {
+    notifier.error("请先创建标签分类。");
     return;
   }
-  if (activeType === "tagGroups") {
-    const name = await dialogs.textInput({ title: "新增标签分类", label: "分类名称", confirmLabel: "新增" }); if (!name) return;
-    setBusy(true);
-    try { const { tagGroup } = await client.request("/api/admin/tag-groups", { method: "POST", body: JSON.stringify({ name, sortOrder: state.getItems("tagGroups").length + 1 }) }); state.appendItem("tagGroups", tagGroup); render(); notifier.success(`已新增标签分类：${tagGroup.name}`); }
-    catch (error) { if (!(error instanceof AdminUnauthorizedError)) notifier.error(messageFor(error)); } finally { setBusy(false); }
-    return;
+  const values = await tagFormDialog(null, initialGroupId);
+  if (!values?.name || !values.groupId) return;
+  setBusy(true);
+  try {
+    const { tag } = await client.request("/api/admin/tags", {
+      method: "POST",
+      body: JSON.stringify({ ...values, sortOrder: state.getItems("tags").length + 1, isVisible: true }),
+    });
+    state.appendItem("tags", tag);
+    expandedGroups.add(Number(values.groupId));
+    render();
+    notifier.success(`已新增标签：${tag.name}`);
+  } catch (error) {
+    if (!(error instanceof AdminUnauthorizedError)) notifier.error(messageFor(error));
+  } finally {
+    setBusy(false);
   }
-  const name = await dialogs.textInput({ title: "新增主分类", label: "分类名称", confirmLabel: "下一步" }); if (!name) return;
-  const directorySlug = await dialogs.textInput({ title: "设置目录", label: "目录名称", helper: "创建后不可在管理台修改。", confirmLabel: "新增" }); if (!directorySlug) return;
-  setBusy(true);
-  try { const { category } = await client.request("/api/admin/categories", { method: "POST", body: JSON.stringify({ name, directorySlug, sortOrder: state.getItems("categories").length + 1 }) }); state.appendItem("categories", category); render(); notifier.success(`已新增主分类：${category.name}`); }
-  catch (error) { if (!(error instanceof AdminUnauthorizedError)) notifier.error(messageFor(error)); } finally { setBusy(false); }
 }
 
-async function renameItem(item) {
-  const values = activeType === "tags" ? await tagFormDialog(item) : { name: await dialogs.textInput({ title: `重命名${activeType === "tagGroups" ? "标签分类" : "主分类"}`, label: "名称", value: item.name }) };
-  if (!values?.name || (values.name === item.name && activeType !== "tags" && values.groupId === undefined) || (activeType === "tags" && values.name === item.name && Number(values.groupId) === Number(item.groupId ?? item.group?.id))) return;
+async function createTagGroup() {
+  const name = await dialogs.textInput({ title: "新增标签分类", label: "分类名称", confirmLabel: "新增" });
+  if (!name) return;
   setBusy(true);
   try {
-    const path = activeType === "tags" ? "/api/admin/tags" : activeType === "tagGroups" ? "/api/admin/tag-groups" : "/api/admin/categories";
-    const payload = await client.request(path, { method: "PATCH", body: JSON.stringify({ id: item.id, ...values }) });
-    const updated = payload[activeType === "tags" ? "tag" : activeType === "tagGroups" ? "tagGroup" : "category"];
-    state.replaceItem(activeType, updated); render(); notifier.success(`已更新：${updated.name}`);
-  } catch (error) { if (!(error instanceof AdminUnauthorizedError)) notifier.error(messageFor(error)); } finally { setBusy(false); }
+    const { tagGroup } = await client.request("/api/admin/tag-groups", {
+      method: "POST",
+      body: JSON.stringify({ name, sortOrder: state.getItems("tagGroups").length + 1 }),
+    });
+    state.appendItem("tagGroups", tagGroup);
+    expandedGroups.add(Number(tagGroup.id));
+    render();
+    notifier.success(`已新增标签分类：${tagGroup.name}`);
+  } catch (error) {
+    if (!(error instanceof AdminUnauthorizedError)) notifier.error(messageFor(error));
+  } finally {
+    setBusy(false);
+  }
 }
 
-async function toggleVisibility(item) {
-  setBusy(true);
-  try { const { tag } = await client.request("/api/admin/tags", { method: "PATCH", body: JSON.stringify({ id: item.id, isVisible: !item.isVisible }) }); state.replaceItem("tags", tag); render(); notifier.success(`${tag.name}已${tag.isVisible ? "显示" : "隐藏"}`); }
-  catch (error) { if (!(error instanceof AdminUnauthorizedError)) notifier.error(messageFor(error)); } finally { setBusy(false); }
-}
-
-async function deleteItem(item) {
-  const isGroup = activeType === "tagGroups"; const label = isGroup ? "标签分类" : activeType === "tags" ? "标签" : "主分类";
-  const confirmed = await dialogs.confirm({ title: `删除${label}`, message: `确定删除“${item.name}”吗？${isGroup ? "分类内必须没有标签。" : "图片不会被删除。"}`, confirmLabel: "删除", danger: true }); if (!confirmed) return;
+async function createCategory() {
+  const name = await dialogs.textInput({ title: "新增主分类", label: "分类名称", confirmLabel: "下一步" });
+  if (!name) return;
+  const directorySlug = await dialogs.textInput({ title: "设置目录", label: "目录名称", helper: "创建后不可在管理台修改。", confirmLabel: "新增" });
+  if (!directorySlug) return;
   setBusy(true);
   try {
-    const path = isGroup ? "/api/admin/tag-groups" : activeType === "tags" ? "/api/admin/tags" : "/api/admin/categories";
-    await client.request(path, { method: "DELETE", body: JSON.stringify({ id: item.id }) }); state.removeItem(activeType, item.id); render(); notifier.success(`已删除${label}：${item.name}`);
-  } catch (error) { if (!(error instanceof AdminUnauthorizedError)) notifier.error(messageFor(error)); } finally { setBusy(false); }
+    const { category } = await client.request("/api/admin/categories", {
+      method: "POST",
+      body: JSON.stringify({ name, directorySlug, sortOrder: state.getItems("categories").length + 1 }),
+    });
+    state.appendItem("categories", category);
+    render();
+    notifier.success(`已新增主分类：${category.name}`);
+  } catch (error) {
+    if (!(error instanceof AdminUnauthorizedError)) notifier.error(messageFor(error));
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function renameTag(tag) {
+  const values = await tagFormDialog(tag);
+  if (!values?.name || (values.name === tag.name && Number(values.groupId) === tagGroupId(tag))) return;
+  setBusy(true);
+  try {
+    const { tag: updated } = await client.request("/api/admin/tags", {
+      method: "PATCH",
+      body: JSON.stringify({ id: tag.id, ...values }),
+    });
+    state.replaceItem("tags", updated);
+    expandedGroups.add(Number(values.groupId));
+    render();
+    notifier.success(`已更新标签：${updated.name}`);
+  } catch (error) {
+    if (!(error instanceof AdminUnauthorizedError)) notifier.error(messageFor(error));
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function renameGroup(group) {
+  const name = await dialogs.textInput({ title: "重命名标签分类", label: "分类名称", value: group.name });
+  if (!name || name === group.name) return;
+  setBusy(true);
+  try {
+    const { tagGroup } = await client.request("/api/admin/tag-groups", {
+      method: "PATCH",
+      body: JSON.stringify({ id: group.id, name }),
+    });
+    state.replaceItem("tagGroups", tagGroup);
+    render();
+    notifier.success(`已重命名为：${tagGroup.name}`);
+  } catch (error) {
+    if (!(error instanceof AdminUnauthorizedError)) notifier.error(messageFor(error));
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function renameCategory(category) {
+  const name = await dialogs.textInput({ title: "重命名主分类", label: "名称", value: category.name });
+  if (!name || name === category.name) return;
+  setBusy(true);
+  try {
+    const { category: updated } = await client.request("/api/admin/categories", {
+      method: "PATCH",
+      body: JSON.stringify({ id: category.id, name }),
+    });
+    state.replaceItem("categories", updated);
+    render();
+    notifier.success(`已重命名为：${updated.name}`);
+  } catch (error) {
+    if (!(error instanceof AdminUnauthorizedError)) notifier.error(messageFor(error));
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function toggleVisibility(tag) {
+  setBusy(true);
+  try {
+    const { tag: updated } = await client.request("/api/admin/tags", {
+      method: "PATCH",
+      body: JSON.stringify({ id: tag.id, isVisible: !tag.isVisible }),
+    });
+    state.replaceItem("tags", updated);
+    render();
+    notifier.success(`${updated.name}已${updated.isVisible ? "显示" : "隐藏"}`);
+  } catch (error) {
+    if (!(error instanceof AdminUnauthorizedError)) notifier.error(messageFor(error));
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function deleteTag(tag) {
+  const confirmed = await dialogs.confirm({ title: "删除标签", message: `确定删除“${tag.name}”吗？图片不会被删除。`, confirmLabel: "删除", danger: true });
+  if (!confirmed) return;
+  setBusy(true);
+  try {
+    await client.request("/api/admin/tags", { method: "DELETE", body: JSON.stringify({ id: tag.id }) });
+    state.removeItem("tags", tag.id);
+    render();
+    notifier.success(`已删除标签：${tag.name}`);
+  } catch (error) {
+    if (!(error instanceof AdminUnauthorizedError)) notifier.error(messageFor(error));
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function deleteGroup(group) {
+  const confirmed = await dialogs.confirm({ title: "删除标签分类", message: `确定删除“${group.name}”吗？分类内必须没有标签。`, confirmLabel: "删除", danger: true });
+  if (!confirmed) return;
+  setBusy(true);
+  try {
+    await client.request("/api/admin/tag-groups", { method: "DELETE", body: JSON.stringify({ id: group.id }) });
+    state.removeItem("tagGroups", group.id);
+    expandedGroups.delete(Number(group.id));
+    render();
+    notifier.success(`已删除标签分类：${group.name}`);
+  } catch (error) {
+    if (!(error instanceof AdminUnauthorizedError)) notifier.error(messageFor(error));
+  } finally {
+    setBusy(false);
+  }
+}
+
+function moveDraftItem(type, id, direction) {
+  const items = [...state.getItems(type)];
+  const index = items.findIndex((item) => Number(item.id) === Number(id));
+  const target = index + direction;
+  if (index < 0 || target < 0 || target >= items.length) return;
+  [items[index], items[target]] = [items[target], items[index]];
+  state.setDraft(type, items);
+  render();
+}
+
+async function moveTagToGroup(tagId, groupId) {
+  const tag = state.getItems("tags").find((item) => Number(item.id) === Number(tagId));
+  if (!tag || tagGroupId(tag) === Number(groupId)) return;
+  setBusy(true);
+  try {
+    const { tag: updated } = await client.request("/api/admin/tags", {
+      method: "PATCH",
+      body: JSON.stringify({ id: tag.id, groupId: Number(groupId) }),
+    });
+    state.replaceItem("tags", updated);
+    expandedGroups.add(Number(groupId));
+    render();
+    notifier.success(`已将“${updated.name}”移入新的标签分类`);
+  } catch (error) {
+    if (!(error instanceof AdminUnauthorizedError)) notifier.error(messageFor(error));
+  } finally {
+    setBusy(false);
+  }
 }
 
 async function saveOrder() {
-  const type = activeType; setBusy(true);
-  try { const payload = await client.request(`/api/admin/${type === "tagGroups" ? "tag-groups" : type}/reorder`, { method: "PATCH", body: JSON.stringify({ items: state.serialize(type) }) }); state.commitDraft(type, payload[type]); render(); notifier.success("排序已保存"); }
-  catch (error) { if (!(error instanceof AdminUnauthorizedError)) notifier.error(messageFor(error)); updateOrderActions(); } finally { setBusy(false); }
+  const type = orderType();
+  setBusy(true);
+  try {
+    const endpoint = type === "tagGroups" ? "tag-groups" : type;
+    const payload = await client.request(`/api/admin/${endpoint}/reorder`, {
+      method: "PATCH",
+      body: JSON.stringify({ items: state.serialize(type) }),
+    });
+    state.commitDraft(type, payload[type]);
+    render();
+    notifier.success("排序已保存");
+  } catch (error) {
+    if (!(error instanceof AdminUnauthorizedError)) notifier.error(messageFor(error));
+    updateOrderActions();
+  } finally {
+    setBusy(false);
+  }
 }
 
 elements.loginForm.addEventListener("submit", submitLogin);
-elements.passwordToggle.addEventListener("click", () => { const visible = elements.keyInput.type === "text"; elements.keyInput.type = visible ? "password" : "text"; elements.passwordToggle.textContent = visible ? "显示" : "隐藏"; elements.passwordToggle.setAttribute("aria-label", visible ? "显示管理密钥" : "隐藏管理密钥"); });
-elements.logout.addEventListener("click", () => { keyStore.clear(); state = createSettingsState(); showAuth(); });
-elements.tabs.forEach((tab) => tab.addEventListener("click", () => { activeType = tab.dataset.settingsTab; elements.search.value = ""; render(); }));
-elements.search.addEventListener("input", render); elements.create.addEventListener("click", createItem);
-elements.reset.addEventListener("click", () => { state.resetDraft(activeType); render(); }); elements.save.addEventListener("click", saveOrder);
+elements.passwordToggle.addEventListener("click", () => {
+  const visible = elements.keyInput.type === "text";
+  elements.keyInput.type = visible ? "password" : "text";
+  elements.passwordToggle.textContent = visible ? "显示" : "隐藏";
+  elements.passwordToggle.setAttribute("aria-label", visible ? "显示管理密钥" : "隐藏管理密钥");
+});
+elements.logout.addEventListener("click", () => {
+  keyStore.clear();
+  state = createSettingsState();
+  showAuth();
+});
+elements.tabs.forEach((tab) => tab.addEventListener("click", () => {
+  activeType = tab.dataset.settingsTab;
+  elements.search.value = "";
+  render();
+}));
+elements.search.addEventListener("input", render);
+elements.create.addEventListener("click", () => activeType === "tags" ? createTag() : createCategory());
+elements.createGroup.addEventListener("click", createTagGroup);
+elements.reset.addEventListener("click", () => { state.resetDraft(orderType()); render(); });
+elements.save.addEventListener("click", saveOrder);
+
 elements.list.addEventListener("click", (event) => {
-  if (busy) return; const action = event.target.closest("[data-action]")?.dataset.action; const row = event.target.closest("[data-sort-id]"); if (!action || !row) return;
-  const item = state.getItems(activeType).find((candidate) => String(candidate.id) === row.dataset.sortId); if (!item) return;
-  if (action === "move-up" || action === "move-down") { const items = [...state.getItems(activeType)]; const index = items.findIndex((candidate) => candidate.id === item.id); const target = index + (action === "move-up" ? -1 : 1); if (target < 0 || target >= items.length) return; [items[index], items[target]] = [items[target], items[index]]; state.setDraft(activeType, items); render(); requestAnimationFrame(() => elements.list.querySelector(`[data-sort-id="${item.id}"] [data-action="${action}"]`)?.focus()); return; }
-  if (action === "rename") renameItem(item); if (action === "toggle-visibility") toggleVisibility(item); if (action === "delete") deleteItem(item);
+  if (busy) return;
+  const action = event.target.closest("[data-action]")?.dataset.action;
+  if (!action) return;
+  const tagRow = event.target.closest("[data-tag-id]");
+  const groupRow = event.target.closest("[data-tag-group-id]");
+  if (activeType === "tags") {
+    if (action === "toggle-group" && groupRow) {
+      const id = Number(groupRow.dataset.tagGroupId);
+      if (expandedGroups.has(id)) expandedGroups.delete(id); else expandedGroups.add(id);
+      render();
+      return;
+    }
+    if (action === "add-tag" && groupRow) { createTag(Number(groupRow.dataset.tagGroupId)); return; }
+    if (action === "rename-group" && groupRow) { const group = state.getItems("tagGroups").find((item) => Number(item.id) === Number(groupRow.dataset.tagGroupId)); if (group) renameGroup(group); return; }
+    if (action === "delete-group" && groupRow) { const group = state.getItems("tagGroups").find((item) => Number(item.id) === Number(groupRow.dataset.tagGroupId)); if (group) deleteGroup(group); return; }
+    if ((action === "move-up" || action === "move-down") && groupRow) { moveDraftItem("tagGroups", groupRow.dataset.tagGroupId, action === "move-up" ? -1 : 1); return; }
+    if (tagRow) {
+      const tag = state.getItems("tags").find((item) => Number(item.id) === Number(tagRow.dataset.tagId));
+      if (!tag) return;
+      if (action === "edit-tag") renameTag(tag);
+      if (action === "toggle-visibility") toggleVisibility(tag);
+      if (action === "delete-tag") deleteTag(tag);
+    }
+    return;
+  }
+  const row = event.target.closest("[data-sort-id]");
+  if (!row) return;
+  const item = state.getItems("categories").find((candidate) => String(candidate.id) === row.dataset.sortId);
+  if (!item) return;
+  if (action === "move-up" || action === "move-down") moveDraftItem("categories", item.id, action === "move-up" ? -1 : 1);
+  if (action === "rename") renameCategory(item);
 });
 
-if (keyStore.get()) authenticate(keyStore.get()).catch((error) => { if (!(error instanceof AdminUnauthorizedError)) showAuth(messageFor(error)); }); else showAuth();
+elements.list.addEventListener("dragstart", (event) => {
+  const tagRow = event.target.closest("[data-tag-id]");
+  if (activeType !== "tags" || !tagRow || busy) return;
+  draggedTagId = Number(tagRow.dataset.tagId);
+  tagRow.classList.add("is-dragging");
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData("text/plain", String(draggedTagId));
+});
+elements.list.addEventListener("dragend", (event) => {
+  event.target.closest("[data-tag-id]")?.classList.remove("is-dragging");
+  elements.list.querySelectorAll(".is-drop-target").forEach((item) => item.classList.remove("is-drop-target"));
+  draggedTagId = null;
+});
+elements.list.addEventListener("dragover", (event) => {
+  const group = event.target.closest("[data-tag-drop-zone]");
+  if (activeType !== "tags" || !group || draggedTagId === null || busy) return;
+  event.preventDefault();
+  event.dataTransfer.dropEffect = "move";
+  group.classList.add("is-drop-target");
+});
+elements.list.addEventListener("dragleave", (event) => {
+  const group = event.target.closest("[data-tag-drop-zone]");
+  if (group && (!event.relatedTarget || !group.contains(event.relatedTarget))) group.classList.remove("is-drop-target");
+});
+elements.list.addEventListener("drop", (event) => {
+  const group = event.target.closest("[data-tag-drop-zone]");
+  if (activeType !== "tags" || !group || draggedTagId === null || busy) return;
+  event.preventDefault();
+  const tagId = draggedTagId;
+  draggedTagId = null;
+  group.classList.remove("is-drop-target");
+  elements.list.querySelectorAll(".is-dragging").forEach((item) => item.classList.remove("is-dragging"));
+  moveTagToGroup(tagId, Number(group.dataset.tagGroupId));
+});
+
+if (keyStore.get()) {
+  authenticate(keyStore.get()).catch((error) => {
+    if (!(error instanceof AdminUnauthorizedError)) showAuth(messageFor(error));
+  });
+} else {
+  showAuth();
+}

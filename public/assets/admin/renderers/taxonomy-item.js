@@ -30,3 +30,30 @@ export function renderTaxonomyItem(item, type, { canMoveUp = true, canMoveDown =
     <div class="taxonomy-actions"><button class="taxonomy-order-action" type="button" data-action="move-up" aria-label="上移 ${name}" title="上移"${canMoveUp ? "" : " disabled"}>↑</button><button class="taxonomy-order-action" type="button" data-action="move-down" aria-label="下移 ${name}" title="下移"${canMoveDown ? "" : " disabled"}>↓</button><button type="button" data-action="rename">${isTag ? "编辑" : "重命名"}</button>${tagActions}</div>
   </article>`;
 }
+
+export function renderTagTreeTag(tag) {
+  const id = escapeHtml(tag.id);
+  const name = escapeHtml(tag.name);
+  return `<article class="tag-tree-tag" draggable="true" data-tag-id="${id}" data-source-group-id="${escapeHtml(tag.groupId ?? tag.group?.id)}">
+    <span class="tag-tree-tag-drag" aria-hidden="true" title="拖动到其他标签分类">⋮⋮</span>
+    <div class="taxonomy-copy"><strong>${name}</strong><span class="taxonomy-visibility ${tag.isVisible ? "is-visible" : "is-hidden"}">${tag.isVisible ? "前台显示" : "已隐藏"}</span></div>
+    <div class="taxonomy-actions"><button type="button" data-action="edit-tag">编辑</button><button type="button" data-action="toggle-visibility">${tag.isVisible ? "隐藏" : "显示"}</button><button class="taxonomy-delete" type="button" data-action="delete-tag">删除</button></div>
+  </article>`;
+}
+
+export function renderTagTreeGroup(group, tags, { expanded = true, canMoveUp = true, canMoveDown = true } = {}) {
+  const id = escapeHtml(group.id);
+  const name = escapeHtml(group.name);
+  const children = tags.length
+    ? tags.map(renderTagTreeTag).join("")
+    : `<div class="tag-tree-empty">暂无标签，可拖入标签或直接新增。</div>`;
+  return `<section class="tag-tree-group${expanded ? " is-expanded" : ""}" data-sort-id="${id}" data-tag-group-id="${id}" data-tag-drop-zone="${id}">
+    <header class="tag-tree-group-header">
+      <button class="tag-tree-toggle" type="button" data-action="toggle-group" aria-expanded="${expanded}" aria-label="${expanded ? "收起" : "展开"} ${name}"><span aria-hidden="true">›</span></button>
+      <span class="taxonomy-order" aria-label="当前顺序">${escapeHtml(group.sortOrder)}</span>
+      <div class="taxonomy-copy"><strong>${name}</strong><span class="taxonomy-directory">${tags.length} 个标签</span></div>
+      <div class="taxonomy-actions"><button class="taxonomy-order-action" type="button" data-action="move-up" aria-label="上移 ${name}" title="上移"${canMoveUp ? "" : " disabled"}>↑</button><button class="taxonomy-order-action" type="button" data-action="move-down" aria-label="下移 ${name}" title="下移"${canMoveDown ? "" : " disabled"}>↓</button><button type="button" data-action="add-tag">新增标签</button><button type="button" data-action="rename-group">重命名</button><button class="taxonomy-delete" type="button" data-action="delete-group">删除</button></div>
+    </header>
+    <div class="tag-tree-children"${expanded ? "" : " hidden"}>${children}</div>
+  </section>`;
+}

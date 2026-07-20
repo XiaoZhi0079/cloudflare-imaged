@@ -191,6 +191,8 @@ test("labels and categories page excludes featured management", () => {
   assert.match(html, /<h1>标签与分类<\/h1>/);
   assert.match(html, /data-settings-tab="tags"/);
   assert.match(html, /data-settings-tab="categories"/);
+  assert.doesNotMatch(html, /data-settings-tab="tagGroups"/);
+  assert.match(html, /id="tag-group-create"/);
   assert.doesNotMatch(html, /data-settings-tab="site"|id="site-panel"/);
   assert.doesNotMatch(html, /site-issue-name|site-hero-copy|site-featured-list/);
 });
@@ -200,7 +202,11 @@ test("taxonomy entry has no featured or site mode", () => {
   assert.doesNotMatch(source, /site-settings\.js|createSiteSettingsController/);
   assert.doesNotMatch(source, /isSiteTab|ensureSiteController|sitePanel|siteController/);
   assert.doesNotMatch(source, /\/api\/admin\/site|\/api\/admin\/images/);
-  assert.match(source, /tagGroups: \["新增标签分类"/);
+  assert.match(source, /renderTagTreeGroup/);
+  assert.match(source, /addEventListener\("dragstart"/);
+  assert.match(source, /addEventListener\("dragover"/);
+  assert.match(source, /addEventListener\("drop"/);
+  assert.match(source, /moveTagToGroup/);
   assert.match(source, /groupId/);
 });
 
@@ -442,7 +448,7 @@ test("changed admin assets use targeted cache-busting versions", () => {
     Array(libraryCardTagsReferences.length).fill(libraryCardTagsVersion),
   );
 
-  const albumsRedesignVersion = "20260720-multilevel-tags";
+  const albumsRedesignVersion = "20260720-tag-tree";
   const albumsRedesignReferences = [
     [settingsHtml, /href="\/assets\/admin\/settings\.css\?v=([^"]+)"/, "settings.css"],
     [featuredHtml, /href="\/assets\/admin\/settings\.css\?v=([^"]+)"/, "featured settings.css"],
@@ -473,7 +479,7 @@ test("changed admin assets use targeted cache-busting versions", () => {
     Array(albumDraftReferences.length).fill(albumDraftVersion),
   );
 
-  const featuredNavigationVersion = "20260720-multilevel-tags";
+  const featuredNavigationVersion = "20260720-tag-tree";
   const navigationReferences = [
     [settingsHtml, /src="\/assets\/admin\/settings-page\.js\?v=([^"]+)"/, "settings-page.js"],
   ];
