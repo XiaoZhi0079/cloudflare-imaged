@@ -164,6 +164,7 @@ test("all admin pages use the shared authentication gate", () => {
     const html = readFileSync(new URL(path, import.meta.url), "utf8");
     const authView = html.match(/<section id="admin-auth-view"[^>]*>/)?.[0] ?? "";
     assert.ok(authView, "admin authentication fallback must exist");
+    assert.match(authView, /data-auth-fallback="visible"/);
     assert.doesNotMatch(authView, /\shidden(?:\s|>)/);
     assert.match(html, /id="admin-app"[^>]*hidden/);
     assert.match(html, /id="admin-key"/);
