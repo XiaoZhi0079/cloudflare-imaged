@@ -12,9 +12,13 @@ function renderMember(image, index, total, coverImageId) {
   const eligible = image?.featuredEligibility?.eligible === true;
   const isCover = Number(image.id) === Number(coverImageId);
   return `<article class="site-featured-item ${eligible ? "is-eligible" : ""}${isCover ? " is-cover" : ""}" data-member-id="${image.id}">
-    <img src="${escapeHtml(image.fileUrl)}" alt="${escapeHtml(image.fileName)}" loading="lazy" />
-    <div class="site-featured-copy"><strong>${escapeHtml(image.fileName)}${isCover ? ' <span class="album-cover-badge" data-role="cover-image">封面</span>' : ""}</strong><span>第 ${index + 1} 张 · ${escapeHtml(image.width ?? "?")}×${escapeHtml(image.height ?? "?")}</span></div>
-    <div class="site-featured-item-actions"><button data-action="move-up" ${index === 0 ? "disabled" : ""}>↑</button><button data-action="move-down" ${index === total - 1 ? "disabled" : ""}>↓</button><button data-action="remove" class="admin-button-danger">移除</button></div>
+    <div class="album-member-preview">
+      <img src="${escapeHtml(image.fileUrl)}" alt="${escapeHtml(image.fileName)}" loading="lazy" decoding="async" />
+      <button class="album-member-open" type="button" data-action="preview" aria-label="预览 ${escapeHtml(image.fileName)}"></button>
+      ${isCover ? '<span class="album-cover-badge" data-role="cover-image">封面</span>' : ""}
+    </div>
+    <div class="site-featured-copy"><strong title="${escapeHtml(image.fileName)}">${escapeHtml(image.fileName)}</strong><span>第 ${index + 1} 张 · ${escapeHtml(image.width ?? "?")}×${escapeHtml(image.height ?? "?")}</span></div>
+    <div class="site-featured-item-actions"><button type="button" data-action="move-up" aria-label="向前移动" title="向前移动" ${index === 0 ? "disabled" : ""}>↑</button><button type="button" data-action="move-down" aria-label="向后移动" title="向后移动" ${index === total - 1 ? "disabled" : ""}>↓</button><button type="button" data-action="remove" class="admin-button-danger">移除</button></div>
   </article>`;
 }
 
@@ -174,6 +178,15 @@ export function createAlbumManagementController({ root, client, dialogs, notifie
     dirty = true;
     renderEditor();
   }
+  function previewImage(image) {
+    const body = document.createElement("div");
+    body.className = "album-preview-stage";
+    const preview = document.createElement("img");
+    preview.src = image.fileUrl;
+    preview.alt = image.fileName || "图集图片预览";
+    body.append(preview);
+    return dialogs.open({ title: image.fileName || "图片预览", body, confirmLabel: "关闭", panelClass: "album-preview-dialog" });
+  }
   function bind() {
     elements.list.addEventListener("click", async (event) => { const button = event.target.closest("[data-album-id]"); if (button && !busy) await requestSelect(button.dataset.albumId); });
     elements.name.addEventListener("input", markEditorDirty);
@@ -187,6 +200,7 @@ export function createAlbumManagementController({ root, client, dialogs, notifie
     elements.members.addEventListener("click", (event) => {
       const action = event.target.closest("[data-action]")?.dataset.action; const row = event.target.closest("[data-member-id]"); if (!action || !row || !draft) return;
       const index = draft.images.findIndex((image) => Number(image.id) === Number(row.dataset.memberId));
+      if (action === "preview" && index >= 0) { previewImage(draft.images[index]); return; }
       if (action === "remove") draft.images.splice(index, 1);
       if (action === "move-up" && index > 0) [draft.images[index - 1], draft.images[index]] = [draft.images[index], draft.images[index - 1]];
       if (action === "move-down" && index < draft.images.length - 1) [draft.images[index + 1], draft.images[index]] = [draft.images[index], draft.images[index + 1]];

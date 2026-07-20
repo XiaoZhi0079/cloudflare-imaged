@@ -13,7 +13,7 @@ test("album management controller owns multi-album operations", () => {
     "/api/admin/albums", "/api/admin/images", "createAlbumManagementController",
     "create-album", "save-album", "delete-album", "add-images",
     "move-up", "move-down", "remove", "coverImageId", "isHome",
-    "轮播可用", "非轮播比例", "cover-image",
+    "轮播可用", "非轮播比例", "cover-image", "preview", "album-preview-stage",
   ]) assert.match(source, new RegExp(contract));
 });
 
@@ -26,6 +26,7 @@ class FakeElement {
     this.innerHTML = "";
     this.textContent = "";
     this.focused = false;
+    this.children = [];
   }
 
   addEventListener(type, listener) {
@@ -43,6 +44,10 @@ class FakeElement {
 
   focus() {
     this.focused = true;
+  }
+
+  append(...children) {
+    this.children.push(...children);
   }
 }
 
@@ -86,15 +91,23 @@ function createHarness({ confirmResult = true } = {}) {
   };
   const dialogs = {
     confirmCalls: 0,
+    openCalls: [],
     async confirm() {
       this.confirmCalls += 1;
       return confirmResult;
+    },
+    async open(options) {
+      this.openCalls.push(options);
+      return true;
     },
   };
   const previousDocument = globalThis.document;
   globalThis.document = {
     querySelector(selector) {
       return selector === '[data-action="create-album"]' ? elements.create : null;
+    },
+    createElement() {
+      return new FakeElement();
     },
   };
   const root = { querySelector: (selector) => elements[selector] };
@@ -152,6 +165,48 @@ test("album editor saves the current name description home state and cover", asy
       },
       { name: "新的首页名字", description: "新的图集介绍", isHome: false, coverImageId: 12 },
     );
+  } finally {
+    harness.restore();
+  }
+});
+
+test("album members render as previewable image cards", async () => {
+  const harness = createHarness();
+  try {
+    await harness.controller.load();
+    assert.match(harness.elements.members.innerHTML, /class="album-member-preview"/);
+    assert.match(harness.elements.members.innerHTML, /data-action="preview"/);
+    assert.match(harness.elements.members.innerHTML, /data-action="move-up"/);
+    assert.match(harness.elements.members.innerHTML, /data-action="remove"/);
+
+    const css = readFileSync(new URL("../public/assets/admin/settings.css", import.meta.url), "utf8");
+    assert.match(css, /#album-members\.site-featured-list\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(190px,\s*1fr\)\)/s);
+    assert.match(css, /#album-members \.album-member-preview\s*\{[^}]*aspect-ratio:\s*4\s*\/\s*3/s);
+    assert.match(css, /\.album-preview-stage img\s*\{[^}]*object-fit:\s*contain/s);
+  } finally {
+    harness.restore();
+  }
+});
+
+test("album member preview opens without making the album dirty", async () => {
+  const harness = createHarness();
+  try {
+    await harness.controller.load();
+    await harness.elements.members.emit("click", {
+      target: {
+        closest(selector) {
+          if (selector === "[data-action]") return { dataset: { action: "preview" } };
+          if (selector === "[data-member-id]") return { dataset: { memberId: "11" } };
+          return null;
+        },
+      },
+    });
+
+    assert.equal(harness.dialogs.openCalls.length, 1);
+    assert.equal(harness.dialogs.openCalls[0].body.className, "album-preview-stage");
+    assert.equal(harness.dialogs.openCalls[0].panelClass, "album-preview-dialog");
+    assert.equal(harness.elements.save.disabled, true);
+    assert.doesNotMatch(harness.elements.status.textContent, /未保存/);
   } finally {
     harness.restore();
   }

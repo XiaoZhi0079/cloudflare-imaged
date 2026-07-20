@@ -15,13 +15,14 @@ export function createDialogHost(host) {
     resolve(value);
   }
 
-  function open({ title, body, confirmLabel, danger = false, valueReader }) {
+  function open({ title, body, confirmLabel, danger = false, valueReader, panelClass = "" }) {
     if (active) close(null);
     return new Promise((resolve) => {
       const opener = document.activeElement;
       host.innerHTML = `<div class="admin-dialog-backdrop"><section class="admin-dialog" role="dialog" aria-modal="true" aria-labelledby="admin-dialog-title"><header><h2 id="admin-dialog-title"></h2><button type="button" data-dialog-close aria-label="关闭" title="关闭">×</button></header><div class="admin-dialog-body"></div><footer><button type="button" data-dialog-cancel>取消</button><button type="button" data-dialog-confirm class="${danger ? "admin-button-danger" : "admin-button-primary"}"></button></footer></section></div>`;
       const backdrop = host.firstElementChild;
       const panel = backdrop.firstElementChild;
+      if (panelClass) panel.classList.add(panelClass);
       panel.querySelector("h2").textContent = title;
       panel.querySelector(".admin-dialog-body").append(body);
       panel.querySelector("[data-dialog-confirm]").textContent = confirmLabel;

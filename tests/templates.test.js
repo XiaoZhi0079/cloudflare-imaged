@@ -431,7 +431,7 @@ test("changed admin assets use targeted cache-busting versions", () => {
     Array(libraryCardTagsReferences.length).fill(libraryCardTagsVersion),
   );
 
-  const albumsRedesignVersion = "20260720-batch-mode-cover-fix";
+  const albumsRedesignVersion = "20260720-album-grid-preview";
   const albumsRedesignReferences = [
     [settingsHtml, /href="\/assets\/admin\/settings\.css\?v=([^"]+)"/, "settings.css"],
     [featuredHtml, /href="\/assets\/admin\/settings\.css\?v=([^"]+)"/, "featured settings.css"],
@@ -446,10 +446,11 @@ test("changed admin assets use targeted cache-busting versions", () => {
     Array(albumsRedesignReferences.length).fill(albumsRedesignVersion),
   );
 
-  const albumDraftVersion = "20260720-batch-mode-cover-fix";
+  const albumDraftVersion = "20260720-album-grid-preview";
   const albumDraftReferences = [
     [featuredHtml, /src="\/assets\/admin\/featured-page\.js\?v=([^"]+)"/, "featured-page.js"],
     [featuredEntry, /from "\.\/album-management\.js\?v=([^"]+)"/, "album-management.js"],
+    [featuredEntry, /from "\.\/dialogs\.js\?v=([^"]+)"/, "dialogs.js"],
   ];
   const albumDraftVersions = albumDraftReferences.map(([source, pattern, asset]) => {
     const match = source.match(pattern);

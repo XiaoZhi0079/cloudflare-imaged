@@ -1,8 +1,8 @@
 import { createAdminApiClient, AdminUnauthorizedError } from "./api-client.js";
 import { createAdminKeyStore } from "./auth.js";
-import { createDialogHost } from "./dialogs.js";
+import { createDialogHost } from "./dialogs.js?v=20260720-album-grid-preview";
 import { createNotifier } from "./notifications.js";
-import { createAlbumManagementController } from "./album-management.js?v=20260720-batch-mode-cover-fix";
+import { createAlbumManagementController } from "./album-management.js?v=20260720-album-grid-preview";
 
 const elements = {
   authView: document.querySelector("#admin-auth-view"),
