@@ -61,6 +61,23 @@ test("public site excludes ineligible members from the home album hero", async (
   assert.deepEqual(payload.featuredImages, []);
 });
 
+test("public home hero starts with the selected home album cover", async () => {
+  const env = createTestEnv();
+  const repository = createGalleryRepository(env.GALLERY_DB);
+  const first = await createImage(repository, "cover-first");
+  const cover = await createImage(repository, "cover-selected");
+  const home = (await repository.listAlbums()).find((album) => album.isHome);
+
+  await repository.updateAlbum(home.id, { imageIds: [first.id, cover.id], coverImageId: cover.id });
+
+  const response = await publicSiteHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/public/site"),
+  });
+
+  assert.deepEqual((await response.json()).featuredImages.map((image) => image.id), [cover.id, first.id]);
+});
+
 test("admin site handler requires auth", async () => {
   const env = createTestEnv();
   const response = await adminSiteHandler({

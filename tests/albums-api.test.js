@@ -68,3 +68,34 @@ test("public albums expose safe summaries and ordered detail", async () => {
   assert.equal(detailResponse.status, 200);
   assert.deepEqual((await detailResponse.json()).album.images.map(({ id }) => id), [image.id]);
 });
+
+test("album cover changes persist through the admin API and public summary", async () => {
+  const state = env();
+  const repository = createGalleryRepository(state.GALLERY_DB);
+  const album = await repository.createAlbum({ name: "封面测试" });
+  const first = await repository.upsertImage({
+    storageKey: "gallery/first.webp", fileName: "first.webp", fileUrl: "/file/gallery/first.webp",
+    width: 1920, height: 1080, syncStatus: "ok",
+  });
+  const cover = await repository.upsertImage({
+    storageKey: "gallery/cover.webp", fileName: "cover.webp", fileUrl: "/file/gallery/cover.webp",
+    width: 1920, height: 1080, syncStatus: "ok",
+  });
+
+  const updateResponse = await adminAlbums({
+    env: state,
+    request: adminRequest("PATCH", {
+      id: album.id,
+      imageIds: [first.id, cover.id],
+      coverImageId: cover.id,
+    }),
+  });
+  assert.equal(updateResponse.status, 200);
+  assert.equal((await updateResponse.json()).album.coverImageId, cover.id);
+
+  const listPayload = await (await publicAlbums({
+    env: state,
+    request: new Request("https://gallery.test/api/public/albums"),
+  })).json();
+  assert.equal(listPayload.albums.find((item) => item.id === album.id).coverImage.id, cover.id);
+});

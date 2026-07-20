@@ -153,6 +153,18 @@ body.is-sorting { user-select:none; cursor:grabbing; }
   white-space: nowrap;
 }
 
+.album-cover-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: rgba(180, 78, 39, .12);
+  color: var(--admin-accent);
+  font-size: 10px;
+  font-weight: 800;
+  vertical-align: 2px;
+}
+
 .site-featured-copy > span,
 .site-featured-head .admin-muted {
   color: var(--admin-muted);

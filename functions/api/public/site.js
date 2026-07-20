@@ -7,7 +7,13 @@ export async function onRequest({ env }) {
     const repository = getRepository(env);
     const albums = await repository.listAlbums();
     const home = albums.find((album) => album.isHome) ?? null;
-    const featuredImages = (home?.images ?? []).filter((image) => classifyFeaturedImage(image).eligible);
+    const eligibleImages = (home?.images ?? []).filter((image) => classifyFeaturedImage(image).eligible);
+    const coverImageId = Number(home?.coverImageId);
+    const featuredImages = eligibleImages.sort((left, right) => {
+      if (Number(left.id) === coverImageId) return -1;
+      if (Number(right.id) === coverImageId) return 1;
+      return 0;
+    });
 
     return jsonResponse({
       issueName: home?.name ?? "图集",

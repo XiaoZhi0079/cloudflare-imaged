@@ -3,7 +3,7 @@ import { createAdminKeyStore, verifyAdminKey } from "./auth.js";
 import { createDialogHost } from "./dialogs.js";
 import { createLibraryState } from "./library-state.js?v=20260715-featured-filter-separation";
 import { createNotifier } from "./notifications.js";
-import { renderImageCard } from "./renderers/image-card.js?v=20260720-library-card-tags";
+import { renderImageCard } from "./renderers/image-card.js?v=20260720-batch-mode-cover-fix";
 import { createUploadRunner, describeUploadFailure, measureImageFile } from "./upload.js";
 
 const elements = {
@@ -28,6 +28,7 @@ const elements = {
   imageList: document.querySelector("#image-list"),
   loadMore: document.querySelector("#admin-load-more"),
   uploadOpen: document.querySelector("#admin-upload-open"),
+  bulkToggle: document.querySelector("#admin-bulk-toggle"),
   uploadDialog: document.querySelector("#admin-upload-dialog"),
   detailOverlay: document.querySelector("#admin-detail-overlay"),
   bulkToolbar: document.querySelector("#admin-bulk-toolbar"),
@@ -45,12 +46,14 @@ const notifier = createNotifier(document.querySelector("#admin-toast-host"));
 let state = createLibraryState();
 let searchTimer = null;
 let compact = false;
+let bulkMode = false;
 let detailImageId = null;
 let detailOpener = null;
 let uploadSession = null;
 
 function showAuth(message = "") {
   state = createLibraryState();
+  bulkMode = false;
   closeDetail({ restoreFocus: false });
   closeUpload({ restoreFocus: false });
   elements.app.hidden = true;
@@ -113,6 +116,12 @@ function replaceImages(updates) {
   state.syncImages(state.getImages().map((image) => replacements.get(Number(image.id)) ?? image));
 }
 
+function setBulkMode(next) {
+  bulkMode = Boolean(next);
+  if (!bulkMode) state.clearSelection();
+  renderLibrary();
+}
+
 function renderFilters() {
   const { tagNames } = state.getFilters();
   const tagQuery = elements.tagFilterSearch.value.trim().toLocaleLowerCase("zh-CN");
@@ -145,11 +154,18 @@ function renderLibrary() {
     : `${visible.length} / ${state.getImages().length}`;
   elements.imageList.classList.toggle("is-compact", compact);
   elements.imageList.innerHTML = rendered.length
-    ? rendered.map((image) => renderImageCard(image, { selected: selectedIds.has(Number(image.id)) })).join("")
+    ? rendered.map((image) => renderImageCard(image, { selected: selectedIds.has(Number(image.id)), selectionMode: bulkMode })).join("")
     : `<div class="admin-empty">${state.getImages().length ? "没有符合当前筛选的图片" : "图片库为空"}</div>`;
   elements.loadMore.hidden = !state.hasMore();
-  elements.bulkToolbar.hidden = selectedIds.size === 0;
+  elements.bulkToolbar.hidden = !bulkMode;
   elements.bulkCount.textContent = `已选择 ${selectedIds.size} 张`;
+  elements.bulkToggle.textContent = bulkMode ? "完成" : "批量管理";
+  elements.bulkToggle.setAttribute("aria-pressed", String(bulkMode));
+  const actionsDisabled = !bulkMode || selectedIds.size === 0;
+  elements.bulkTags.disabled = actionsDisabled;
+  elements.bulkCategory.disabled = actionsDisabled;
+  elements.bulkDelete.disabled = actionsDisabled;
+  elements.bulkClear.disabled = !bulkMode;
 }
 
 function renderAll() {
@@ -174,6 +190,7 @@ function renderLoadError(tags, error) {
 
 async function loadLibrary(tags) {
   showApp();
+  bulkMode = false;
   renderLoading();
   let payloads;
   try {
@@ -648,6 +665,7 @@ elements.density.addEventListener("click", () => {
   elements.density.setAttribute("aria-pressed", String(compact));
   renderLibrary();
 });
+elements.bulkToggle.addEventListener("click", () => setBulkMode(!bulkMode));
 elements.filterToggle.addEventListener("click", () => {
   const open = elements.filterRail.classList.toggle("is-open");
   elements.filterToggle.setAttribute("aria-expanded", String(open));
@@ -674,7 +692,7 @@ elements.imageList.addEventListener("error", (event) => {
   event.target.hidden = true;
   event.target.nextElementSibling.hidden = false;
 }, true);
-elements.bulkClear.addEventListener("click", () => { state.clearSelection(); renderLibrary(); });
+elements.bulkClear.addEventListener("click", () => setBulkMode(false));
 elements.bulkTags.addEventListener("click", bulkAssignTags);
 elements.bulkCategory.addEventListener("click", bulkAssignCategory);
 elements.bulkDelete.addEventListener("click", bulkDelete);

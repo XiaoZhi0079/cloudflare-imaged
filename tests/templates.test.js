@@ -147,7 +147,8 @@ test("featured management page becomes multi-album management", () => {
     assert.match(html, new RegExp(`id="${id}"`));
   }
   assert.match(html, />图集管理</);
-  assert.match(html, />保存图集</);
+  assert.match(html, /id="album-save"[^>]*>保存</);
+  assert.doesNotMatch(html, />保存图集</);
   assert.match(html, /id="featured-retry"[^>]*hidden/);
   assert.doesNotMatch(html, /data-settings-tab|taxonomy-list|taxonomy-create/);
 });
@@ -414,7 +415,7 @@ test("changed admin assets use targeted cache-busting versions", () => {
     Array(centeredModalReferences.length).fill(centeredModalVersion),
   );
 
-  const libraryCardTagsVersion = "20260720-library-card-tags";
+  const libraryCardTagsVersion = "20260720-batch-mode-cover-fix";
   const libraryCardTagsReferences = [
     [libraryEntry, /from "\.\/renderers\/image-card\.js\?v=([^"]+)"/, "image-card.js"],
     [libraryHtml, /href="\/assets\/admin\/workbench\.css\?v=([^"]+)"/, "workbench.css"],
@@ -430,7 +431,7 @@ test("changed admin assets use targeted cache-busting versions", () => {
     Array(libraryCardTagsReferences.length).fill(libraryCardTagsVersion),
   );
 
-  const albumsRedesignVersion = "20260717-albums-gallery-redesign";
+  const albumsRedesignVersion = "20260720-batch-mode-cover-fix";
   const albumsRedesignReferences = [
     [settingsHtml, /href="\/assets\/admin\/settings\.css\?v=([^"]+)"/, "settings.css"],
     [featuredHtml, /href="\/assets\/admin\/settings\.css\?v=([^"]+)"/, "featured settings.css"],
@@ -445,7 +446,7 @@ test("changed admin assets use targeted cache-busting versions", () => {
     Array(albumsRedesignReferences.length).fill(albumsRedesignVersion),
   );
 
-  const albumDraftVersion = "20260717-album-draft-persistence";
+  const albumDraftVersion = "20260720-batch-mode-cover-fix";
   const albumDraftReferences = [
     [featuredHtml, /src="\/assets\/admin\/featured-page\.js\?v=([^"]+)"/, "featured-page.js"],
     [featuredEntry, /from "\.\/album-management\.js\?v=([^"]+)"/, "album-management.js"],

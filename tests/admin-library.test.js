@@ -120,7 +120,7 @@ test("image card escapes values and exposes selection and detail actions", () =>
     category: { name: "人像" },
     tags: ["一", "二", "三"],
     syncStatus: "ok",
-  }, { selected: true });
+  }, { selected: true, selectionMode: true });
 
   assert.doesNotMatch(html, /<bad/);
   assert.match(html, /loading="lazy"/);
@@ -129,6 +129,14 @@ test("image card escapes values and exposes selection and detail actions", () =>
   assert.match(html, /aria-pressed="true"/);
   assert.doesNotMatch(html, /人像/);
   assert.match(html, />三</);
+});
+
+test("image card keeps selection controls out of normal browsing mode", () => {
+  const normalHtml = renderImageCard({ id: 16, fileName: "normal.webp", tags: [] });
+  const batchHtml = renderImageCard({ id: 16, fileName: "normal.webp", tags: [] }, { selectionMode: true });
+
+  assert.doesNotMatch(normalHtml, /data-action="toggle-selection"/);
+  assert.match(batchHtml, /data-action="toggle-selection"/);
 });
 
 test("image card shows every tag without rendering the main category as a peer label", () => {
@@ -225,6 +233,9 @@ test("library controller connects detail and bulk API operations", () => {
   assert.match(source, /\/api\/admin\/images\/tag-assignments\/bulk/);
   assert.match(source, /\/api\/admin\/images\/category-assignments\/bulk/);
   assert.match(source, /\/api\/admin\/images\/bulk-delete/);
+  assert.match(source, /bulkMode/);
+  assert.match(source, /selectionMode: bulkMode/);
+  assert.match(source, /elements\.bulkToolbar\.hidden = !bulkMode/);
 });
 
 test("library controller has no carousel filter and uses neutral image dimensions", () => {
@@ -262,4 +273,13 @@ test("image detail uses a centered responsive modal workspace", () => {
 test("image card tag rows wrap instead of clipping assigned tags", () => {
   const workbenchCss = readFileSync(new URL("../public/assets/admin/workbench.css", import.meta.url), "utf8");
   assert.match(workbenchCss, /\.image-card-tags\s*\{[^}]*flex-wrap:\s*wrap[^}]*overflow:\s*visible/s);
+});
+
+test("image workbench enters batch mode before exposing selection controls", () => {
+  const html = readFileSync(new URL("../public/admin/index.html", import.meta.url), "utf8");
+  const source = readFileSync(new URL("../public/assets/admin/library-page.js", import.meta.url), "utf8");
+  assert.match(html, /id="admin-bulk-toggle"/);
+  assert.match(html, /id="admin-bulk-toolbar"[^>]*hidden/);
+  assert.match(source, /bulkToggle: document\.querySelector\("#admin-bulk-toggle"\)/);
+  assert.match(source, /setBulkMode\(!bulkMode\)/);
 });

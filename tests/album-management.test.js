@@ -13,7 +13,7 @@ test("album management controller owns multi-album operations", () => {
     "/api/admin/albums", "/api/admin/images", "createAlbumManagementController",
     "create-album", "save-album", "delete-album", "add-images",
     "move-up", "move-down", "remove", "coverImageId", "isHome",
-    "轮播可用", "非轮播比例",
+    "轮播可用", "非轮播比例", "cover-image",
   ]) assert.match(source, new RegExp(contract));
 });
 
@@ -152,6 +152,22 @@ test("album editor saves the current name description home state and cover", asy
       },
       { name: "新的首页名字", description: "新的图集介绍", isHome: false, coverImageId: 12 },
     );
+  } finally {
+    harness.restore();
+  }
+});
+
+test("album editor marks the selected member as the persisted cover", async () => {
+  const harness = createHarness();
+  try {
+    await harness.controller.load();
+    harness.elements.cover.value = "12";
+    await harness.elements.cover.emit("change");
+    assert.match(harness.elements.members.innerHTML, /data-member-id="12"[^>]*>[\s\S]*cover-image/);
+    await harness.elements.save.emit("click");
+
+    assert.equal(harness.requests[0].coverImageId, 12);
+    assert.match(harness.elements.members.innerHTML, /data-member-id="12"[^>]*>[\s\S]*cover-image/);
   } finally {
     harness.restore();
   }

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Gallery 图集管理</title>
     <link rel="stylesheet" href="/assets/admin/admin.css?v=20260717-centered-viewer-admin-modal" />
-    <link rel="stylesheet" href="/assets/admin/settings.css?v=20260717-albums-gallery-redesign" />
+    <link rel="stylesheet" href="/assets/admin/settings.css?v=20260720-batch-mode-cover-fix" />
   </head>
   <body class="admin-body" data-admin-page="featured">
     <section id="admin-auth-view" class="admin-auth-view" hidden>
@@ -31,13 +31,13 @@
               <label class="admin-field album-description-field" for="album-description"><span>图集介绍</span><textarea id="album-description" rows="4" maxlength="500" disabled></textarea></label>
               <label class="admin-field" for="album-cover"><span>图集封面</span><select id="album-cover" disabled></select></label>
             </div>
-            <div class="site-featured-head"><div><h2>图集图片</h2><p id="album-status" class="admin-muted" aria-live="polite"></p></div><div class="site-featured-actions"><button id="album-add-images" data-action="add-images" type="button" disabled>从图片库添加</button><button id="album-delete" data-action="delete-album" class="admin-button-danger" type="button" disabled>删除图集</button><button id="album-save" data-action="save-album" class="admin-button-primary" type="button" disabled>保存图集</button></div></div>
+            <div class="site-featured-head"><div><h2>图集图片</h2><p id="album-status" class="admin-muted" aria-live="polite"></p></div><div class="site-featured-actions"><button id="album-add-images" data-action="add-images" type="button" disabled>从图片库添加</button><button id="album-delete" data-action="delete-album" class="admin-button-danger" type="button" disabled>删除图集</button><button id="album-save" data-action="save-album" class="admin-button-primary" type="button" disabled>保存</button></div></div>
             <div id="album-members" class="site-featured-list"></div>
           </div>
         </section>
       </main>
       <div id="admin-dialog-host"></div><div id="admin-toast-host" class="admin-toast-host" aria-live="polite"></div>
     </div>
-    <script type="module" src="/assets/admin/featured-page.js?v=20260717-album-draft-persistence"></script>
+    <script type="module" src="/assets/admin/featured-page.js?v=20260720-batch-mode-cover-fix"></script>
   </body>
 </html>

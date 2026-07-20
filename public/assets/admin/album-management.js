@@ -8,11 +8,12 @@ function pickerTier(image) {
   return eligibility?.eligible === true ? eligibility.resolutionTier : "ineligible";
 }
 
-function renderMember(image, index, total) {
+function renderMember(image, index, total, coverImageId) {
   const eligible = image?.featuredEligibility?.eligible === true;
-  return `<article class="site-featured-item ${eligible ? "is-eligible" : ""}" data-member-id="${image.id}">
+  const isCover = Number(image.id) === Number(coverImageId);
+  return `<article class="site-featured-item ${eligible ? "is-eligible" : ""}${isCover ? " is-cover" : ""}" data-member-id="${image.id}">
     <img src="${escapeHtml(image.fileUrl)}" alt="${escapeHtml(image.fileName)}" loading="lazy" />
-    <div class="site-featured-copy"><strong>${escapeHtml(image.fileName)}</strong><span>第 ${index + 1} 张 · ${escapeHtml(image.width ?? "?")}×${escapeHtml(image.height ?? "?")}</span></div>
+    <div class="site-featured-copy"><strong>${escapeHtml(image.fileName)}${isCover ? ' <span class="album-cover-badge" data-role="cover-image">封面</span>' : ""}</strong><span>第 ${index + 1} 张 · ${escapeHtml(image.width ?? "?")}×${escapeHtml(image.height ?? "?")}</span></div>
     <div class="site-featured-item-actions"><button data-action="move-up" ${index === 0 ? "disabled" : ""}>↑</button><button data-action="move-down" ${index === total - 1 ? "disabled" : ""}>↓</button><button data-action="remove" class="admin-button-danger">移除</button></div>
   </article>`;
 }
@@ -72,8 +73,9 @@ export function createAlbumManagementController({ root, client, dialogs, notifie
     elements.cover.innerHTML = draft.images.length
       ? draft.images.map((image) => `<option value="${image.id}"${Number(image.id) === Number(draft.coverImageId) ? " selected" : ""}>${escapeHtml(image.fileName)}</option>`).join("")
       : `<option value="">暂无图片</option>`;
+    if (draft.images.length) elements.cover.value = String(draft.coverImageId ?? draft.images[0].id);
     elements.members.innerHTML = draft.images.length
-      ? draft.images.map((image, index) => renderMember(image, index, draft.images.length)).join("")
+      ? draft.images.map((image, index) => renderMember(image, index, draft.images.length, draft.coverImageId)).join("")
       : `<div class="admin-empty">这个图集还没有图片</div>`;
     renderStatus();
     setDisabled(busy);
@@ -139,6 +141,7 @@ export function createAlbumManagementController({ root, client, dialogs, notifie
     setDisabled(true);
     try {
       const payload = await client.request("/api/admin/albums", { method: "PATCH", body: JSON.stringify(submission) });
+      if (Number(payload.album.coverImageId) !== Number(submission.coverImageId)) throw new Error("图集封面保存结果不一致，请重试。");
       albums = albums.map((album) => album.id === payload.album.id ? payload.album : { ...album, isHome: payload.album.isHome ? false : album.isHome });
       select(payload.album.id); notifier.success("图集已保存");
     } catch (error) { notifier.error(error?.message || "保存失败"); } finally { busy = false; renderEditor(); }
@@ -176,7 +179,7 @@ export function createAlbumManagementController({ root, client, dialogs, notifie
     elements.name.addEventListener("input", markEditorDirty);
     elements.description.addEventListener("input", markEditorDirty);
     elements.isHome.addEventListener("change", markEditorDirty);
-    elements.cover.addEventListener("change", markEditorDirty);
+    elements.cover.addEventListener("change", () => { markEditorDirty(); renderEditor(); });
     elements.create.addEventListener("click", async () => { if (!busy) await createAlbum(); });
     elements.add.addEventListener("click", async () => { if (!busy) await addImages(); });
     elements.save.addEventListener("click", async () => { if (!busy) await saveAlbum(); });

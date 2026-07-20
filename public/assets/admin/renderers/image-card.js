@@ -15,7 +15,7 @@ function normalizedLabel(value) {
   return String(value ?? "").trim();
 }
 
-export function renderImageCard(image, { selected = false } = {}) {
+export function renderImageCard(image, { selected = false, selectionMode = false } = {}) {
   const id = escapeHtml(image.id);
   const fileName = escapeHtml(image.fileName || "未命名图片");
   const fileUrl = String(image.fileUrl ?? "").trim();
@@ -27,6 +27,9 @@ export function renderImageCard(image, { selected = false } = {}) {
     .map(normalizedLabel)
     .filter(Boolean))];
   const tags = tagNames.map((tagName) => `<span>${escapeHtml(tagName)}</span>`).join("");
+  const selectionButton = selectionMode
+    ? `<button class="image-card-select" type="button" data-action="toggle-selection" aria-label="${selected ? "取消选择" : "选择"} ${fileName}" aria-pressed="${selected}" title="${selected ? "取消选择" : "选择"}"><span aria-hidden="true">✓</span></button>`
+    : "";
   const syncWarning = image.syncStatus && image.syncStatus !== "ok"
     ? `<span class="image-sync-warning" title="${escapeHtml(image.note || "文件状态异常")}">待修复</span>`
     : "";
@@ -34,7 +37,7 @@ export function renderImageCard(image, { selected = false } = {}) {
     <div class="image-card-stage">
       ${preview}
       <button class="image-card-open" type="button" data-action="open-detail" aria-label="查看 ${fileName} 详情"></button>
-      <button class="image-card-select" type="button" data-action="toggle-selection" aria-label="${selected ? "取消选择" : "选择"} ${fileName}" aria-pressed="${selected}" title="${selected ? "取消选择" : "选择"}"><span aria-hidden="true">✓</span></button>
+      ${selectionButton}
       ${syncWarning}
     </div>
     <div class="image-card-copy"><strong title="${fileName}">${fileName}</strong><div class="image-card-meta"><span class="image-card-tags">${tags}</span></div></div>
