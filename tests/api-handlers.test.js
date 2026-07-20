@@ -752,6 +752,22 @@ test("admin image audit finds and repairs a unique D1 to R2 name mismatch", asyn
   assert.equal((await repository.getImageById(image.id)).storageKey, "elegant-beauty/wallpaper-beauty-011.png");
 });
 
+test("admin image audit accepts an isolated maintenance key without replacing admin auth", async () => {
+  const env = {
+    ...createTestEnv(),
+    GALLERY_AUDIT_KEY: "one-time-audit-key",
+  };
+  const response = await adminImagesAuditHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/images/audit", {
+      headers: { "x-gallery-audit-key": "one-time-audit-key" },
+    }),
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).summary.imageRecords, 0);
+});
+
 test("admin images import handler is no longer available after gallery split", async () => {
   const env = createTestEnv();
 

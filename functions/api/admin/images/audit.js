@@ -5,6 +5,15 @@ import {
 } from "../../../../src/server/image-storage-audit.js";
 import { jsonResponse, parseRequestJson } from "../../../../src/shared/http.js";
 
+function requireAuditAccess(request, env) {
+  const adminFailure = requireAdminKey(request, env);
+  if (!adminFailure) return null;
+  const auditKey = request.headers.get("x-gallery-audit-key");
+  return env.GALLERY_AUDIT_KEY && auditKey === env.GALLERY_AUDIT_KEY
+    ? null
+    : adminFailure;
+}
+
 function auditErrorResponse(error) {
   const code = String(error?.code ?? "IMAGE_STORAGE_AUDIT_FAILED");
   const status = code === "IMAGE_NOT_FOUND"
@@ -31,7 +40,7 @@ function auditErrorResponse(error) {
 }
 
 export async function onRequest({ env, request }) {
-  const authFailure = requireAdminKey(request, env);
+  const authFailure = requireAuditAccess(request, env);
   if (authFailure) return authFailure;
 
   try {
