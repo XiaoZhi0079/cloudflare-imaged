@@ -3,7 +3,7 @@ import { createAdminKeyStore, verifyAdminKey } from "./auth.js";
 import { createDialogHost } from "./dialogs.js";
 import { createLibraryState } from "./library-state.js?v=20260715-featured-filter-separation";
 import { createNotifier } from "./notifications.js";
-import { renderImageCard } from "./renderers/image-card.js?v=20260715-featured-filter-separation";
+import { renderImageCard } from "./renderers/image-card.js?v=20260720-library-card-tags";
 import { createUploadRunner, describeUploadFailure, measureImageFile } from "./upload.js";
 
 const elements = {

@@ -127,8 +127,24 @@ test("image card escapes values and exposes selection and detail actions", () =>
   assert.match(html, /data-action="toggle-selection"/);
   assert.match(html, /data-action="open-detail"/);
   assert.match(html, /aria-pressed="true"/);
-  assert.match(html, /人像/);
-  assert.doesNotMatch(html, />三</);
+  assert.doesNotMatch(html, /人像/);
+  assert.match(html, />三</);
+});
+
+test("image card shows every tag without rendering the main category as a peer label", () => {
+  const html = renderImageCard({
+    id: 15,
+    fileName: "tagged.webp",
+    fileUrl: "/files/tagged.webp",
+    category: { name: "人物目录" },
+    tags: ["气质美女", "连衣裙", "侧光", "室内"],
+  });
+
+  assert.doesNotMatch(html, /人物目录/);
+  assert.match(html, />气质美女</);
+  assert.match(html, />连衣裙</);
+  assert.match(html, />侧光</);
+  assert.match(html, />室内</);
 });
 
 test("image card includes a fallback when no preview URL exists", () => {
@@ -241,4 +257,9 @@ test("image detail uses a centered responsive modal workspace", () => {
   assert.match(workbenchCss, /@media \(max-width:900px\)[\s\S]*\.admin-detail-workspace\s*\{[^}]*grid-template-columns:\s*1fr/);
   assert.match(workbenchCss, /@media \(max-width:720px\)[\s\S]*\.admin-detail-overlay\s*\{[^}]*padding:\s*0/);
   assert.match(workbenchCss, /@media \(max-width:720px\)[\s\S]*\.admin-detail-dialog\s*\{[^}]*width:\s*100%[^}]*min-height:\s*100dvh[^}]*max-height:\s*100dvh[^}]*border:\s*0[^}]*border-radius:\s*0/s);
+});
+
+test("image card tag rows wrap instead of clipping assigned tags", () => {
+  const workbenchCss = readFileSync(new URL("../public/assets/admin/workbench.css", import.meta.url), "utf8");
+  assert.match(workbenchCss, /\.image-card-tags\s*\{[^}]*flex-wrap:\s*wrap[^}]*overflow:\s*visible/s);
 });

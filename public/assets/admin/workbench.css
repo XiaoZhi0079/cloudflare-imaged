@@ -39,11 +39,9 @@
 .image-sync-warning { position:absolute; right:8px; bottom:8px; z-index:2; padding:4px 7px; border-radius:5px; background:var(--admin-warning); color:#fff; font-size:11px; font-weight:800; }
 .image-card-copy { display:grid; gap:7px; padding:10px; }
 .image-card-copy strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; }
-.image-card-meta { min-height:24px; display:flex; align-items:center; gap:5px; overflow:hidden; }
-.image-card-category,.image-card-tags span { flex:0 0 auto; max-width:110px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:3px 6px; border-radius:5px; background:#efe8df; color:#5d5147; font-size:10px; }
-.image-card-category.is-empty { color:var(--admin-muted); }
-.image-card-tags { min-width:0; display:flex; gap:4px; overflow:hidden; }
-.image-card-tags span { background:#edf1ec; color:#42604f; }
+.image-card-meta { min-height:24px; overflow:visible; }
+.image-card-tags { min-width:0; display:flex; flex-wrap:wrap; gap:4px; overflow:visible; }
+.image-card-tags span { flex:0 0 auto; max-width:110px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:3px 6px; border-radius:5px; background:#edf1ec; color:#42604f; font-size:10px; }
 #admin-load-more { display:block; margin:20px auto 0; }
 .admin-bulk-toolbar { position:fixed; left:50%; bottom:18px; z-index:40; width:min(760px,calc(100vw - 28px)); min-height:58px; display:flex; align-items:center; justify-content:space-between; gap:14px; padding:8px 10px 8px 16px; border:1px solid #aa9785; border-radius:8px; background:var(--admin-panel); box-shadow:0 14px 34px rgba(39,30,21,.2); transform:translateX(-50%); }
 .admin-bulk-toolbar > div { display:flex; gap:7px; }

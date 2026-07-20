@@ -387,7 +387,6 @@ test("changed admin assets use targeted cache-busting versions", () => {
   const filterSeparationVersion = "20260715-featured-filter-separation";
   const unchangedReferences = [
     [libraryEntry, /from "\.\/library-state\.js\?v=([^"]+)"/, "library-state.js"],
-    [libraryEntry, /from "\.\/renderers\/image-card\.js\?v=([^"]+)"/, "image-card.js"],
   ];
   const unchangedVersions = unchangedReferences.map(([source, pattern, asset]) => {
     const match = source.match(pattern);
@@ -404,8 +403,6 @@ test("changed admin assets use targeted cache-busting versions", () => {
     [libraryHtml, /href="\/assets\/admin\/admin\.css\?v=([^"]+)"/, "admin.css"],
     [settingsHtml, /href="\/assets\/admin\/admin\.css\?v=([^"]+)"/, "settings admin.css"],
     [featuredHtml, /href="\/assets\/admin\/admin\.css\?v=([^"]+)"/, "featured admin.css"],
-    [libraryHtml, /href="\/assets\/admin\/workbench\.css\?v=([^"]+)"/, "workbench.css"],
-    [libraryHtml, /src="\/assets\/admin\/library-page\.js\?v=([^"]+)"/, "library-page.js"],
   ];
   const centeredModalVersions = centeredModalReferences.map(([source, pattern, asset]) => {
     const match = source.match(pattern);
@@ -415,6 +412,22 @@ test("changed admin assets use targeted cache-busting versions", () => {
   assert.deepEqual(
     centeredModalVersions,
     Array(centeredModalReferences.length).fill(centeredModalVersion),
+  );
+
+  const libraryCardTagsVersion = "20260720-library-card-tags";
+  const libraryCardTagsReferences = [
+    [libraryEntry, /from "\.\/renderers\/image-card\.js\?v=([^"]+)"/, "image-card.js"],
+    [libraryHtml, /href="\/assets\/admin\/workbench\.css\?v=([^"]+)"/, "workbench.css"],
+    [libraryHtml, /src="\/assets\/admin\/library-page\.js\?v=([^"]+)"/, "library-page.js"],
+  ];
+  const libraryCardTagsVersions = libraryCardTagsReferences.map(([source, pattern, asset]) => {
+    const match = source.match(pattern);
+    assert.ok(match, `${asset} must include a cache-busting release version`);
+    return match[1];
+  });
+  assert.deepEqual(
+    libraryCardTagsVersions,
+    Array(libraryCardTagsReferences.length).fill(libraryCardTagsVersion),
   );
 
   const albumsRedesignVersion = "20260717-albums-gallery-redesign";
