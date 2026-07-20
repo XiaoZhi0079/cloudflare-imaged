@@ -15,14 +15,18 @@ const elements = {
   keyInput: document.querySelector("#admin-key"),
   passwordToggle: document.querySelector("[data-toggle-password]"),
   logout: document.querySelector("[data-admin-logout]"),
-  tabs: [...document.querySelectorAll("[data-settings-tab]")],
   create: document.querySelector("#taxonomy-create"),
   createGroup: document.querySelector("#tag-group-create"),
+  createCategory: document.querySelector("#category-create"),
   search: document.querySelector("#taxonomy-search"),
-  list: document.querySelector("#taxonomy-list"),
-  status: document.querySelector("#taxonomy-status"),
-  reset: document.querySelector("#taxonomy-reset-order"),
-  save: document.querySelector("#taxonomy-save-order"),
+  tagList: document.querySelector("#tag-taxonomy-list"),
+  categoryList: document.querySelector("#category-taxonomy-list"),
+  tagStatus: document.querySelector("#tag-taxonomy-status"),
+  categoryStatus: document.querySelector("#category-taxonomy-status"),
+  tagReset: document.querySelector("#tag-taxonomy-reset-order"),
+  tagSave: document.querySelector("#tag-taxonomy-save-order"),
+  categoryReset: document.querySelector("#category-taxonomy-reset-order"),
+  categorySave: document.querySelector("#category-taxonomy-save-order"),
   tagCount: document.querySelector("#tag-count"),
   tagGroupCount: document.querySelector("#tag-group-count"),
   categoryCount: document.querySelector("#category-count"),
@@ -32,8 +36,7 @@ const keyStore = createAdminKeyStore();
 const dialogs = createDialogHost(document.querySelector("#admin-dialog-host"));
 const notifier = createNotifier(document.querySelector("#admin-toast-host"));
 let state = createSettingsState();
-let activeType = "tags";
-let sortable = null;
+let categorySortable = null;
 let busy = false;
 let draggedTagId = null;
 const expandedGroups = new Set();
@@ -63,26 +66,27 @@ function messageFor(error) {
   return error?.message || "操作失败，请稍后重试。";
 }
 
-function orderType() {
-  return activeType === "tags" ? "tagGroups" : "categories";
-}
-
 function setBusy(next) {
   busy = next;
   elements.create.disabled = next;
   elements.createGroup.disabled = next;
-  elements.tabs.forEach((tab) => { tab.disabled = next; });
+  elements.createCategory.disabled = next;
   updateOrderActions();
 }
 
-function updateOrderActions() {
-  const dirty = state.isDirty(orderType());
+function updateOrderAction(type, reset, save, status, label) {
+  const dirty = state.isDirty(type);
   const filtering = Boolean(elements.search.value.trim());
-  elements.reset.disabled = busy || !dirty;
-  elements.save.disabled = busy || !dirty;
-  elements.status.textContent = dirty
-    ? "顺序已调整，保存后生效。"
+  reset.disabled = busy || !dirty;
+  save.disabled = busy || !dirty;
+  status.textContent = dirty
+    ? `${label}顺序已调整，保存后生效。`
     : filtering ? "清除搜索后可调整顺序。" : "";
+}
+
+function updateOrderActions() {
+  updateOrderAction("tagGroups", elements.tagReset, elements.tagSave, elements.tagStatus, "标签分类");
+  updateOrderAction("categories", elements.categoryReset, elements.categorySave, elements.categoryStatus, "主分类");
 }
 
 function tagGroupId(tag) {
@@ -120,8 +124,8 @@ function visibleCategoryItems() {
 function renderTags() {
   const groups = filteredTagGroups();
   const allGroups = state.getItems("tagGroups");
-  elements.list.classList.remove("is-filtering");
-  elements.list.innerHTML = groups.length
+  elements.tagList.classList.toggle("is-filtering", Boolean(elements.search.value.trim()));
+  elements.tagList.innerHTML = groups.length
     ? `<div class="tag-tree-list">${groups.map((group) => {
       const index = allGroups.findIndex((item) => Number(item.id) === Number(group.id));
       const expanded = elements.search.value.trim()
@@ -140,8 +144,8 @@ function renderCategories() {
   const items = visibleCategoryItems();
   const allItems = state.getItems("categories");
   const filtering = Boolean(elements.search.value.trim());
-  elements.list.classList.toggle("is-filtering", filtering);
-  elements.list.innerHTML = items.length
+  elements.categoryList.classList.toggle("is-filtering", filtering);
+  elements.categoryList.innerHTML = items.length
     ? items.map((item) => {
       const index = allItems.findIndex((current) => current.id === item.id);
       return renderTaxonomyItem({ ...item, sortOrder: index + 1 }, "categories", {
@@ -151,7 +155,7 @@ function renderCategories() {
     }).join("")
     : `<div class="admin-empty">${elements.search.value ? "没有匹配结果" : "暂无内容"}</div>`;
   if (filtering) {
-    elements.list.querySelectorAll("[data-sort-handle]").forEach((handle) => {
+    elements.categoryList.querySelectorAll("[data-sort-handle]").forEach((handle) => {
       handle.disabled = true;
       handle.title = "清除搜索后可调整顺序";
     });
@@ -160,35 +164,26 @@ function renderCategories() {
 
 function renderTaxonomy() {
   elements.tagCount.textContent = state.getItems("tags").length;
-  elements.tagGroupCount.textContent = `${state.getItems("tagGroups").length} 类`;
+  elements.tagGroupCount.textContent = state.getItems("tagGroups").length;
   elements.categoryCount.textContent = state.getItems("categories").length;
-  elements.tabs.forEach((tab) => {
-    const selected = tab.dataset.settingsTab === activeType;
-    tab.classList.toggle("is-active", selected);
-    tab.setAttribute("aria-selected", String(selected));
-  });
-  document.body.dataset.settingsType = activeType;
-  elements.create.textContent = activeType === "tags" ? "新增标签" : "新增主分类";
-  elements.search.placeholder = activeType === "tags" ? "搜索标签或分类" : "搜索分类名称";
-  if (activeType === "tags") renderTags(); else renderCategories();
+  renderTags();
+  renderCategories();
   updateOrderActions();
 }
 
 function render() {
-  sortable?.destroy();
-  sortable = null;
+  categorySortable?.destroy();
+  categorySortable = null;
   renderTaxonomy();
-  if (activeType === "categories") {
-    sortable = createSortableList({
-      container: elements.list,
-      getItems: () => state.getItems("categories"),
-      setItems: (items) => state.setDraft("categories", items),
-      onChange: (_items, { phase }) => {
-        if (phase === "preview") updateOrderActions();
-        if (phase === "end" || phase === "cancel") render();
-      },
-    });
-  }
+  categorySortable = createSortableList({
+    container: elements.categoryList,
+    getItems: () => state.getItems("categories"),
+    setItems: (items) => state.setDraft("categories", items),
+    onChange: (_items, { phase }) => {
+      if (phase === "preview") updateOrderActions();
+      if (phase === "end" || phase === "cancel") render();
+    },
+  });
 }
 
 async function authenticate(key) {
@@ -454,8 +449,7 @@ async function moveTagToGroup(tagId, groupId) {
   }
 }
 
-async function saveOrder() {
-  const type = orderType();
+async function saveOrder(type) {
   setBusy(true);
   try {
     const endpoint = type === "tagGroups" ? "tag-groups" : type;
@@ -486,43 +480,43 @@ elements.logout.addEventListener("click", () => {
   state = createSettingsState();
   showAuth();
 });
-elements.tabs.forEach((tab) => tab.addEventListener("click", () => {
-  activeType = tab.dataset.settingsTab;
-  elements.search.value = "";
-  render();
-}));
 elements.search.addEventListener("input", render);
-elements.create.addEventListener("click", () => activeType === "tags" ? createTag() : createCategory());
+elements.create.addEventListener("click", () => createTag());
 elements.createGroup.addEventListener("click", createTagGroup);
-elements.reset.addEventListener("click", () => { state.resetDraft(orderType()); render(); });
-elements.save.addEventListener("click", saveOrder);
+elements.createCategory.addEventListener("click", createCategory);
+elements.tagReset.addEventListener("click", () => { state.resetDraft("tagGroups"); render(); });
+elements.tagSave.addEventListener("click", () => saveOrder("tagGroups"));
+elements.categoryReset.addEventListener("click", () => { state.resetDraft("categories"); render(); });
+elements.categorySave.addEventListener("click", () => saveOrder("categories"));
 
-elements.list.addEventListener("click", (event) => {
+elements.tagList.addEventListener("click", (event) => {
   if (busy) return;
   const action = event.target.closest("[data-action]")?.dataset.action;
   if (!action) return;
   const tagRow = event.target.closest("[data-tag-id]");
   const groupRow = event.target.closest("[data-tag-group-id]");
-  if (activeType === "tags") {
-    if (action === "toggle-group" && groupRow) {
-      const id = Number(groupRow.dataset.tagGroupId);
-      if (expandedGroups.has(id)) expandedGroups.delete(id); else expandedGroups.add(id);
-      render();
-      return;
-    }
-    if (action === "add-tag" && groupRow) { createTag(Number(groupRow.dataset.tagGroupId)); return; }
-    if (action === "rename-group" && groupRow) { const group = state.getItems("tagGroups").find((item) => Number(item.id) === Number(groupRow.dataset.tagGroupId)); if (group) renameGroup(group); return; }
-    if (action === "delete-group" && groupRow) { const group = state.getItems("tagGroups").find((item) => Number(item.id) === Number(groupRow.dataset.tagGroupId)); if (group) deleteGroup(group); return; }
-    if ((action === "move-up" || action === "move-down") && groupRow) { moveDraftItem("tagGroups", groupRow.dataset.tagGroupId, action === "move-up" ? -1 : 1); return; }
-    if (tagRow) {
-      const tag = state.getItems("tags").find((item) => Number(item.id) === Number(tagRow.dataset.tagId));
-      if (!tag) return;
-      if (action === "edit-tag") renameTag(tag);
-      if (action === "toggle-visibility") toggleVisibility(tag);
-      if (action === "delete-tag") deleteTag(tag);
-    }
+  if (action === "toggle-group" && groupRow) {
+    const id = Number(groupRow.dataset.tagGroupId);
+    if (expandedGroups.has(id)) expandedGroups.delete(id); else expandedGroups.add(id);
+    render();
     return;
   }
+  if (action === "add-tag" && groupRow) { createTag(Number(groupRow.dataset.tagGroupId)); return; }
+  if (action === "rename-group" && groupRow) { const group = state.getItems("tagGroups").find((item) => Number(item.id) === Number(groupRow.dataset.tagGroupId)); if (group) renameGroup(group); return; }
+  if (action === "delete-group" && groupRow) { const group = state.getItems("tagGroups").find((item) => Number(item.id) === Number(groupRow.dataset.tagGroupId)); if (group) deleteGroup(group); return; }
+  if ((action === "move-up" || action === "move-down") && groupRow) { moveDraftItem("tagGroups", groupRow.dataset.tagGroupId, action === "move-up" ? -1 : 1); return; }
+  if (!tagRow) return;
+  const tag = state.getItems("tags").find((item) => Number(item.id) === Number(tagRow.dataset.tagId));
+  if (!tag) return;
+  if (action === "edit-tag") renameTag(tag);
+  if (action === "toggle-visibility") toggleVisibility(tag);
+  if (action === "delete-tag") deleteTag(tag);
+});
+
+elements.categoryList.addEventListener("click", (event) => {
+  if (busy) return;
+  const action = event.target.closest("[data-action]")?.dataset.action;
+  if (!action) return;
   const row = event.target.closest("[data-sort-id]");
   if (!row) return;
   const item = state.getItems("categories").find((candidate) => String(candidate.id) === row.dataset.sortId);
@@ -531,38 +525,38 @@ elements.list.addEventListener("click", (event) => {
   if (action === "rename") renameCategory(item);
 });
 
-elements.list.addEventListener("dragstart", (event) => {
+elements.tagList.addEventListener("dragstart", (event) => {
   const tagRow = event.target.closest("[data-tag-id]");
-  if (activeType !== "tags" || !tagRow || busy) return;
+  if (!tagRow || busy) return;
   draggedTagId = Number(tagRow.dataset.tagId);
   tagRow.classList.add("is-dragging");
   event.dataTransfer.effectAllowed = "move";
   event.dataTransfer.setData("text/plain", String(draggedTagId));
 });
-elements.list.addEventListener("dragend", (event) => {
+elements.tagList.addEventListener("dragend", (event) => {
   event.target.closest("[data-tag-id]")?.classList.remove("is-dragging");
-  elements.list.querySelectorAll(".is-drop-target").forEach((item) => item.classList.remove("is-drop-target"));
+  elements.tagList.querySelectorAll(".is-drop-target").forEach((item) => item.classList.remove("is-drop-target"));
   draggedTagId = null;
 });
-elements.list.addEventListener("dragover", (event) => {
+elements.tagList.addEventListener("dragover", (event) => {
   const group = event.target.closest("[data-tag-drop-zone]");
-  if (activeType !== "tags" || !group || draggedTagId === null || busy) return;
+  if (!group || draggedTagId === null || busy) return;
   event.preventDefault();
   event.dataTransfer.dropEffect = "move";
   group.classList.add("is-drop-target");
 });
-elements.list.addEventListener("dragleave", (event) => {
+elements.tagList.addEventListener("dragleave", (event) => {
   const group = event.target.closest("[data-tag-drop-zone]");
   if (group && (!event.relatedTarget || !group.contains(event.relatedTarget))) group.classList.remove("is-drop-target");
 });
-elements.list.addEventListener("drop", (event) => {
+elements.tagList.addEventListener("drop", (event) => {
   const group = event.target.closest("[data-tag-drop-zone]");
-  if (activeType !== "tags" || !group || draggedTagId === null || busy) return;
+  if (!group || draggedTagId === null || busy) return;
   event.preventDefault();
   const tagId = draggedTagId;
   draggedTagId = null;
   group.classList.remove("is-drop-target");
-  elements.list.querySelectorAll(".is-dragging").forEach((item) => item.classList.remove("is-dragging"));
+  elements.tagList.querySelectorAll(".is-dragging").forEach((item) => item.classList.remove("is-dragging"));
   moveTagToGroup(tagId, Number(group.dataset.tagGroupId));
 });
 

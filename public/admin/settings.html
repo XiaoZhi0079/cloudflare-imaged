@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Gallery 标签与分类</title>
     <link rel="stylesheet" href="/assets/admin/admin.css?v=20260721-admin-layout" />
-    <link rel="stylesheet" href="/assets/admin/settings.css?v=20260721-admin-layout" />
+    <link rel="stylesheet" href="/assets/admin/settings.css?v=20260721-unified-taxonomy" />
   </head>
   <body class="admin-body" data-admin-page="settings">
     <section id="admin-auth-view" class="admin-auth-view" data-auth-fallback="visible">
@@ -20,30 +20,49 @@
       <main class="settings-page">
         <header class="settings-heading">
           <div><p class="admin-eyebrow">Taxonomy</p><h1>标签与分类</h1></div>
-          <div class="settings-heading-actions">
-            <button id="tag-group-create" type="button">新增标签分类</button>
-            <button id="taxonomy-create" class="admin-button-primary" type="button">新增标签</button>
+          <div class="settings-heading-actions" aria-label="新增内容">
+            <button id="tag-group-create" type="button"><span aria-hidden="true">+</span>新增标签分类</button>
+            <button id="taxonomy-create" class="admin-button-primary" type="button"><span aria-hidden="true">+</span>新增标签</button>
+            <button id="category-create" type="button"><span aria-hidden="true">+</span>新增主分类</button>
           </div>
         </header>
-        <div class="admin-segments" role="tablist">
-          <button class="is-active" type="button" data-settings-tab="tags" role="tab">标签体系 <span id="tag-count">0</span><span id="tag-group-count" aria-label="标签分类数量">0 类</span></button>
-          <button type="button" data-settings-tab="categories" role="tab">主分类 <span id="category-count">0</span></button>
+
+        <div class="settings-overview" aria-label="内容统计">
+          <div class="settings-overview-item"><span>标签分类</span><strong id="tag-group-count">0</strong></div>
+          <div class="settings-overview-item"><span>标签</span><strong id="tag-count">0</strong></div>
+          <div class="settings-overview-item"><span>主分类</span><strong id="category-count">0</strong></div>
         </div>
 
-        <section id="taxonomy-panel" class="settings-panel">
-          <div class="settings-tools">
-            <input id="taxonomy-search" type="search" placeholder="搜索名称" />
-            <div>
-              <button id="taxonomy-reset-order" type="button" disabled>取消排序</button>
-              <button id="taxonomy-save-order" class="admin-button-primary" type="button" disabled>保存排序</button>
+        <div class="settings-filter-bar">
+          <label class="settings-search-field" for="taxonomy-search"><span>搜索</span><input id="taxonomy-search" type="search" placeholder="搜索标签、标签分类或主分类" /></label>
+        </div>
+
+        <section id="tag-taxonomy-panel" class="settings-taxonomy-section" aria-labelledby="tag-taxonomy-title">
+          <header class="settings-taxonomy-section-heading">
+            <div><p class="admin-eyebrow">Tags</p><h2 id="tag-taxonomy-title">标签体系</h2></div>
+            <div class="settings-order-actions">
+              <button id="tag-taxonomy-reset-order" type="button" disabled>取消排序</button>
+              <button id="tag-taxonomy-save-order" class="admin-button-primary" type="button" disabled>保存排序</button>
             </div>
-          </div>
-          <p id="taxonomy-status" class="settings-status" aria-live="polite"></p>
-          <div id="taxonomy-list" class="taxonomy-list"></div>
+          </header>
+          <p id="tag-taxonomy-status" class="settings-status" aria-live="polite"></p>
+          <div id="tag-taxonomy-list" class="taxonomy-list"></div>
+        </section>
+
+        <section id="category-taxonomy-panel" class="settings-taxonomy-section" aria-labelledby="category-taxonomy-title">
+          <header class="settings-taxonomy-section-heading">
+            <div><p class="admin-eyebrow">Categories</p><h2 id="category-taxonomy-title">主分类</h2></div>
+            <div class="settings-order-actions">
+              <button id="category-taxonomy-reset-order" type="button" disabled>取消排序</button>
+              <button id="category-taxonomy-save-order" class="admin-button-primary" type="button" disabled>保存排序</button>
+            </div>
+          </header>
+          <p id="category-taxonomy-status" class="settings-status" aria-live="polite"></p>
+          <div id="category-taxonomy-list" class="taxonomy-list"></div>
         </section>
       </main>
       <div id="admin-dialog-host"></div><div id="admin-toast-host" class="admin-toast-host" aria-live="polite"></div>
     </div>
-    <script type="module" src="/assets/admin/settings-page.js?v=20260720-tag-tree"></script>
+    <script type="module" src="/assets/admin/settings-page.js?v=20260721-unified-taxonomy"></script>
   </body>
 </html>

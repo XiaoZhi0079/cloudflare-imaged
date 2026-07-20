@@ -192,10 +192,12 @@ test("admin pages load page-specific modules and styles", () => {
 test("labels and categories page excludes featured management", () => {
   const html = readFileSync(new URL("../public/admin/settings.html", import.meta.url), "utf8");
   assert.match(html, /<h1>标签与分类<\/h1>/);
-  assert.match(html, /data-settings-tab="tags"/);
-  assert.match(html, /data-settings-tab="categories"/);
-  assert.doesNotMatch(html, /data-settings-tab="tagGroups"/);
   assert.match(html, /id="tag-group-create"/);
+  assert.match(html, /id="taxonomy-create"/);
+  assert.match(html, /id="category-create"/);
+  assert.match(html, /id="tag-taxonomy-panel"/);
+  assert.match(html, /id="category-taxonomy-panel"/);
+  assert.doesNotMatch(html, /data-settings-tab|role="tablist"/);
   assert.doesNotMatch(html, /data-settings-tab="site"|id="site-panel"/);
   assert.doesNotMatch(html, /site-issue-name|site-hero-copy|site-featured-list/);
 });
@@ -451,7 +453,7 @@ test("changed admin assets use targeted cache-busting versions", () => {
     Array(libraryCardTagsReferences.length).fill(libraryCardTagsVersion),
   );
 
-  const albumsRedesignVersion = "20260721-admin-layout";
+  const albumsRedesignVersion = "20260721-unified-taxonomy";
   const albumsRedesignReferences = [
     [settingsHtml, /href="\/assets\/admin\/settings\.css\?v=([^"]+)"/, "settings.css"],
     [featuredHtml, /href="\/assets\/admin\/settings\.css\?v=([^"]+)"/, "featured settings.css"],
@@ -482,7 +484,7 @@ test("changed admin assets use targeted cache-busting versions", () => {
     Array(albumDraftReferences.length).fill(albumDraftVersion),
   );
 
-  const featuredNavigationVersion = "20260720-tag-tree";
+  const featuredNavigationVersion = "20260721-unified-taxonomy";
   const navigationReferences = [
     [settingsHtml, /src="\/assets\/admin\/settings-page\.js\?v=([^"]+)"/, "settings-page.js"],
   ];
