@@ -1043,6 +1043,25 @@ export function createGalleryRepository(database) {
       return attachTagNames([mapImageRow(image)], await getImageTagRows(database, [image.id]))[0];
     },
 
+    async getImageByStorageKey(storageKey) {
+      const image = await first(
+        database,
+        `
+          SELECT ${SELECT_IMAGE_COLUMNS}
+          FROM images
+          LEFT JOIN categories ON categories.id = images.category_id
+          WHERE images.storage_key = ?
+        `,
+        [storageKey],
+      );
+
+      if (!image) {
+        return null;
+      }
+
+      return attachTagNames([mapImageRow(image)], await getImageTagRows(database, [image.id]))[0];
+    },
+
     async listImages() {
       const imageRows = await all(
         database,
@@ -1095,7 +1114,43 @@ export function createGalleryRepository(database) {
       return await this.getImageById(imageId);
     },
 
+    async updateImageStorage(imageId, { storageKey, fileName, fileUrl, syncStatus = "ok", note = null }) {
+      const current = await this.getImageById(imageId);
+      if (!current) {
+        return null;
+      }
+
+      await run(
+        database,
+        `
+          UPDATE images
+          SET storage_key = ?,
+              file_name = ?,
+              file_url = ?,
+              sync_status = ?,
+              note = ?,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `,
+        [storageKey, fileName, fileUrl, syncStatus, note, imageId],
+      );
+
+      return {
+        ...current,
+        storageKey,
+        fileName,
+        fileUrl,
+        syncStatus,
+        note,
+      };
+    },
+
     async updateImageSyncState(imageId, { syncStatus, note = null }) {
+      const current = await this.getImageById(imageId);
+      if (!current) {
+        return null;
+      }
+
       await run(
         database,
         `
@@ -1106,7 +1161,11 @@ export function createGalleryRepository(database) {
         [syncStatus, note, imageId],
       );
 
-      return await this.getImageById(imageId);
+      return {
+        ...current,
+        syncStatus,
+        note,
+      };
     },
 
     async deleteImage(imageId) {

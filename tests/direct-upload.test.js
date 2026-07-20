@@ -8,6 +8,7 @@ import {
 } from "../functions/api/admin/images/upload/init.js";
 import { onRequest as adminUploadCompleteHandler } from "../functions/api/admin/images/upload/complete.js";
 import { createTestDatabase } from "./helpers/test-database.js";
+import { copyR2Object, R2RequestError } from "../src/server/r2-direct-upload.js";
 
 function createMockBucket() {
   const objects = new Map();
@@ -113,6 +114,56 @@ test("direct upload signing converts runtime failures into a safe diagnostic", a
   assert.deepEqual(result, {
     error: "生成 R2 直传地址失败：TypeError: crypto provider unavailable",
   });
+});
+
+test("R2 server-side copy signs a metadata-only CopyObject request", async () => {
+  let captured = null;
+  const result = await copyR2Object({
+    accountId: "account-123",
+    bucketName: "gallery",
+    accessKeyId: "test-access-key",
+    secretAccessKey: "test-secret-key",
+    sourceKey: "elegant beauty/source image.png",
+    destinationKey: "elegant beauty/target image.png",
+    now: new Date("2026-07-21T00:00:00.000Z"),
+    fetchImpl: async (url, options) => {
+      captured = { url, options };
+      return new Response("<CopyObjectResult><ETag>copied-etag</ETag></CopyObjectResult>", {
+        status: 200,
+        headers: { etag: "copied-etag" },
+      });
+    },
+  });
+
+  assert.deepEqual(result, { etag: "copied-etag" });
+  assert.equal(
+    captured.url,
+    "https://gallery.account-123.r2.cloudflarestorage.com/elegant%20beauty/target%20image.png",
+  );
+  assert.equal(captured.options.method, "PUT");
+  assert.equal(
+    captured.options.headers["x-amz-copy-source"],
+    "/gallery/elegant%20beauty/source%20image.png",
+  );
+  assert.match(captured.options.headers.authorization, /^AWS4-HMAC-SHA256 Credential=test-access-key\//);
+  assert.equal("body" in captured.options, false);
+});
+
+test("R2 server-side copy maps storage conflicts to a typed error", async () => {
+  await assert.rejects(
+    copyR2Object({
+      accountId: "account-123",
+      bucketName: "gallery",
+      accessKeyId: "test-access-key",
+      secretAccessKey: "test-secret-key",
+      sourceKey: "gallery/source.png",
+      destinationKey: "gallery/target.png",
+      fetchImpl: async () => new Response("<Error><Code>PreconditionFailed</Code></Error>", { status: 412 }),
+    }),
+    (error) => error instanceof R2RequestError
+      && error.code === "PreconditionFailed"
+      && error.status === 409,
+  );
 });
 
 test("admin upload init handler converts unexpected runtime errors into JSON", async () => {

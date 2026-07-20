@@ -34,6 +34,17 @@ function createMockBucket() {
         customMetadata: { ...(entry.customMetadata ?? {}) },
       };
     },
+    async head(key) {
+      const entry = objects.get(key);
+      return entry
+        ? {
+            key,
+            size: entry.body.byteLength,
+            httpMetadata: { ...(entry.httpMetadata ?? {}) },
+            customMetadata: { ...(entry.customMetadata ?? {}) },
+          }
+        : null;
+    },
     async delete(key) {
       objects.delete(key);
     },
@@ -96,6 +107,81 @@ test("renameImage renames the stored object inside the gallery bucket", async ()
   });
   assert.equal(bucket.objects.has("gallery/campus-01.webp"), false);
   assert.ok(bucket.objects.has("gallery/campus-02.webp"));
+});
+
+test("renameImage uses server-side copy without reading image bytes through the service", async () => {
+  const bucket = createMockBucket();
+  await bucket.put("gallery/source.webp", new Uint8Array([1, 2, 3]));
+  let copyCall = null;
+  const storage = createGalleryStorage({
+    bucket,
+    publicBaseUrl: "https://gallery.example.com/file",
+    serverSideCopy: async (sourceKey, destinationKey) => {
+      copyCall = { sourceKey, destinationKey };
+      const source = bucket.objects.get(sourceKey);
+      bucket.objects.set(destinationKey, {
+        body: new Uint8Array(source.body),
+        httpMetadata: { ...source.httpMetadata },
+        customMetadata: { ...source.customMetadata },
+      });
+    },
+  });
+
+  await storage.renameImage("gallery/source.webp", "gallery/target.webp");
+
+  assert.deepEqual(copyCall, {
+    sourceKey: "gallery/source.webp",
+    destinationKey: "gallery/target.webp",
+  });
+  assert.equal(bucket.objects.has("gallery/source.webp"), false);
+  assert.equal(bucket.objects.has("gallery/target.webp"), true);
+});
+
+test("renameImage never overwrites an existing target object", async () => {
+  const bucket = createMockBucket();
+  await bucket.put("gallery/source.webp", new Uint8Array([1]));
+  await bucket.put("gallery/target.webp", new Uint8Array([2]));
+  const storage = createGalleryStorage({
+    bucket,
+    publicBaseUrl: "https://gallery.example.com/file",
+  });
+
+  await assert.rejects(
+    storage.renameImage("gallery/source.webp", "gallery/target.webp"),
+    (error) => error.code === "TARGET_OBJECT_EXISTS" && error.status === 409,
+  );
+  assert.deepEqual([...bucket.objects.get("gallery/source.webp").body], [1]);
+  assert.deepEqual([...bucket.objects.get("gallery/target.webp").body], [2]);
+});
+
+test("renameImage completes an explicitly resumed retry when only the target exists", async () => {
+  const bucket = createMockBucket();
+  await bucket.put("gallery/target.webp", new Uint8Array([1, 2, 3]));
+  const storage = createGalleryStorage({
+    bucket,
+    publicBaseUrl: "https://gallery.example.com/file",
+  });
+
+  const record = await storage.renameImage("gallery/source.webp", "gallery/target.webp", {
+    allowExistingTarget: true,
+  });
+
+  assert.equal(record.storageKey, "gallery/target.webp");
+  assert.equal(bucket.objects.has("gallery/target.webp"), true);
+});
+
+test("renameImage treats an untracked missing-source existing-target state as ambiguous", async () => {
+  const bucket = createMockBucket();
+  await bucket.put("gallery/target.webp", new Uint8Array([1, 2, 3]));
+  const storage = createGalleryStorage({
+    bucket,
+    publicBaseUrl: "https://gallery.example.com/file",
+  });
+
+  await assert.rejects(
+    storage.renameImage("gallery/source.webp", "gallery/target.webp"),
+    (error) => error.code === "RELOCATION_STATE_AMBIGUOUS" && error.status === 409,
+  );
 });
 
 test("moveImage moves the stored object into another directory", async () => {

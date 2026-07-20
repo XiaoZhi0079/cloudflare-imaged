@@ -7,6 +7,7 @@ import { onRequest as publicImagesHandler } from "../functions/api/public/images
 import { onRequest as adminTagsHandler } from "../functions/api/admin/tags.js";
 import { onRequest as adminTagGroupsHandler } from "../functions/api/admin/tag-groups.js";
 import { onRequest as adminImagesHandler } from "../functions/api/admin/images.js";
+import { onRequest as adminImagesAuditHandler } from "../functions/api/admin/images/audit.js";
 import { onRequest as adminImportHandler } from "../functions/api/admin/images/import.js";
 import { onRequest as adminUploadHandler } from "../functions/api/admin/images/upload/index.js";
 import { onRequest as adminTagAssignmentsHandler } from "../functions/api/admin/images/tag-assignments.js";
@@ -604,6 +605,20 @@ function createMockBucket() {
         customMetadata: { ...(entry.customMetadata ?? {}) },
       };
     },
+    async head(key) {
+      const entry = objects.get(key);
+      return entry ? { key, size: entry.body.byteLength, etag: key } : null;
+    },
+    async list() {
+      return {
+        objects: [...objects.entries()].map(([key, entry]) => ({
+          key,
+          size: entry.body.byteLength,
+          etag: key,
+        })),
+        truncated: false,
+      };
+    },
     async delete(key) {
       objects.delete(key);
     },
@@ -678,6 +693,63 @@ test("admin images handler renames and moves gallery files inside the gallery bu
   assert.equal(moveResponse.status, 200);
   assert.equal(env.GALLERY_BUCKET.objects.has("gallery/campus-02.webp"), false);
   assert.ok(env.GALLERY_BUCKET.objects.has("archive/campus-02.webp"));
+});
+
+test("admin image audit finds and repairs a unique D1 to R2 name mismatch", async () => {
+  const env = {
+    ...createTestEnv(),
+    GALLERY_BUCKET: createMockBucket(),
+    GALLERY_PUBLIC_BASE_URL: "https://gallery.example.com/file",
+  };
+  await env.GALLERY_BUCKET.put("elegant-beauty/wallpaper-beauty-011.png", new Uint8Array([1, 2, 3]));
+  const repository = createGalleryRepository(env.GALLERY_DB);
+  const image = await repository.upsertImage({
+    storageKey: "elegant-beauty/wallpaper-beauty-018.png",
+    fileName: "wallpaper-beauty-018.png",
+    fileUrl: "https://gallery.example.com/file/elegant-beauty/wallpaper-beauty-018.png",
+    width: 1920,
+    height: 1080,
+    syncStatus: "rename_failed",
+    note: "rename failed",
+  });
+  const headers = {
+    "content-type": "application/json",
+    "x-gallery-admin-key": "gallery-secret",
+  };
+
+  const auditResponse = await adminImagesAuditHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/images/audit", { headers }),
+  });
+  assert.equal(auditResponse.status, 200);
+  const audit = await auditResponse.json();
+  assert.deepEqual(audit.summary, {
+    imageRecords: 1,
+    r2Objects: 1,
+    missingObjects: 1,
+    orphanObjects: 1,
+    failedRecords: 1,
+    uniqueRepairSuggestions: 1,
+  });
+  assert.equal(audit.suggestions[0].existingKey, "elegant-beauty/wallpaper-beauty-011.png");
+
+  const repairResponse = await adminImagesAuditHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/images/audit", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        action: "repair-record",
+        imageId: image.id,
+        storageKey: "elegant-beauty/wallpaper-beauty-011.png",
+      }),
+    }),
+  });
+  assert.equal(repairResponse.status, 200);
+  const repaired = await repairResponse.json();
+  assert.equal(repaired.image.fileName, "wallpaper-beauty-011.png");
+  assert.equal(repaired.image.syncStatus, "ok");
+  assert.equal((await repository.getImageById(image.id)).storageKey, "elegant-beauty/wallpaper-beauty-011.png");
 });
 
 test("admin images import handler is no longer available after gallery split", async () => {

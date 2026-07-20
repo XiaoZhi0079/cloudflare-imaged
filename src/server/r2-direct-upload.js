@@ -55,6 +55,38 @@ function buildCanonicalQueryString(parameters) {
     .join("&");
 }
 
+const EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+
+async function createSigningKey(secretAccessKey, dateStamp) {
+  return await hmacBytes(
+    await hmacBytes(
+      await hmacBytes(
+        await hmacBytes(`AWS4${secretAccessKey}`, dateStamp),
+        "auto",
+      ),
+      "s3",
+    ),
+    "aws4_request",
+  );
+}
+
+function normalizeHeaderValue(value) {
+  return String(value ?? "").trim().replace(/\s+/g, " ");
+}
+
+function r2Host(bucketName, accountId) {
+  return `${bucketName}.${accountId}.r2.cloudflarestorage.com`;
+}
+
+export class R2RequestError extends Error {
+  constructor(message, { code = "R2_REQUEST_FAILED", status = 502 } = {}) {
+    super(message);
+    this.name = "R2RequestError";
+    this.code = code;
+    this.status = status;
+  }
+}
+
 export function resolveR2DirectUploadConfig(env) {
   const accountId = String(env.R2_ACCOUNT_ID ?? "").trim();
   const bucketName = String(env.R2_BUCKET_NAME ?? "").trim();
@@ -85,7 +117,7 @@ export async function createPresignedPutUrl({
   expiresIn = 900,
   now = new Date(),
 }) {
-  const host = `${bucketName}.${accountId}.r2.cloudflarestorage.com`;
+  const host = r2Host(bucketName, accountId);
   const pathname = `/${encodeKeyPath(key)}`;
   const algorithm = "AWS4-HMAC-SHA256";
   const amzDate = formatAmzDate(now);
@@ -116,17 +148,73 @@ export async function createPresignedPutUrl({
     credentialScope,
     await sha256Hex(canonicalRequest),
   ].join("\n");
-  const signingKey = await hmacBytes(
-    await hmacBytes(
-      await hmacBytes(
-        await hmacBytes(`AWS4${secretAccessKey}`, dateStamp),
-        "auto",
-      ),
-      "s3",
-    ),
-    "aws4_request",
-  );
+  const signingKey = await createSigningKey(secretAccessKey, dateStamp);
   const signature = await hmacHex(signingKey, stringToSign);
 
   return `https://${host}${pathname}?${canonicalQuery}&X-Amz-Signature=${signature}`;
+}
+
+export async function copyR2Object({
+  accountId,
+  bucketName,
+  accessKeyId,
+  secretAccessKey,
+  sourceKey,
+  destinationKey,
+  now = new Date(),
+  fetchImpl = fetch,
+}) {
+  const host = r2Host(bucketName, accountId);
+  const pathname = `/${encodeKeyPath(destinationKey)}`;
+  const copySource = `/${encodeRfc3986(bucketName)}/${encodeKeyPath(sourceKey)}`;
+  const amzDate = formatAmzDate(now);
+  const dateStamp = getDateStamp(amzDate);
+  const credentialScope = `${dateStamp}/auto/s3/aws4_request`;
+  const signedHeaders = "host;x-amz-content-sha256;x-amz-copy-source;x-amz-date";
+  const canonicalHeaders = [
+    `host:${host}`,
+    `x-amz-content-sha256:${EMPTY_SHA256}`,
+    `x-amz-copy-source:${normalizeHeaderValue(copySource)}`,
+    `x-amz-date:${amzDate}`,
+    "",
+  ].join("\n");
+  const canonicalRequest = [
+    "PUT",
+    pathname,
+    "",
+    canonicalHeaders,
+    signedHeaders,
+    EMPTY_SHA256,
+  ].join("\n");
+  const stringToSign = [
+    "AWS4-HMAC-SHA256",
+    amzDate,
+    credentialScope,
+    await sha256Hex(canonicalRequest),
+  ].join("\n");
+  const signingKey = await createSigningKey(secretAccessKey, dateStamp);
+  const signature = await hmacHex(signingKey, stringToSign);
+  const authorization = `AWS4-HMAC-SHA256 Credential=${accessKeyId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+  const response = await fetchImpl(`https://${host}${pathname}`, {
+    method: "PUT",
+    headers: {
+      authorization,
+      "x-amz-content-sha256": EMPTY_SHA256,
+      "x-amz-copy-source": copySource,
+      "x-amz-date": amzDate,
+    },
+  });
+  const responseText = await response.text();
+  const embeddedError = response.ok && /<Error(?:\s|>)/i.test(responseText);
+  if (!response.ok || embeddedError) {
+    const code = responseText.match(/<Code>([^<]+)<\/Code>/i)?.[1] ?? "R2_COPY_FAILED";
+    throw new R2RequestError(`R2 server-side copy failed (${response.status}, ${code})`, {
+      code,
+      status: response.status === 409 || response.status === 412 ? 409 : 502,
+    });
+  }
+
+  return {
+    etag: response.headers.get("etag") ?? responseText.match(/<ETag>\s*&quot;?([^<&"]+)/i)?.[1] ?? null,
+  };
 }

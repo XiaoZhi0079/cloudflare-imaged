@@ -1,5 +1,52 @@
 import { getGalleryStorage, getRepository, requireAdminKey, toAdminImage } from "./_shared.js";
 import { jsonResponse, parseRequestJson } from "../../../src/shared/http.js";
+import { createImageRelocationService } from "../../../src/server/image-relocation.js";
+
+function errorDetails(error) {
+  return {
+    name: String(error?.name ?? "Error").slice(0, 80),
+    code: String(error?.code ?? "UNKNOWN").slice(0, 80),
+    message: String(error?.message ?? "unknown error").replace(/\s+/g, " ").slice(0, 240),
+  };
+}
+
+function logImageMutationError(details) {
+  console.error(JSON.stringify({
+    level: "error",
+    service: "gallery-image-mutation",
+    ...details,
+    error: errorDetails(details.error),
+    rollbackError: details.rollbackError ? errorDetails(details.rollbackError) : undefined,
+  }));
+}
+
+function relocationResponse(error, imageId) {
+  const code = String(error?.code ?? "IMAGE_RELOCATION_FAILED");
+  const status = code === "INVALID_FILE_NAME" || code === "INVALID_DIRECTORY"
+    ? 400
+    : code === "TARGET_OBJECT_EXISTS" || code === "SOURCE_OBJECT_NOT_FOUND" || code === "RELOCATION_STATE_AMBIGUOUS"
+      ? 409
+      : code === "PENDING_STATE_FAILED" || error?.repairRequired
+        ? 503
+        : 502;
+  const message = code === "TARGET_OBJECT_EXISTS"
+    ? "目标文件名已存在，请换一个名称。"
+    : code === "SOURCE_OBJECT_NOT_FOUND" || code === "RELOCATION_STATE_AMBIGUOUS"
+      ? "R2 对象状态与系统记录不一致，请先执行资源库对账。"
+    : code === "INVALID_FILE_NAME"
+      ? "文件名包含不支持的字符。"
+      : code === "INVALID_DIRECTORY"
+        ? "目录名称无效。"
+        : error?.repairRequired
+          ? "文件已移动但元数据修复失败，请先执行资源库对账。"
+          : "底层文件操作失败，系统已保留同步状态。";
+  return jsonResponse({
+    error: message,
+    code,
+    imageId,
+    repairRequired: Boolean(error?.repairRequired),
+  }, status);
+}
 
 export async function onRequest({ env, request }) {
   const authFailure = requireAdminKey(request, env);
@@ -37,57 +84,30 @@ export async function onRequest({ env, request }) {
     }
 
     const storage = getGalleryStorage(env, request);
+    const relocation = createImageRelocationService({
+      repository,
+      storage,
+      onError: logImageMutationError,
+    });
 
     if (nextDirectory) {
       try {
-        const moved = await storage.moveImage(image.storageKey, nextDirectory);
-        const updated = await repository.updateImage(imageId, {
-          storageKey: moved.storageKey,
-          fileName: moved.fileName,
-          fileUrl: moved.fileUrl,
-          syncStatus: "ok",
-          note: null,
-        });
+        const updated = await relocation.move(image, nextDirectory);
 
         return jsonResponse({ image: toAdminImage(updated) });
-      } catch {
-        await repository.updateImageSyncState(imageId, {
-          syncStatus: "move_failed",
-          note: "底层文件移动失败，图片仍保留在原始目录中。",
-        });
-
-        return jsonResponse({
-          error: "底层文件移动失败，图片已标记为待修复。",
-          imageId,
-        }, 502);
+      } catch (error) {
+        logImageMutationError({ event: "image_move_failed", imageId, error });
+        return relocationResponse(error, imageId);
       }
     }
 
-    const parts = image.storageKey.split("/");
-    parts[parts.length - 1] = nextFileName;
-    const newFileId = parts.join("/");
-
     try {
-      const renamed = await storage.renameImage(image.storageKey, newFileId);
-      const updated = await repository.updateImage(imageId, {
-        storageKey: renamed.storageKey,
-        fileName: renamed.fileName,
-        fileUrl: renamed.fileUrl,
-        syncStatus: "ok",
-        note: null,
-      });
+      const updated = await relocation.rename(image, nextFileName);
 
       return jsonResponse({ image: toAdminImage(updated) });
-    } catch {
-      await repository.updateImageSyncState(imageId, {
-        syncStatus: "rename_failed",
-        note: "底层文件重命名失败，图片仍保留原始文件名。",
-      });
-
-      return jsonResponse({
-        error: "底层文件重命名失败，图片已标记为待修复。",
-        imageId,
-      }, 502);
+    } catch (error) {
+      logImageMutationError({ event: "image_rename_failed", imageId, error });
+      return relocationResponse(error, imageId);
     }
   }
 

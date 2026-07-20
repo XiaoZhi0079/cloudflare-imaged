@@ -77,10 +77,29 @@ function extractHttpMetadata(object) {
   return {};
 }
 
-async function copyObject(bucket, fromKey, toKey) {
+export class GalleryStorageError extends Error {
+  constructor(message, { code = "STORAGE_OPERATION_FAILED", status = 502, cause } = {}) {
+    super(message, cause ? { cause } : undefined);
+    this.name = "GalleryStorageError";
+    this.code = code;
+    this.status = status;
+  }
+}
+
+async function getObjectMetadata(bucket, key) {
+  if (typeof bucket.head === "function") {
+    return await bucket.head(key);
+  }
+  return await bucket.get(key);
+}
+
+async function copyObjectThroughBinding(bucket, fromKey, toKey) {
   const object = await bucket.get(fromKey);
   if (!object?.body) {
-    throw new Error(`Stored object not found: ${fromKey}`);
+    throw new GalleryStorageError(`Stored object not found: ${fromKey}`, {
+      code: "SOURCE_OBJECT_NOT_FOUND",
+      status: 409,
+    });
   }
 
   await bucket.put(toKey, object.body, {
@@ -89,7 +108,79 @@ async function copyObject(bucket, fromKey, toKey) {
   });
 }
 
-export function createGalleryStorage({ bucket, publicBaseUrl }) {
+async function relocateObject(bucket, fromKey, toKey, serverSideCopy, { allowExistingTarget = false } = {}) {
+  if (fromKey === toKey) {
+    const current = await getObjectMetadata(bucket, fromKey);
+    if (!current) {
+      throw new GalleryStorageError(`Stored object not found: ${fromKey}`, {
+        code: "SOURCE_OBJECT_NOT_FOUND",
+        status: 409,
+      });
+    }
+    return;
+  }
+
+  const [source, target] = await Promise.all([
+    getObjectMetadata(bucket, fromKey),
+    getObjectMetadata(bucket, toKey),
+  ]);
+  if (!source && target) {
+    if (allowExistingTarget) return;
+    throw new GalleryStorageError("Source is missing while target already exists", {
+      code: "RELOCATION_STATE_AMBIGUOUS",
+      status: 409,
+    });
+  }
+  if (!source) {
+    throw new GalleryStorageError(`Stored object not found: ${fromKey}`, {
+      code: "SOURCE_OBJECT_NOT_FOUND",
+      status: 409,
+    });
+  }
+  if (target) {
+    throw new GalleryStorageError(`Target object already exists: ${toKey}`, {
+      code: "TARGET_OBJECT_EXISTS",
+      status: 409,
+    });
+  }
+
+  try {
+    if (serverSideCopy) {
+      await serverSideCopy(fromKey, toKey);
+    } else {
+      await copyObjectThroughBinding(bucket, fromKey, toKey);
+    }
+  } catch (error) {
+    if (error instanceof GalleryStorageError) throw error;
+    throw new GalleryStorageError("Stored object copy failed", {
+      code: error?.code ?? "OBJECT_COPY_FAILED",
+      status: Number(error?.status) === 409 ? 409 : 502,
+      cause: error,
+    });
+  }
+
+  const copied = await getObjectMetadata(bucket, toKey);
+  if (!copied || (Number.isFinite(Number(source.size)) && Number(source.size) !== Number(copied.size))) {
+    await bucket.delete(toKey).catch(() => {});
+    throw new GalleryStorageError("Copied object verification failed", {
+      code: "OBJECT_COPY_VERIFICATION_FAILED",
+      status: 502,
+    });
+  }
+
+  try {
+    await bucket.delete(fromKey);
+  } catch (error) {
+    await bucket.delete(toKey).catch(() => {});
+    throw new GalleryStorageError("Source object cleanup failed", {
+      code: "SOURCE_OBJECT_DELETE_FAILED",
+      status: 502,
+      cause: error,
+    });
+  }
+}
+
+export function createGalleryStorage({ bucket, publicBaseUrl, serverSideCopy }) {
   if (!bucket) {
     throw new Error("GALLERY_BUCKET binding is required");
   }
@@ -112,9 +203,8 @@ export function createGalleryStorage({ bucket, publicBaseUrl }) {
       return toImageRecord(fileId, publicBaseUrl, imageMeta);
     },
 
-    async renameImage(fileId, newFileId) {
-      await copyObject(bucket, fileId, newFileId);
-      await bucket.delete(fileId);
+    async renameImage(fileId, newFileId, options) {
+      await relocateObject(bucket, fileId, newFileId, serverSideCopy, options);
       return {
         storageKey: newFileId,
         fileName: newFileId.split("/").pop(),
@@ -123,12 +213,11 @@ export function createGalleryStorage({ bucket, publicBaseUrl }) {
       };
     },
 
-    async moveImage(fileId, directory) {
+    async moveImage(fileId, directory, options) {
       const fileName = fileId.split("/").pop();
       const targetDirectory = String(directory ?? "").trim().replace(/^\/+|\/+$/g, "");
       const nextFileId = targetDirectory ? `${targetDirectory}/${fileName}` : fileName;
-      await copyObject(bucket, fileId, nextFileId);
-      await bucket.delete(fileId);
+      await relocateObject(bucket, fileId, nextFileId, serverSideCopy, options);
       return {
         storageKey: nextFileId,
         fileName,

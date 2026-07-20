@@ -1,5 +1,6 @@
 import { createGalleryRepository } from "../../../src/server/gallery-repository.js";
 import { createGalleryStorage, resolvePublicBaseUrl } from "../../../src/server/gallery-storage.js";
+import { copyR2Object, resolveR2DirectUploadConfig } from "../../../src/server/r2-direct-upload.js";
 import { classifyFeaturedImage } from "../../../src/shared/featured-image-rules.js";
 import { jsonResponse } from "../../../src/shared/http.js";
 
@@ -64,9 +65,17 @@ export function getRepository(env) {
 }
 
 export function getGalleryStorage(env, request) {
+  const r2Config = resolveR2DirectUploadConfig(env);
   return createGalleryStorage({
     bucket: env.GALLERY_BUCKET,
     publicBaseUrl: resolvePublicBaseUrl(env.GALLERY_PUBLIC_BASE_URL, request?.url),
+    serverSideCopy: r2Config.error
+      ? undefined
+      : (sourceKey, destinationKey) => copyR2Object({
+          ...r2Config,
+          sourceKey,
+          destinationKey,
+        }),
   });
 }
 
