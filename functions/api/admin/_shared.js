@@ -71,12 +71,35 @@ export function getGalleryStorage(env, request) {
 }
 
 export function toApiTag(tag) {
+  const groupId = Number(tag.group_id ?? tag.groupId);
+  const hasGroup = Number.isInteger(groupId) && groupId > 0;
   return {
     id: tag.id,
     name: tag.name,
     slug: tag.slug,
     sortOrder: Number(tag.sort_order ?? tag.sortOrder ?? 0),
     isVisible: Number(tag.is_visible ?? tag.isVisible ?? 0) === 1,
+    ...(hasGroup
+      ? {
+          groupId,
+          group: {
+            id: groupId,
+            name: tag.group_name ?? tag.group?.name,
+            slug: tag.group_slug ?? tag.group?.slug,
+            sortOrder: Number(tag.group_sort_order ?? tag.group?.sortOrder ?? 0),
+          },
+        }
+      : {}),
+  };
+}
+
+export function toApiTagGroup(group) {
+  return {
+    id: group.id,
+    name: group.name,
+    slug: group.slug,
+    sortOrder: Number(group.sort_order ?? group.sortOrder ?? 0),
+    tagCount: Number(group.tag_count ?? group.tagCount ?? 0),
   };
 }
 

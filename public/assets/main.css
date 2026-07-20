@@ -102,13 +102,13 @@ button[disabled] {
 }
 
 .hero-featured.has-featured .hero-issue {
-  color: rgba(255, 248, 240, 0.78);
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.72);
+  color: #fff;
+  text-shadow: 0 1px 5px rgba(0, 0, 0, 0.78);
 }
 
 .hero-featured.has-featured .hero-copy {
-  color: #fff;
-  text-shadow: 0 1px 5px rgba(0, 0, 0, 0.78);
+  color: rgba(255, 248, 240, 0.78);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.72);
 }
 
 .hero-stage {
@@ -186,18 +186,19 @@ button[disabled] {
 }
 
 .hero-issue {
-  margin: 0 0 8px;
-  color: var(--accent);
-  font-size: 13px;
-  letter-spacing: 0.08em;
-}
-
-.hero-copy {
   margin: 0;
   max-width: 40em;
   color: var(--muted);
   font-size: 15px;
   line-height: 1.7;
+}
+
+.hero-copy {
+  margin: 8px 0 0;
+  color: var(--accent);
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: 0.08em;
 }
 
 .eyebrow {
@@ -230,10 +231,30 @@ button[disabled] {
 }
 
 .tag-strip {
-  display: flex;
-  gap: 12px;
-  overflow-x: auto;
+  display: grid;
+  gap: 14px;
   padding: 18px 4px 8px;
+}
+
+.tag-group {
+  display: grid;
+  grid-template-columns: minmax(88px, 132px) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.tag-group h3 {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.tag-group-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .tag-chip {
@@ -540,6 +561,15 @@ button[disabled] {
     padding: 16px 18px 18px;
     background: transparent;
     pointer-events: none;
+  }
+
+  .tag-group {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .tag-group h3 {
+    margin-top: 0;
   }
 
   .gallery-grid {

@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 
 const baselineUrl = new URL("../migrations/0001_baseline.sql", import.meta.url);
 const albumsUrl = new URL("../migrations/0002_albums.sql", import.meta.url);
+const tagGroupsUrl = new URL("../migrations/0003_tag_groups.sql", import.meta.url);
 const schemaUrl = new URL("../schema.sql", import.meta.url);
 
 const BUSINESS_TABLES = [
@@ -15,6 +16,7 @@ const BUSINESS_TABLES = [
   "image_tags",
   "images",
   "site_settings",
+  "tag_groups",
   "tags",
 ];
 
@@ -29,6 +31,8 @@ const BUSINESS_INDEXES = [
   "idx_image_tags_tag_id",
   "idx_images_category_id",
   "idx_images_file_id",
+  "idx_tag_groups_order",
+  "idx_tags_group_order",
   "idx_tags_visible_order",
 ];
 
@@ -52,7 +56,7 @@ function normalizedObjects(database) {
     .map((row) => ({
       type: row.type,
       name: row.name,
-      sql: row.sql.replace(/\s+/g, " ").trim().toLowerCase(),
+      sql: row.sql.replace(/\s+/g, " ").replace(/\s+([,)])/g, "$1").trim().toLowerCase(),
     }));
 }
 
@@ -60,10 +64,12 @@ test("migrations prepare a fresh database and are idempotent", () => {
   assert.equal(existsSync(baselineUrl), true, "baseline migration must exist");
   const baseline = readFileSync(baselineUrl, "utf8");
   const albums = readFileSync(albumsUrl, "utf8");
+  const tagGroups = readFileSync(tagGroupsUrl, "utf8");
   const database = new DatabaseSync(":memory:");
 
   database.exec(baseline);
   database.exec(albums);
+  database.exec(tagGroups);
   database.exec(baseline);
   database.exec(albums);
 
@@ -71,6 +77,10 @@ test("migrations prepare a fresh database and are idempotent", () => {
   assert.deepEqual(objectNames(database, "index"), BUSINESS_INDEXES);
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM categories").get().count, 3);
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM site_settings").get().count, 2);
+  assert.deepEqual(
+    { ...database.prepare("SELECT name, slug, sort_order FROM tag_groups").get() },
+    { name: "未分类", slug: "uncategorized", sort_order: 1 },
+  );
   assert.deepEqual(
     { ...database.prepare("SELECT name, slug, description, is_home FROM albums").get() },
     {
@@ -89,9 +99,23 @@ test("schema snapshot and baseline migration define identical objects", () => {
 
   migrationDatabase.exec(readFileSync(baselineUrl, "utf8"));
   migrationDatabase.exec(readFileSync(albumsUrl, "utf8"));
+  migrationDatabase.exec(readFileSync(tagGroupsUrl, "utf8"));
   snapshotDatabase.exec(readFileSync(schemaUrl, "utf8"));
 
   assert.deepEqual(normalizedObjects(migrationDatabase), normalizedObjects(snapshotDatabase));
+});
+
+test("tag group migration preserves existing tags and assigns the default group", () => {
+  const database = new DatabaseSync(":memory:");
+  database.exec(readFileSync(baselineUrl, "utf8"));
+  database.prepare("INSERT INTO tags (name, slug, sort_order, is_visible) VALUES (?, ?, ?, ?)").run("旧标签", "legacy", 1, 1);
+
+  database.exec(readFileSync(tagGroupsUrl, "utf8"));
+
+  assert.deepEqual(
+    { ...database.prepare(`SELECT tags.name, tag_groups.slug AS group_slug FROM tags INNER JOIN tag_groups ON tag_groups.id = tags.group_id WHERE tags.slug = 'legacy'`).get() },
+    { name: "旧标签", group_slug: "uncategorized" },
+  );
 });
 
 test("album migration preserves an existing gallery and converts featured order", () => {

@@ -140,21 +140,30 @@ test("Cloudflare D1 preflight documents every table, foreign key, and index", ()
     "utf8",
   );
   const tables = [
+    "tag_groups",
     "tags",
     "categories",
     "images",
     "image_tags",
     "site_settings",
     "featured_images",
+    "albums",
+    "album_images",
   ];
   const indexes = [
     "idx_tags_visible_order",
+    "idx_tag_groups_order",
+    "idx_tags_group_order",
     "idx_categories_order",
     "idx_images_file_id",
     "idx_images_category_id",
     "idx_image_tags_image_id",
     "idx_image_tags_tag_id",
     "idx_featured_images_order",
+    "idx_albums_order",
+    "idx_albums_home",
+    "idx_album_images_order",
+    "idx_album_images_image_id",
   ];
 
   for (const table of tables) {
@@ -180,12 +189,15 @@ test("Cloudflare D1 preflight compares complete table DDL and proves sort contin
 
   assert.ok(tableDdlCommand, "preflight must output complete CREATE TABLE SQL");
   for (const table of [
+    "tag_groups",
     "tags",
     "categories",
     "images",
     "image_tags",
     "site_settings",
     "featured_images",
+    "albums",
+    "album_images",
   ]) {
     assert.match(tableDdlCommand, new RegExp(`'${table}'`));
   }

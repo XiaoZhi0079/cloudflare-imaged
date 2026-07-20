@@ -27,6 +27,7 @@ export async function loadPublicBootstrapData(fetchImpl = globalThis.fetch) {
   return {
     site,
     tags: Array.isArray(tagsPayload?.tags) ? tagsPayload.tags : [],
+    tagGroups: Array.isArray(tagsPayload?.tagGroups) ? tagsPayload.tagGroups : [],
     albums: Array.isArray(albumsPayload?.albums) ? albumsPayload.albums : [],
   };
 }

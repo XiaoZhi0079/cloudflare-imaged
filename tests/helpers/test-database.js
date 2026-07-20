@@ -7,6 +7,9 @@ export const BASELINE_SQL = readFileSync(
 ) + "\n" + readFileSync(
   new URL("../../migrations/0002_albums.sql", import.meta.url),
   "utf8",
+) + "\n" + readFileSync(
+  new URL("../../migrations/0003_tag_groups.sql", import.meta.url),
+  "utf8",
 );
 
 export function createTestDatabase() {

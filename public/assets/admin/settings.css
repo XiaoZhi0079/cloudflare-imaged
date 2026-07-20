@@ -18,7 +18,8 @@
 .taxonomy-order { display:grid; width:34px; height:34px; place-items:center; border:1px solid var(--admin-line); border-radius:6px; color:var(--admin-muted); font-size:12px; font-weight:800; }
 .taxonomy-copy { min-width:0; display:grid; gap:5px; }
 .taxonomy-copy strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:15px; }
-.taxonomy-visibility,.taxonomy-directory { width:max-content; max-width:100%; color:var(--admin-muted); font-size:12px; }
+.taxonomy-visibility,.taxonomy-directory,.taxonomy-group-name { width:max-content; max-width:100%; color:var(--admin-muted); font-size:12px; }
+.taxonomy-group-name { padding-left:8px; border-left:1px solid var(--admin-line); }
 .taxonomy-visibility::before { content:""; display:inline-block; width:7px; height:7px; margin-right:6px; border-radius:50%; background:var(--admin-success); }
 .taxonomy-visibility.is-hidden::before { background:var(--admin-muted); }
 .taxonomy-actions { display:flex; gap:6px; }

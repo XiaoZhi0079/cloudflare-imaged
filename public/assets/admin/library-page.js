@@ -1,9 +1,9 @@
 import { createAdminApiClient, AdminUnauthorizedError } from "./api-client.js";
-import { createAdminKeyStore, verifyAdminKey } from "./auth.js";
+import { createAdminKeyStore, fetchAdminTaxonomy } from "./auth.js";
 import { createDialogHost } from "./dialogs.js";
 import { createLibraryState } from "./library-state.js?v=20260715-featured-filter-separation";
 import { createNotifier } from "./notifications.js";
-import { renderImageCard } from "./renderers/image-card.js?v=20260720-batch-mode-cover-fix";
+import { renderImageCard } from "./renderers/image-card.js?v=20260720-multilevel-tags";
 import { createUploadRunner, describeUploadFailure, measureImageFile } from "./upload.js";
 
 const elements = {
@@ -122,26 +122,62 @@ function setBulkMode(next) {
   renderLibrary();
 }
 
+function groupedTags(options = state.getTags()) {
+  const optionsByGroup = new Map();
+  for (const option of options) {
+    const groupId = Number(option.groupId ?? option.group?.id);
+    const current = optionsByGroup.get(groupId) ?? [];
+    current.push(option);
+    optionsByGroup.set(groupId, current);
+  }
+  const groups = state.getTagGroups().map((group) => ({ ...group, tags: optionsByGroup.get(Number(group.id)) ?? [] }));
+  const knownIds = new Set(groups.map((group) => Number(group.id)));
+  const ungrouped = options.filter((option) => !knownIds.has(Number(option.groupId ?? option.group?.id)));
+  if (ungrouped.length) groups.push({ id: "ungrouped", name: "未分类", tags: ungrouped });
+  return groups.filter((group) => group.tags.length);
+}
+
+function appendGroupedTagChoices(container, { selectedNames = new Set(), labelClass = "detail-check" } = {}) {
+  const inputs = [];
+  for (const group of groupedTags()) {
+    const section = createElement("section", { className: "tag-choice-group" });
+    section.append(createElement("h4", {}, group.name));
+    const choices = createElement("div", { className: "tag-choice-options" });
+    for (const tag of group.tags) {
+      const input = createElement("input", { type: "checkbox", value: tag.id, checked: selectedNames.has(tag.name) });
+      const label = createElement("label", { className: labelClass });
+      label.append(input, createElement("span", {}, tag.name));
+      choices.append(label); inputs.push(input);
+    }
+    section.append(choices); container.append(section);
+  }
+  return inputs;
+}
+
 function renderFilters() {
   const { tagNames } = state.getFilters();
   const tagQuery = elements.tagFilterSearch.value.trim().toLocaleLowerCase("zh-CN");
   elements.selectedTagCount.textContent = `已选 ${tagNames.size}`;
   elements.tagFilters.replaceChildren();
-  for (const tag of state.getTags().filter((item) => !tagQuery || item.name.toLocaleLowerCase("zh-CN").includes(tagQuery))) {
-    const count = state.getImages().filter((image) => (image.tags ?? []).includes(tag.name)).length;
-    const selected = tagNames.has(tag.name);
-    const label = createElement("label", { className: `filter-option filter-tag-option${selected ? " is-selected" : ""}` });
-    const input = createElement("input", { type: "checkbox", value: tag.name, checked: selected });
-    input.addEventListener("change", () => {
-      const next = state.getFilters().tagNames;
-      if (input.checked) next.add(tag.name); else next.delete(tag.name);
-      state.setTagsFilter(next);
-      label.classList.toggle("is-selected", input.checked);
-      elements.selectedTagCount.textContent = `已选 ${next.size}`;
-      renderLibrary();
-    });
-    label.append(input, createElement("span", {}, tag.name), createElement("small", {}, count));
-    elements.tagFilters.append(label);
+  const matchingTags = state.getTags().filter((item) => !tagQuery || item.name.toLocaleLowerCase("zh-CN").includes(tagQuery));
+  for (const group of groupedTags(matchingTags)) {
+    const section = createElement("section", { className: "filter-tag-group" });
+    section.append(createElement("h4", {}, group.name));
+    const options = createElement("div", { className: "filter-tag-group-options" });
+    for (const tag of group.tags) {
+      const count = state.getImages().filter((image) => (image.tags ?? []).includes(tag.name)).length;
+      const selected = tagNames.has(tag.name);
+      const label = createElement("label", { className: `filter-option filter-tag-option${selected ? " is-selected" : ""}` });
+      const input = createElement("input", { type: "checkbox", value: tag.name, checked: selected });
+      input.addEventListener("change", () => {
+        const next = state.getFilters().tagNames;
+        if (input.checked) next.add(tag.name); else next.delete(tag.name);
+        state.setTagsFilter(next); label.classList.toggle("is-selected", input.checked);
+        elements.selectedTagCount.textContent = `已选 ${next.size}`; renderLibrary();
+      });
+      label.append(input, createElement("span", {}, tag.name), createElement("small", {}, count)); options.append(label);
+    }
+    section.append(options); elements.tagFilters.append(section);
   }
 }
 
@@ -188,7 +224,7 @@ function renderLoadError(tags, error) {
   elements.imageList.replaceChildren(box);
 }
 
-async function loadLibrary(tags) {
+async function loadLibrary(taxonomy) {
   showApp();
   bulkMode = false;
   renderLoading();
@@ -200,12 +236,13 @@ async function loadLibrary(tags) {
     ]);
   } catch (error) {
     if (error instanceof AdminUnauthorizedError) throw error;
-    renderLoadError(tags, error);
+    renderLoadError(taxonomy, error);
     return;
   }
   const [{ images = [] }, { categories = [] }] = payloads;
   state = createLibraryState();
-  state.setTags(tags);
+  state.setTags(taxonomy.tags);
+  state.setTagGroups(taxonomy.tagGroups);
   state.setCategories(categories);
   state.setImages(images);
   renderAll();
@@ -213,8 +250,8 @@ async function loadLibrary(tags) {
 
 async function authenticate(key) {
   keyStore.set(key);
-  const tags = await verifyAdminKey(client);
-  await loadLibrary(tags);
+  const taxonomy = await fetchAdminTaxonomy(client);
+  await loadLibrary(taxonomy);
 }
 
 async function submitLogin(event) {
@@ -292,7 +329,7 @@ function openDetail(image, opener) {
   categoryLabel.append(createElement("span", {}, "主分类"), category);
   const tags = createElement("fieldset", { className: "detail-tags" });
   tags.append(createElement("legend", {}, "标签"));
-  for (const tag of state.getTags()) tags.append(checkboxField(tag, (image.tags ?? []).includes(tag.name)));
+  appendGroupedTagChoices(tags, { selectedNames: new Set(image.tags ?? []) });
   const error = createElement("p", { className: "admin-field-error", "aria-live": "polite" });
   const save = createElement("button", { type: "submit", className: "admin-button-primary" }, "保存修改");
   form.append(nameLabel, categoryLabel, tags, error, save);
@@ -367,7 +404,7 @@ async function saveDetail(event, controls) {
   }
 }
 
-function openChoiceDialog({ title, options, selected = new Set(), single = false, confirmLabel = "保存" }) {
+function openChoiceDialog({ title, options, selected = new Set(), single = false, grouped = false, confirmLabel = "保存" }) {
   const opener = document.activeElement;
   return new Promise((resolve) => {
     const backdrop = createElement("div", { className: "admin-dialog-backdrop" });
@@ -376,13 +413,21 @@ function openChoiceDialog({ title, options, selected = new Set(), single = false
     const close = createElement("button", { type: "button", "aria-label": "关闭", title: "关闭" }, "×");
     header.append(createElement("h2", {}, title), close);
     const body = createElement("div", { className: "admin-dialog-body choice-list" });
-    for (const option of options) {
-      const label = createElement("label", { className: "filter-option" });
-      label.append(
-        createElement("input", { type: single ? "radio" : "checkbox", name: "dialog-choice", value: option.id, checked: selected.has(Number(option.id)) }),
-        createElement("span", {}, option.name),
-      );
-      body.append(label);
+    const renderOptions = (target, entries) => {
+      for (const option of entries) {
+        const label = createElement("label", { className: "filter-option" });
+        label.append(createElement("input", { type: single ? "radio" : "checkbox", name: "dialog-choice", value: option.id, checked: selected.has(Number(option.id)) }), createElement("span", {}, option.name));
+        target.append(label);
+      }
+    };
+    if (grouped) {
+      for (const group of groupedTags(options)) {
+        const section = createElement("section", { className: "tag-choice-group" });
+        section.append(createElement("h4", {}, group.name));
+        const choices = createElement("div", { className: "tag-choice-options" }); renderOptions(choices, group.tags); section.append(choices); body.append(section);
+      }
+    } else {
+      renderOptions(body, options);
     }
     const footer = createElement("footer");
     const cancel = createElement("button", { type: "button" }, "取消");
@@ -416,7 +461,7 @@ function openChoiceDialog({ title, options, selected = new Set(), single = false
 
 async function bulkAssignTags() {
   const imageIds = [...state.getSelectedIds()];
-  const tagIds = await openChoiceDialog({ title: "批量设置标签", options: state.getTags(), confirmLabel: "应用标签" });
+  const tagIds = await openChoiceDialog({ title: "批量设置标签", options: state.getTags(), grouped: true, confirmLabel: "应用标签" });
   if (tagIds === null) return;
   try {
     await client.request("/api/admin/images/tag-assignments/bulk", {
@@ -577,13 +622,7 @@ function openUploadDialog() {
   const tagsField = createElement("fieldset", { className: "upload-tags" });
   tagsField.append(createElement("legend", {}, "标签（至少一个）"));
   const activeTags = state.getFilters().tagNames;
-  const tagInputs = state.getTags().map((tag) => {
-    const input = createElement("input", { type: "checkbox", value: tag.id, checked: activeTags.has(tag.name) });
-    const label = createElement("label");
-    label.append(input, createElement("span", {}, tag.name));
-    tagsField.append(label);
-    return input;
-  });
+  const tagInputs = appendGroupedTagChoices(tagsField, { selectedNames: activeTags, labelClass: "detail-check" });
   formGrid.append(filesLabel, categoryLabel, tagsField);
   const error = createElement("p", { className: "admin-field-error", "aria-live": "polite" });
   const summary = createElement("p", { className: "upload-summary", "aria-live": "polite" }, "尚未选择图片");

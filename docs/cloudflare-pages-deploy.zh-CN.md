@@ -49,55 +49,61 @@ npx wrangler d1 migrations list GALLERY_DB --remote
 
 下面的检查只读取 schema、数量与排序数值，不读取图片 URL、文件名、标签名称、分类名称、站点文案或图片内容。
 
-先核对六张业务表及 migration 记录：
+先核对九张业务表及 migration 记录：
 
 ```powershell
 npx wrangler d1 execute GALLERY_DB --remote --command "SELECT type, name FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name"
 ```
 
-再输出六张表的完整 `CREATE TABLE` SQL，并与 `schema.sql` 逐项比较。这个检查覆盖 `PRIMARY KEY`、`UNIQUE`、`AUTOINCREMENT`、`NOT NULL`、默认值和表内外键等 `table_info` 无法完整表达的约束：
+再输出目标九张表的完整 `CREATE TABLE` SQL。迁移前如果列表明确显示 `0003_tag_groups.sql` 待执行，`tag_groups`、`tags.group_id` 和两个新索引尚不存在是预期状态；其余已有对象仍须与前一版结构一致。这个检查覆盖 `PRIMARY KEY`、`UNIQUE`、`AUTOINCREMENT`、`NOT NULL`、默认值和表内外键等 `table_info` 无法完整表达的约束：
 
 ```powershell
-npx wrangler d1 execute GALLERY_DB --remote --command "SELECT name, sql FROM sqlite_schema WHERE type = 'table' AND name IN ('tags', 'categories', 'images', 'image_tags', 'site_settings', 'featured_images') ORDER BY name"
+npx wrangler d1 execute GALLERY_DB --remote --command "SELECT name, sql FROM sqlite_schema WHERE type = 'table' AND name IN ('tag_groups', 'tags', 'categories', 'images', 'image_tags', 'site_settings', 'featured_images', 'albums', 'album_images') ORDER BY name"
 ```
 
 逐表核对完整列定义：
 
 ```powershell
+npx wrangler d1 execute GALLERY_DB --remote --command "PRAGMA table_info(tag_groups)"
 npx wrangler d1 execute GALLERY_DB --remote --command "PRAGMA table_info(tags)"
 npx wrangler d1 execute GALLERY_DB --remote --command "PRAGMA table_info(categories)"
 npx wrangler d1 execute GALLERY_DB --remote --command "PRAGMA table_info(images)"
 npx wrangler d1 execute GALLERY_DB --remote --command "PRAGMA table_info(image_tags)"
 npx wrangler d1 execute GALLERY_DB --remote --command "PRAGMA table_info(site_settings)"
 npx wrangler d1 execute GALLERY_DB --remote --command "PRAGMA table_info(featured_images)"
+npx wrangler d1 execute GALLERY_DB --remote --command "PRAGMA table_info(albums)"
+npx wrangler d1 execute GALLERY_DB --remote --command "PRAGMA table_info(album_images)"
 ```
 
 逐表核对全部外键；没有外键的表应返回空结果：
 
 ```powershell
+npx wrangler d1 execute GALLERY_DB --remote --command "PRAGMA foreign_key_list(tag_groups)"
 npx wrangler d1 execute GALLERY_DB --remote --command "PRAGMA foreign_key_list(tags)"
 npx wrangler d1 execute GALLERY_DB --remote --command "PRAGMA foreign_key_list(categories)"
 npx wrangler d1 execute GALLERY_DB --remote --command "PRAGMA foreign_key_list(images)"
 npx wrangler d1 execute GALLERY_DB --remote --command "PRAGMA foreign_key_list(image_tags)"
 npx wrangler d1 execute GALLERY_DB --remote --command "PRAGMA foreign_key_list(site_settings)"
 npx wrangler d1 execute GALLERY_DB --remote --command "PRAGMA foreign_key_list(featured_images)"
+npx wrangler d1 execute GALLERY_DB --remote --command "PRAGMA foreign_key_list(albums)"
+npx wrangler d1 execute GALLERY_DB --remote --command "PRAGMA foreign_key_list(album_images)"
 ```
 
-核对七个业务索引的完整 SQL：
+核对十三个业务索引的完整 SQL：
 
 ```powershell
-npx wrangler d1 execute GALLERY_DB --remote --command "SELECT name, sql FROM sqlite_schema WHERE type = 'index' AND name IN ('idx_tags_visible_order', 'idx_categories_order', 'idx_images_file_id', 'idx_images_category_id', 'idx_image_tags_image_id', 'idx_image_tags_tag_id', 'idx_featured_images_order') ORDER BY name"
+npx wrangler d1 execute GALLERY_DB --remote --command "SELECT name, sql FROM sqlite_schema WHERE type = 'index' AND name IN ('idx_tags_visible_order', 'idx_tag_groups_order', 'idx_tags_group_order', 'idx_categories_order', 'idx_images_file_id', 'idx_images_category_id', 'idx_image_tags_image_id', 'idx_image_tags_tag_id', 'idx_featured_images_order', 'idx_albums_order', 'idx_albums_home', 'idx_album_images_order', 'idx_album_images_image_id') ORDER BY name"
 ```
 
-最后只用聚合数值检查标签与分类排序，不输出任何名称：
+最后只用聚合数值检查迁移前已经存在的标签、主分类与图集排序，不输出任何名称：
 
 ```powershell
-npx wrangler d1 execute GALLERY_DB --remote --command "SELECT 'tags' AS entity, COUNT(*) AS row_count, COUNT(DISTINCT sort_order) AS distinct_sort_orders, MIN(sort_order) AS min_sort_order, MAX(sort_order) AS max_sort_order, SUM(CASE WHEN sort_order IS NULL THEN 1 ELSE 0 END) AS null_sort_orders, CASE WHEN COUNT(*) = 0 THEN 1 WHEN COUNT(DISTINCT sort_order) = COUNT(*) AND MIN(sort_order) = 1 AND MAX(sort_order) = COUNT(*) AND SUM(CASE WHEN sort_order IS NULL THEN 1 ELSE 0 END) = 0 THEN 1 ELSE 0 END AS sort_order_is_contiguous FROM tags UNION ALL SELECT 'categories' AS entity, COUNT(*) AS row_count, COUNT(DISTINCT sort_order) AS distinct_sort_orders, MIN(sort_order) AS min_sort_order, MAX(sort_order) AS max_sort_order, SUM(CASE WHEN sort_order IS NULL THEN 1 ELSE 0 END) AS null_sort_orders, CASE WHEN COUNT(*) = 0 THEN 1 WHEN COUNT(DISTINCT sort_order) = COUNT(*) AND MIN(sort_order) = 1 AND MAX(sort_order) = COUNT(*) AND SUM(CASE WHEN sort_order IS NULL THEN 1 ELSE 0 END) = 0 THEN 1 ELSE 0 END AS sort_order_is_contiguous FROM categories"
+npx wrangler d1 execute GALLERY_DB --remote --command "SELECT 'tags' AS entity, COUNT(*) AS row_count, COUNT(DISTINCT sort_order) AS distinct_sort_orders, MIN(sort_order) AS min_sort_order, MAX(sort_order) AS max_sort_order, SUM(CASE WHEN sort_order IS NULL THEN 1 ELSE 0 END) AS null_sort_orders, CASE WHEN COUNT(*) = 0 THEN 1 WHEN COUNT(DISTINCT sort_order) = COUNT(*) AND MIN(sort_order) = 1 AND MAX(sort_order) = COUNT(*) AND SUM(CASE WHEN sort_order IS NULL THEN 1 ELSE 0 END) = 0 THEN 1 ELSE 0 END AS sort_order_is_contiguous FROM tags UNION ALL SELECT 'categories', COUNT(*), COUNT(DISTINCT sort_order), MIN(sort_order), MAX(sort_order), SUM(CASE WHEN sort_order IS NULL THEN 1 ELSE 0 END), CASE WHEN COUNT(*) = 0 THEN 1 WHEN COUNT(DISTINCT sort_order) = COUNT(*) AND MIN(sort_order) = 1 AND MAX(sort_order) = COUNT(*) AND SUM(CASE WHEN sort_order IS NULL THEN 1 ELSE 0 END) = 0 THEN 1 ELSE 0 END FROM categories UNION ALL SELECT 'albums', COUNT(*), COUNT(DISTINCT sort_order), MIN(sort_order), MAX(sort_order), SUM(CASE WHEN sort_order IS NULL THEN 1 ELSE 0 END), CASE WHEN COUNT(*) = 0 THEN 1 WHEN COUNT(DISTINCT sort_order) = COUNT(*) AND MIN(sort_order) = 1 AND MAX(sort_order) = COUNT(*) AND SUM(CASE WHEN sort_order IS NULL THEN 1 ELSE 0 END) = 0 THEN 1 ELSE 0 END FROM albums"
 ```
 
 对于非空表，必须同时满足 `distinct_sort_orders = row_count`、`min_sort_order = 1`、`max_sort_order = row_count`、`null_sort_orders = 0`，且 `sort_order_is_contiguous = 1`；空表也应返回 `sort_order_is_contiguous = 1`。
 
-必须确认：六张表的完整 `CREATE TABLE` SQL 与 `schema.sql` 一致，包括主键、唯一约束、自增、非空、默认值和外键；逐列及外键检查一致；七个索引名称与 SQL 一致；排序连续性为 1；待执行列表只有本次审查过的 migration。任何一项不一致都应停止发布，不得尝试用写入命令“顺手修复”。
+迁移前必须确认：已有表和索引没有意外漂移；排序连续性为 1；待执行列表只包含本次审查过的 migration。任何非预期差异都应停止发布，不得尝试用写入命令“顺手修复”。
 
 ## 第三步：迁移、推送同一 SHA 并等待部署
 
@@ -108,7 +114,14 @@ npx wrangler d1 migrations apply GALLERY_DB --remote
 npx wrangler d1 migrations list GALLERY_DB --remote
 ```
 
-`0001_baseline.sql` 只使用 `CREATE ... IF NOT EXISTS` 和 `ON CONFLICT DO NOTHING`，不会删除或覆盖业务数据。migration 失败时停止发布，不推送依赖该结构的新代码。生产 migration 不放入 Pages build 或 GitHub CI。
+当前 migration 按 `0001_baseline.sql`、`0002_albums.sql`、`0003_tag_groups.sql` 顺序执行。`0003_tag_groups.sql` 只新增标签分类表、`tags.group_id` 和索引，并把旧标签归入“未分类”，不会删除图片、标签或图集。migration 失败时停止发布，不推送依赖该结构的新代码。生产 migration 不放入 Pages build 或 GitHub CI。
+
+应用后重复第二步的结构、列、外键、索引和排序检查。此时必须确认：九张表的完整 `CREATE TABLE` SQL 与 `schema.sql` 一致；逐列及外键检查一致；十三个业务索引名称与 SQL 一致；所有旧标签的 `group_id` 均非空；排序连续性为 1；migration 列表没有待执行项。
+
+```powershell
+npx wrangler d1 execute GALLERY_DB --remote --command "SELECT COUNT(*) AS tag_count, SUM(CASE WHEN group_id IS NULL THEN 1 ELSE 0 END) AS tags_without_group FROM tags"
+npx wrangler d1 execute GALLERY_DB --remote --command "SELECT 'tag_groups' AS entity, COUNT(*) AS row_count, COUNT(DISTINCT sort_order) AS distinct_sort_orders, MIN(sort_order) AS min_sort_order, MAX(sort_order) AS max_sort_order, SUM(CASE WHEN sort_order IS NULL THEN 1 ELSE 0 END) AS null_sort_orders, CASE WHEN COUNT(*) = 0 THEN 1 WHEN COUNT(DISTINCT sort_order) = COUNT(*) AND MIN(sort_order) = 1 AND MAX(sort_order) = COUNT(*) AND SUM(CASE WHEN sort_order IS NULL THEN 1 ELSE 0 END) = 0 THEN 1 ELSE 0 END AS sort_order_is_contiguous FROM tag_groups"
+```
 
 确认本地仍是完全相同的已审查提交，然后普通推送：
 
@@ -229,10 +242,10 @@ npx wrangler pages deployment list --project-name cloudflare-imaged
 1. 首页能打开
 2. 后台 `/admin/` 能打开
 3. 输入管理密钥能进入后台
-4. 新建标签成功
+4. 新建标签分类，并在其中新建标签成功
 5. 上传 1 张图片成功
 6. 图片能通过 `/file/...` 打开
-7. 前台按标签筛选正常
+7. 前台按标签分类展示，选择多个标签时只返回全部匹配的图片
 8. `/api/public/site` 返回 JSON，而不是静态 HTML
 9. 管理端“站点”页可以保存期名、文案和精选顺序
 10. 首页轮播可以暂停，且删除精选图片后数量同步

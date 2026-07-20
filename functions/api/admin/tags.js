@@ -1,4 +1,4 @@
-import { getRepository, requireAdminKey, toApiTag } from "./_shared.js";
+import { getRepository, requireAdminKey, toApiTag, toApiTagGroup } from "./_shared.js";
 import { jsonResponse, parseRequestJson } from "../../../src/shared/http.js";
 
 function normalizeOptionalTagName(value) {
@@ -23,9 +23,11 @@ export async function onRequest({ env, request }) {
 
   if (request.method === "GET") {
     const tags = await repository.listTags();
+    const groups = await repository.listTagGroups();
 
     return jsonResponse({
       tags: tags.map(toApiTag),
+      tagGroups: groups.map(toApiTagGroup),
     });
   }
 
@@ -36,10 +38,15 @@ export async function onRequest({ env, request }) {
     if (!name) {
       return jsonResponse({ error: "标签名称不能为空。" }, 400);
     }
+    const groupId = Number(body.groupId);
+    if (!Number.isInteger(groupId) || groupId <= 0) {
+      return jsonResponse({ error: "请选择标签分类。" }, 400);
+    }
 
     try {
       const tag = await repository.createTag({
         name,
+        groupId,
         sortOrder: body.sortOrder ?? 0,
         isVisible: body.isVisible ?? true,
       });
@@ -70,10 +77,15 @@ export async function onRequest({ env, request }) {
     if (body.name !== undefined && !name) {
       return jsonResponse({ error: "标签名称不能为空。" }, 400);
     }
+    const groupId = body.groupId === undefined ? undefined : Number(body.groupId);
+    if (body.groupId !== undefined && (!Number.isInteger(groupId) || groupId <= 0)) {
+      return jsonResponse({ error: "请选择标签分类。" }, 400);
+    }
 
     try {
       const tag = await repository.updateTag(body.id, {
         name,
+        groupId,
         sortOrder: body.sortOrder,
         isVisible: body.isVisible,
       });

@@ -1,6 +1,6 @@
-import { fetchPublicJson } from "./public-data.js?v=20260717-gallery-list-fix";
-import { renderGalleryCards } from "./templates.js?v=20260717-gallery-list-fix";
-import { createImageViewer } from "./image-viewer.js?v=20260717-gallery-list-fix";
+import { fetchPublicJson } from "./public-data.js?v=20260720-multilevel-tags";
+import { renderGalleryCards } from "./templates.js?v=20260720-multilevel-tags";
+import { createImageViewer } from "./image-viewer.js?v=20260720-multilevel-tags";
 
 const title = document.querySelector("#album-title");
 const description = document.querySelector("#album-description");

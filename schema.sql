@@ -1,3 +1,12 @@
+CREATE TABLE IF NOT EXISTS tag_groups (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE,
+  slug TEXT NOT NULL UNIQUE,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS tags (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL UNIQUE,
@@ -5,7 +14,8 @@ CREATE TABLE IF NOT EXISTS tags (
   sort_order INTEGER NOT NULL DEFAULT 0,
   is_visible INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  group_id INTEGER REFERENCES tag_groups(id) ON DELETE RESTRICT
 );
 
 CREATE TABLE IF NOT EXISTS categories (
@@ -78,6 +88,8 @@ CREATE TABLE IF NOT EXISTS album_images (
 );
 
 CREATE INDEX IF NOT EXISTS idx_tags_visible_order ON tags(is_visible, sort_order, name);
+CREATE INDEX IF NOT EXISTS idx_tag_groups_order ON tag_groups(sort_order, name);
+CREATE INDEX IF NOT EXISTS idx_tags_group_order ON tags(group_id, sort_order, name);
 CREATE INDEX IF NOT EXISTS idx_categories_order ON categories(sort_order, name);
 CREATE INDEX IF NOT EXISTS idx_images_file_id ON images(storage_key);
 CREATE INDEX IF NOT EXISTS idx_images_category_id ON images(category_id);

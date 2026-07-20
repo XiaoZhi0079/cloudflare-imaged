@@ -116,6 +116,19 @@ test("replaceImageTags rewrites tag assignments and listImagesByTagSlug returns 
   assert.deepEqual(campusImages[0].tags, ["校园风情", "短发美女"]);
 });
 
+test("listImagesByTagSlugs requires every selected tag", async () => {
+  const repository = createGalleryRepository(createTestDb());
+  const portrait = await repository.createTag({ name: "人像", sortOrder: 1, isVisible: true });
+  const dress = await repository.createTag({ name: "连衣裙", sortOrder: 2, isVisible: true });
+  const first = await repository.upsertImage({ storageKey: "gallery/a.webp", fileName: "a.webp", fileUrl: "/file/a.webp", width: 1920, height: 1080, syncStatus: "ok" });
+  const second = await repository.upsertImage({ storageKey: "gallery/b.webp", fileName: "b.webp", fileUrl: "/file/b.webp", width: 1920, height: 1080, syncStatus: "ok" });
+  await repository.replaceImageTags(first.id, [portrait.id, dress.id]);
+  await repository.replaceImageTags(second.id, [portrait.id]);
+
+  assert.deepEqual((await repository.listImagesByTagSlugs([portrait.slug, dress.slug])).map((image) => image.id), [first.id]);
+  assert.deepEqual((await repository.listImagesByTagSlugs([])).map((image) => image.id), []);
+});
+
 test("updateTag renames a tag and updates its order and visibility", async () => {
   const database = createTestDb();
   const repository = createGalleryRepository(database);
@@ -133,6 +146,10 @@ test("updateTag renames a tag and updates its order and visibility", async () =>
     slug: "日系写真",
     sort_order: 1,
     is_visible: 0,
+    group_id: 1,
+    group_name: "未分类",
+    group_slug: "uncategorized",
+    group_sort_order: 1,
   });
   assert.deepEqual(await repository.listVisibleTags(), []);
 });

@@ -5,6 +5,7 @@ import { createGalleryRepository } from "../src/server/gallery-repository.js";
 import { onRequest as publicTagsHandler } from "../functions/api/public/tags.js";
 import { onRequest as publicImagesHandler } from "../functions/api/public/images.js";
 import { onRequest as adminTagsHandler } from "../functions/api/admin/tags.js";
+import { onRequest as adminTagGroupsHandler } from "../functions/api/admin/tag-groups.js";
 import { onRequest as adminImagesHandler } from "../functions/api/admin/images.js";
 import { onRequest as adminImportHandler } from "../functions/api/admin/images/import.js";
 import { onRequest as adminUploadHandler } from "../functions/api/admin/images/upload/index.js";
@@ -22,6 +23,25 @@ function createTestEnv() {
   };
 }
 
+const defaultTagGroup = Object.freeze({
+  id: 1,
+  name: "未分类",
+  slug: "uncategorized",
+  sortOrder: 1,
+});
+
+function expectedAdminTag(tag) {
+  return {
+    id: tag.id,
+    name: tag.name,
+    slug: tag.slug,
+    sortOrder: Number(tag.sortOrder ?? tag.sort_order),
+    isVisible: Number(tag.is_visible ?? tag.isVisible) === 1 || tag.isVisible === true,
+    groupId: 1,
+    group: defaultTagGroup,
+  };
+}
+
 test("public tags handler reads an explicitly migrated empty tag table", async () => {
   const env = createTestEnv();
 
@@ -33,6 +53,7 @@ test("public tags handler reads an explicitly migrated empty tag table", async (
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
     tags: [],
+    tagGroups: [],
   });
 });
 
@@ -52,9 +73,13 @@ test("public tags handler returns visible ordered tags only", async () => {
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
     tags: [
+      { id: 2, name: "校园风情", slug: "校园风情", sortOrder: 1, groupId: 1, group: defaultTagGroup },
+      { id: 1, name: "欧美美女", slug: "欧美美女", sortOrder: 2, groupId: 1, group: defaultTagGroup },
+    ],
+    tagGroups: [{ ...defaultTagGroup, tags: [
       { id: 2, name: "校园风情", slug: "校园风情", sortOrder: 1 },
       { id: 1, name: "欧美美女", slug: "欧美美女", sortOrder: 2 },
-    ],
+    ] }],
   });
 });
 
@@ -104,6 +129,78 @@ test("public images handler returns images for the requested tag", async () => {
   });
 });
 
+test("public images handler intersects repeated tag parameters", async () => {
+  const env = createTestEnv();
+  const repository = createGalleryRepository(env.GALLERY_DB);
+  const portrait = await repository.createTag({ name: "人像", sortOrder: 1, isVisible: true });
+  const dress = await repository.createTag({ name: "连衣裙", sortOrder: 2, isVisible: true });
+  const both = await repository.upsertImage({ storageKey: "gallery/both.webp", fileName: "both.webp", fileUrl: "/file/both.webp", width: 1920, height: 1080, syncStatus: "ok" });
+  const portraitOnly = await repository.upsertImage({ storageKey: "gallery/portrait.webp", fileName: "portrait.webp", fileUrl: "/file/portrait.webp", width: 1920, height: 1080, syncStatus: "ok" });
+  await repository.replaceImageTags(both.id, [portrait.id, dress.id]);
+  await repository.replaceImageTags(portraitOnly.id, [portrait.id]);
+
+  const response = await publicImagesHandler({
+    env,
+    request: new Request(`https://gallery.example.com/api/public/images?tag=${encodeURIComponent(portrait.slug)}&tag=${encodeURIComponent(dress.slug)}`),
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).images.map((image) => image.id), [both.id]);
+});
+
+test("admin tags require a tag group", async () => {
+  const env = createTestEnv();
+  const response = await adminTagsHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/tags", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-gallery-admin-key": "gallery-secret" },
+      body: JSON.stringify({ name: "未指定分类" }),
+    }),
+  });
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), { error: "请选择标签分类。" });
+});
+
+test("tag groups can be managed and non-empty groups cannot be deleted", async () => {
+  const env = createTestEnv();
+  const createResponse = await adminTagGroupsHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/tag-groups", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-gallery-admin-key": "gallery-secret" },
+      body: JSON.stringify({ name: "人物", sortOrder: 2 }),
+    }),
+  });
+  assert.equal(createResponse.status, 201);
+  const { tagGroup } = await createResponse.json();
+  assert.equal(tagGroup.name, "人物");
+
+  const repository = createGalleryRepository(env.GALLERY_DB);
+  const tag = await repository.createTag({ name: "东亚人", groupId: tagGroup.id, sortOrder: 1, isVisible: true });
+  const rejectedDelete = await adminTagGroupsHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/tag-groups", {
+      method: "DELETE",
+      headers: { "content-type": "application/json", "x-gallery-admin-key": "gallery-secret" },
+      body: JSON.stringify({ id: tagGroup.id }),
+    }),
+  });
+  assert.equal(rejectedDelete.status, 400);
+
+  await repository.updateTag(tag.id, { groupId: 1 });
+  const deleted = await adminTagGroupsHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/tag-groups", {
+      method: "DELETE",
+      headers: { "content-type": "application/json", "x-gallery-admin-key": "gallery-secret" },
+      body: JSON.stringify({ id: tagGroup.id }),
+    }),
+  });
+  assert.equal(deleted.status, 200);
+  assert.deepEqual(await deleted.json(), { deletedTagGroupId: tagGroup.id });
+});
+
 test("admin tags handler creates tags when the admin key is valid", async () => {
   const env = createTestEnv();
 
@@ -117,6 +214,7 @@ test("admin tags handler creates tags when the admin key is valid", async () => 
       },
       body: JSON.stringify({
         name: "田园景色",
+        groupId: 1,
         sortOrder: 1,
         isVisible: true,
       }),
@@ -124,15 +222,7 @@ test("admin tags handler creates tags when the admin key is valid", async () => 
   });
 
   assert.equal(response.status, 201);
-  assert.deepEqual(await response.json(), {
-    tag: {
-      id: 1,
-      name: "田园景色",
-      slug: "田园景色",
-      sortOrder: 1,
-      isVisible: true,
-    },
-  });
+  assert.deepEqual(await response.json(), { tag: expectedAdminTag({ id: 1, name: "田园景色", slug: "田园景色", sortOrder: 1, isVisible: true }) });
 });
 
 test("admin tags handler rejects blank tag names", async () => {
@@ -173,6 +263,7 @@ test("admin tags handler rejects duplicate tags with a conflict response", async
       },
       body: JSON.stringify({
         name: "校园风情",
+        groupId: 1,
         sortOrder: 2,
         isVisible: true,
       }),
@@ -208,15 +299,7 @@ test("admin tags handler reorders tags into contiguous slots when sort order is 
   });
 
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), {
-    tag: {
-      id: third.id,
-      name: "tag-charlie",
-      slug: "tag-charlie",
-      sortOrder: 2,
-      isVisible: true,
-    },
-  });
+  assert.deepEqual(await response.json(), { tag: expectedAdminTag({ ...third, sortOrder: 2, isVisible: true }) });
 
   const listResponse = await adminTagsHandler({
     env,
@@ -228,9 +311,9 @@ test("admin tags handler reorders tags into contiguous slots when sort order is 
   });
 
   assert.deepEqual((await listResponse.json()).tags, [
-    { id: first.id, name: "tag-alpha", slug: "tag-alpha", sortOrder: 1, isVisible: true },
-    { id: third.id, name: "tag-charlie", slug: "tag-charlie", sortOrder: 2, isVisible: true },
-    { id: second.id, name: "tag-bravo", slug: "tag-bravo", sortOrder: 3, isVisible: true },
+    expectedAdminTag({ ...first, sortOrder: 1, isVisible: true }),
+    expectedAdminTag({ ...third, sortOrder: 2, isVisible: true }),
+    expectedAdminTag({ ...second, sortOrder: 3, isVisible: true }),
   ]);
 });
 
@@ -257,15 +340,7 @@ test("admin tags handler updates tag fields when the admin key is valid", async 
   });
 
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), {
-    tag: {
-      id: tag.id,
-      name: "日系写真",
-      slug: "日系写真",
-      sortOrder: 1,
-      isVisible: false,
-    },
-  });
+  assert.deepEqual(await response.json(), { tag: expectedAdminTag({ id: tag.id, name: "日系写真", slug: "日系写真", sortOrder: 1, isVisible: false }) });
 });
 
 test("admin tags handler deletes a tag when the admin key is valid", async () => {

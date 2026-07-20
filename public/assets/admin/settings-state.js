@@ -1,6 +1,6 @@
 import { ordersEqual, serializeOrder } from "./sort-order.js";
 
-const TYPES = new Set(["tags", "categories"]);
+const TYPES = new Set(["tags", "tagGroups", "categories"]);
 
 function assertType(type) {
   if (!TYPES.has(type)) {
@@ -15,10 +15,12 @@ function copyItems(items) {
 export function createSettingsState(initial = {}) {
   const server = {
     tags: copyItems(initial.tags),
+    tagGroups: copyItems(initial.tagGroups),
     categories: copyItems(initial.categories),
   };
   const drafts = {
     tags: copyItems(server.tags),
+    tagGroups: copyItems(server.tagGroups),
     categories: copyItems(server.categories),
   };
 

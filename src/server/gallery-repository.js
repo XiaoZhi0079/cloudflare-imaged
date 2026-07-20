@@ -147,11 +147,29 @@ async function getTagById(database, tagId) {
   return await first(
     database,
     `
-      SELECT id, name, slug, sort_order, is_visible
+      SELECT tags.id, tags.name, tags.slug, tags.sort_order, tags.is_visible,
+             tag_groups.id AS group_id, tag_groups.name AS group_name,
+             tag_groups.slug AS group_slug, tag_groups.sort_order AS group_sort_order
       FROM tags
-      WHERE id = ?
+      LEFT JOIN tag_groups ON tag_groups.id = tags.group_id
+      WHERE tags.id = ?
     `,
     [tagId],
+  );
+}
+
+async function getTagGroupById(database, groupId) {
+  return await first(
+    database,
+    `SELECT id, name, slug, sort_order FROM tag_groups WHERE id = ?`,
+    [groupId],
+  );
+}
+
+async function getDefaultTagGroup(database) {
+  return await first(
+    database,
+    `SELECT id, name, slug, sort_order FROM tag_groups ORDER BY CASE WHEN slug = 'uncategorized' THEN 0 ELSE 1 END, sort_order, id LIMIT 1`,
   );
 }
 
@@ -190,10 +208,20 @@ async function listTagsOrdered(database) {
   return await all(
     database,
     `
-      SELECT id, name, slug, sort_order, is_visible
+      SELECT tags.id, tags.name, tags.slug, tags.sort_order, tags.is_visible,
+             tag_groups.id AS group_id, tag_groups.name AS group_name,
+             tag_groups.slug AS group_slug, tag_groups.sort_order AS group_sort_order
       FROM tags
-      ORDER BY sort_order ASC, name ASC, id ASC
+      LEFT JOIN tag_groups ON tag_groups.id = tags.group_id
+      ORDER BY tag_groups.sort_order ASC, tags.sort_order ASC, tags.name ASC, tags.id ASC
     `,
+  );
+}
+
+async function listTagGroupsOrdered(database) {
+  return await all(
+    database,
+    `SELECT id, name, slug, sort_order FROM tag_groups ORDER BY sort_order ASC, name ASC, id ASC`,
   );
 }
 
@@ -278,12 +306,28 @@ async function applyContiguousCategoryOrder(database, orderedCategories) {
   return orderedCategories;
 }
 
+async function applyContiguousTagGroupOrder(database, orderedGroups) {
+  for (let index = 0; index < orderedGroups.length; index += 1) {
+    const group = orderedGroups[index];
+    const nextSortOrder = index + 1;
+    if (Number(group.sort_order) !== nextSortOrder) {
+      await run(database, `UPDATE tag_groups SET sort_order = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [nextSortOrder, group.id]);
+    }
+    group.sort_order = nextSortOrder;
+  }
+  return orderedGroups;
+}
+
 async function normalizeTagSortOrders(database) {
   return await applyContiguousTagOrder(database, await listTagsOrdered(database));
 }
 
 async function normalizeCategorySortOrders(database) {
   return await applyContiguousCategoryOrder(database, await listCategoriesOrdered(database));
+}
+
+async function normalizeTagGroupSortOrders(database) {
+  return await applyContiguousTagGroupOrder(database, await listTagGroupsOrdered(database));
 }
 
 function recordsInSubmittedOrder(records, orderedIds) {
@@ -700,19 +744,23 @@ export function createGalleryRepository(database) {
       return await this.listFeaturedImages();
     },
 
-    async createTag({ name, sortOrder = 0, isVisible = true }) {
+    async createTag({ name, groupId, sortOrder = 0, isVisible = true }) {
       const normalizedName = normalizeTagName(name);
       const slug = slugifyTagName(normalizedName);
+      const group = groupId === undefined
+        ? await getDefaultTagGroup(database)
+        : await getTagGroupById(database, Number(groupId));
+      if (!group) throw new RangeError("tag group is required");
       const orderedTags = await normalizeTagSortOrders(database);
       const targetPosition = clampTagPosition(sortOrder, orderedTags.length + 1, orderedTags.length + 1);
 
       await run(
         database,
         `
-          INSERT INTO tags (name, slug, sort_order, is_visible)
-          VALUES (?, ?, ?, ?)
+          INSERT INTO tags (name, slug, sort_order, is_visible, group_id)
+          VALUES (?, ?, ?, ?, ?)
         `,
-        [normalizedName, slug, targetPosition, isVisible ? 1 : 0],
+        [normalizedName, slug, targetPosition, isVisible ? 1 : 0, group.id],
       );
 
       const created = await first(
@@ -746,15 +794,19 @@ export function createGalleryRepository(database) {
         ? currentPosition
         : clampTagPosition(changes.sortOrder, orderedTags.length, currentPosition);
       const isVisible = changes.isVisible === undefined ? Number(current.is_visible) : changes.isVisible ? 1 : 0;
+      const group = changes.groupId === undefined
+        ? await getTagGroupById(database, current.group_id)
+        : await getTagGroupById(database, Number(changes.groupId));
+      if (!group) throw new RangeError("tag group is required");
 
       await run(
         database,
         `
           UPDATE tags
-          SET name = ?, slug = ?, sort_order = ?, is_visible = ?, updated_at = CURRENT_TIMESTAMP
+          SET name = ?, slug = ?, sort_order = ?, is_visible = ?, group_id = ?, updated_at = CURRENT_TIMESTAMP
           WHERE id = ?
         `,
-        [normalizedName, slug, currentPosition, isVisible, tagId],
+        [normalizedName, slug, currentPosition, isVisible, group.id, tagId],
       );
 
       const updated = await getTagById(database, tagId);
@@ -792,12 +844,72 @@ export function createGalleryRepository(database) {
       return await all(
         database,
         `
-          SELECT id, name, slug, sort_order, is_visible
+          SELECT tags.id, tags.name, tags.slug, tags.sort_order, tags.is_visible,
+                 tag_groups.id AS group_id, tag_groups.name AS group_name,
+                 tag_groups.slug AS group_slug, tag_groups.sort_order AS group_sort_order
           FROM tags
-          WHERE is_visible = 1
-          ORDER BY sort_order ASC, name ASC, id ASC
+          INNER JOIN tag_groups ON tag_groups.id = tags.group_id
+          WHERE tags.is_visible = 1
+          ORDER BY tag_groups.sort_order ASC, tags.sort_order ASC, tags.name ASC, tags.id ASC
         `,
       );
+    },
+
+    async listTagGroups() {
+      return await listTagGroupsOrdered(database);
+    },
+
+    async getTagGroupById(groupId) {
+      return await getTagGroupById(database, groupId);
+    },
+
+    async createTagGroup({ name, sortOrder = 0 }) {
+      const normalizedName = normalizeTagName(name);
+      if (!normalizedName) throw new RangeError("tag group name is required");
+      const slug = slugifyTagName(normalizedName);
+      const orderedGroups = await normalizeTagGroupSortOrders(database);
+      const targetPosition = clampCategoryPosition(sortOrder, orderedGroups.length + 1, orderedGroups.length + 1);
+      await run(database, `INSERT INTO tag_groups (name, slug, sort_order) VALUES (?, ?, ?)`, [normalizedName, slug, targetPosition]);
+      const created = await first(database, `SELECT id, name, slug, sort_order FROM tag_groups WHERE slug = ?`, [slug]);
+      orderedGroups.splice(targetPosition - 1, 0, created);
+      await applyContiguousTagGroupOrder(database, orderedGroups);
+      return await getTagGroupById(database, created.id);
+    },
+
+    async updateTagGroup(groupId, changes = {}) {
+      const current = await getTagGroupById(database, groupId);
+      if (!current) return null;
+      const orderedGroups = await normalizeTagGroupSortOrders(database);
+      const currentIndex = orderedGroups.findIndex((group) => Number(group.id) === Number(groupId));
+      const currentPosition = currentIndex + 1;
+      const name = changes.name === undefined ? current.name : normalizeTagName(changes.name);
+      if (!name) throw new RangeError("tag group name is required");
+      const slug = changes.name === undefined ? current.slug : slugifyTagName(name);
+      const targetPosition = changes.sortOrder === undefined
+        ? currentPosition
+        : clampCategoryPosition(changes.sortOrder, orderedGroups.length, currentPosition);
+      await run(database, `UPDATE tag_groups SET name = ?, slug = ?, sort_order = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [name, slug, currentPosition, groupId]);
+      const updated = await getTagGroupById(database, groupId);
+      const reordered = orderedGroups.filter((group) => Number(group.id) !== Number(groupId));
+      reordered.splice(targetPosition - 1, 0, updated);
+      await applyContiguousTagGroupOrder(database, reordered);
+      return await getTagGroupById(database, groupId);
+    },
+
+    async deleteTagGroup(groupId) {
+      const current = await getTagGroupById(database, groupId);
+      if (!current) return false;
+      const count = await first(database, `SELECT COUNT(*) AS count FROM tags WHERE group_id = ?`, [groupId]);
+      if (Number(count?.count ?? 0) > 0) throw new RangeError("tag group must be empty");
+      await run(database, `DELETE FROM tag_groups WHERE id = ?`, [groupId]);
+      await normalizeTagGroupSortOrders(database);
+      return true;
+    },
+
+    async reorderTagGroups(orderedIds) {
+      const records = recordsInSubmittedOrder(await listTagGroupsOrdered(database), orderedIds);
+      await applyExactOrder(database, "tag_groups", records);
+      return await listTagGroupsOrdered(database);
     },
 
     async getExistingTagIds(tagIds) {
@@ -1021,23 +1133,36 @@ export function createGalleryRepository(database) {
       }
     },
 
-    async listImagesByTagSlug(tagSlug) {
+    async listImagesByTagSlugs(tagSlugs) {
+      const normalizedSlugs = [...new Set((Array.isArray(tagSlugs) ? tagSlugs : [tagSlugs]).map((slug) => String(slug ?? "").trim()).filter(Boolean))];
+      if (!normalizedSlugs.length) return [];
+      const placeholders = normalizedSlugs.map(() => "?").join(", ");
       const imageRows = await all(
         database,
         `
           SELECT DISTINCT ${SELECT_IMAGE_COLUMNS}
           FROM images
           LEFT JOIN categories ON categories.id = images.category_id
-          INNER JOIN image_tags ON image_tags.image_id = images.id
-          INNER JOIN tags ON tags.id = image_tags.tag_id
-          WHERE tags.slug = ?
+          WHERE images.id IN (
+            SELECT image_tags.image_id
+            FROM image_tags
+            INNER JOIN tags ON tags.id = image_tags.tag_id
+            WHERE tags.slug IN (${placeholders})
+              AND tags.is_visible = 1
+            GROUP BY image_tags.image_id
+            HAVING COUNT(DISTINCT tags.slug) = ?
+          )
           ORDER BY images.created_at DESC, images.id DESC
         `,
-        [tagSlug],
+        [...normalizedSlugs, normalizedSlugs.length],
       );
 
       const images = imageRows.map(mapImageRow);
       return attachTagNames(images, await getImageTagRows(database, images.map((image) => image.id)));
+    },
+
+    async listImagesByTagSlug(tagSlug) {
+      return await this.listImagesByTagSlugs([tagSlug]);
     },
   };
 }

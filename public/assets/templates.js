@@ -1,4 +1,4 @@
-import { getResponsiveImageAttributes } from "./image-variants.js?v=20260717-gallery-list-fix";
+import { getResponsiveImageAttributes } from "./image-variants.js?v=20260720-multilevel-tags";
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -26,12 +26,18 @@ function formatPublicTagText(tags) {
 }
 
 export function renderTagChips(tags, activeSlug) {
+  const activeSlugs = activeSlug instanceof Set ? activeSlug : new Set(activeSlug ? [activeSlug] : []);
   return tags
     .map((tag) => {
-      const className = tag.slug === activeSlug ? "tag-chip active" : "tag-chip";
-
+      const className = activeSlugs.has(tag.slug) ? "tag-chip active" : "tag-chip";
       return `<button type="button" class="${className}" data-tag-slug="${escapeHtml(tag.slug)}">${escapeHtml(tag.name)}</button>`;
     })
+    .join("");
+}
+
+export function renderTagGroups(tagGroups, activeSlugs = new Set()) {
+  return (tagGroups ?? [])
+    .map((group) => `<section class="tag-group"><h3>${escapeHtml(group.name)}</h3><div class="tag-group-chips">${renderTagChips(group.tags ?? [], activeSlugs)}</div></section>`)
     .join("");
 }
 

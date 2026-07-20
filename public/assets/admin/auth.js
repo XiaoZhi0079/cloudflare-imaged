@@ -28,3 +28,11 @@ export async function verifyAdminKey(client) {
   const payload = await client.request("/api/admin/tags", { method: "GET" });
   return Array.isArray(payload.tags) ? payload.tags : [];
 }
+
+export async function fetchAdminTaxonomy(client) {
+  const payload = await client.request("/api/admin/tags", { method: "GET" });
+  return {
+    tags: Array.isArray(payload?.tags) ? payload.tags : [],
+    tagGroups: Array.isArray(payload?.tagGroups) ? payload.tagGroups : [],
+  };
+}

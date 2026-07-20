@@ -2,12 +2,14 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 
-import { renderAlbumCards, renderGalleryCards, renderTagChips } from "../src/shared/templates.js";
+import { renderAlbumCards, renderGalleryCards, renderTagChips, renderTagGroups } from "../src/shared/templates.js";
 
 test("public renderers keep gallery behavior", () => {
   const chips = renderTagChips([{ name: "人像", slug: "portrait" }], "portrait");
+  const groups = renderTagGroups([{ name: "人物", tags: [{ name: "人像", slug: "portrait" }] }], new Set(["portrait"]));
   const cards = renderGalleryCards([{ id: 1, fileName: "private-name.webp", fileUrl: "/file/object-42", width: 1920, height: 1080, tags: ["人像"], category: { name: "Portrait" } }]);
   assert.match(chips, /tag-chip active/);
+  assert.match(groups, /tag-group/);
   assert.match(cards, /loading="lazy"/);
   assert.match(cards, /gallery-hover-meta/);
   assert.match(cards, /人像/);
@@ -55,7 +57,7 @@ test("public gallery copy stays light-branded", () => {
   assert.doesNotMatch(html, /快速查看整理好的图片内容/);
   assert.match(gallery, /const sitePromise = fetchPublicJson\("\/api\/public\/site"/);
   assert.match(gallery, /const tagsPayload = await fetchPublicJson\("\/api\/public\/tags"/);
-  assert.match(gallery, /imagesPromise = loadImages\(activeSlug\)/);
+  assert.match(gallery, /imagesPromise = loadImages\(activeSlugs\)/);
   assert.doesNotMatch(gallery, /loadPublicBootstrapData/);
   assert.match(gallery, /createHeroCarousel/);
   assert.match(gallery, /setPauseReason\("hover"/);
@@ -118,8 +120,8 @@ test("public pages share one immersive viewer with navigation and URL state", ()
     assert.match(source, /viewer\.syncFromUrl/);
     assert.doesNotMatch(source, /modalImage\.src|modal\.classList\.(?:add|remove)/);
   }
-  assert.match(gallery, /searchParams\.get\("tag"\)/);
-  assert.match(gallery, /searchParams\.set\("tag"/);
+  assert.match(gallery, /searchParams\.getAll\("tag"\)/);
+  assert.match(gallery, /searchParams\.append\("tag"/);
   assert.match(gallery, /searchParams\.delete\("image"\)/);
   assert.match(gallery, /history\.replaceState/);
   assert.match(viewer, /addEventListener\("popstate"/);
@@ -198,7 +200,8 @@ test("taxonomy entry has no featured or site mode", () => {
   assert.doesNotMatch(source, /site-settings\.js|createSiteSettingsController/);
   assert.doesNotMatch(source, /isSiteTab|ensureSiteController|sitePanel|siteController/);
   assert.doesNotMatch(source, /\/api\/admin\/site|\/api\/admin\/images/);
-  assert.match(source, /activeType === "tags" \? "新增标签" : "新增主分类"/);
+  assert.match(source, /tagGroups: \["新增标签分类"/);
+  assert.match(source, /groupId/);
 });
 
 test("image workbench exposes filtering details upload and bulk controls", () => {
@@ -240,7 +243,7 @@ test("runtime public templates stay aligned with shared templates", () => {
   const runtimeVariants = readFileSync(new URL("../public/assets/image-variants.js", import.meta.url), "utf8");
   const sharedVariants = readFileSync(new URL("../src/shared/image-variants.js", import.meta.url), "utf8");
   assert.equal(runtimeVariants, sharedVariants);
-  assert.match(runtime, /image-variants\.js\?v=20260717-gallery-list-fix/);
+  assert.match(runtime, /image-variants\.js\?v=20260720-multilevel-tags/);
 });
 
 test("legacy admin pages and scripts are removed", () => {
@@ -258,7 +261,7 @@ test("public assets contain only public gallery concerns", () => {
   const shared = readFileSync(new URL("../src/shared/templates.js", import.meta.url), "utf8");
   assert.doesNotMatch(css, /\.admin-/);
   for (const source of [runtime, shared]) {
-    assert.deepEqual([...source.matchAll(/export function (\w+)/g)].map((match) => match[1]), ["renderTagChips", "renderAlbumCards", "renderGalleryCards"]);
+    assert.deepEqual([...source.matchAll(/export function (\w+)/g)].map((match) => match[1]), ["renderTagChips", "renderTagGroups", "renderAlbumCards", "renderGalleryCards"]);
   }
 });
 
@@ -292,8 +295,16 @@ test("featured hero copy overlays the image without an opaque panel", () => {
   );
   assert.match(
     css,
-    /\.hero-featured\.has-featured \.hero-copy\s*\{[^}]*color:\s*#fff[^}]*text-shadow:/,
+    /\.hero-featured\.has-featured \.hero-issue\s*\{[^}]*color:\s*#fff[^}]*text-shadow:/,
   );
+});
+
+test("featured hero gives the album name the primary text style", () => {
+  const css = readFileSync(new URL("../public/assets/main.css", import.meta.url), "utf8");
+  assert.match(css, /\.hero-issue\s*\{[^}]*font-size:\s*15px;[^}]*line-height:\s*1\.7;/s);
+  assert.match(css, /\.hero-copy\s*\{[^}]*font-size:\s*13px;[^}]*letter-spacing:\s*0\.08em;/s);
+  assert.match(css, /\.hero-featured\.has-featured \.hero-issue\s*\{[^}]*color:\s*#fff;/s);
+  assert.match(css, /\.hero-featured\.has-featured \.hero-copy\s*\{[^}]*color:\s*rgba\(255, 248, 240, 0\.78\);/s);
 });
 
 test("mobile featured hero copy stays in document flow", () => {
@@ -338,8 +349,8 @@ test("featured hero uses a fixed responsive 16:9 stage", () => {
   ]) {
     assert.doesNotMatch(css, viewportHeightRule);
   }
-  assert.match(index, /main\.css\?v=20260717-gallery-list-fix/);
-  assert.match(index, /gallery\.js\?v=20260717-gallery-list-fix/);
+  assert.match(index, /main\.css\?v=20260720-multilevel-tags/);
+  assert.match(index, /gallery\.js\?v=20260720-multilevel-tags/);
 });
 
 test("public entry assets share one cache-busting release version", () => {
@@ -353,13 +364,13 @@ test("public entry assets share one cache-busting release version", () => {
   assert.ok(scriptVersion, "gallery.js must include a non-empty release version");
   assert.equal(cssVersion[1], scriptVersion[1]);
   for (const source of [gallery, albumPage]) {
-    assert.match(source, /templates\.js\?v=20260717-gallery-list-fix/);
-    assert.match(source, /public-data\.js\?v=20260717-gallery-list-fix/);
-    assert.match(source, /image-viewer\.js\?v=20260717-gallery-list-fix/);
+    assert.match(source, /templates\.js\?v=20260720-multilevel-tags/);
+    assert.match(source, /public-data\.js\?v=20260720-multilevel-tags/);
+    assert.match(source, /image-viewer\.js\?v=20260720-multilevel-tags/);
   }
-  assert.match(gallery, /image-variants\.js\?v=20260717-gallery-list-fix/);
+  assert.match(gallery, /image-variants\.js\?v=20260720-multilevel-tags/);
   const viewer = readFileSync(new URL("../public/assets/image-viewer.js", import.meta.url), "utf8");
-  assert.match(viewer, /image-variants\.js\?v=20260717-gallery-list-fix/);
+  assert.match(viewer, /image-variants\.js\?v=20260720-multilevel-tags/);
 });
 
 test("hero and immersive viewer apply responsive Cloudflare variants", () => {
@@ -415,7 +426,7 @@ test("changed admin assets use targeted cache-busting versions", () => {
     Array(centeredModalReferences.length).fill(centeredModalVersion),
   );
 
-  const libraryCardTagsVersion = "20260720-batch-mode-cover-fix";
+  const libraryCardTagsVersion = "20260720-multilevel-tags";
   const libraryCardTagsReferences = [
     [libraryEntry, /from "\.\/renderers\/image-card\.js\?v=([^"]+)"/, "image-card.js"],
     [libraryHtml, /href="\/assets\/admin\/workbench\.css\?v=([^"]+)"/, "workbench.css"],
@@ -431,7 +442,7 @@ test("changed admin assets use targeted cache-busting versions", () => {
     Array(libraryCardTagsReferences.length).fill(libraryCardTagsVersion),
   );
 
-  const albumsRedesignVersion = "20260720-album-grid-preview";
+  const albumsRedesignVersion = "20260720-multilevel-tags";
   const albumsRedesignReferences = [
     [settingsHtml, /href="\/assets\/admin\/settings\.css\?v=([^"]+)"/, "settings.css"],
     [featuredHtml, /href="\/assets\/admin\/settings\.css\?v=([^"]+)"/, "featured settings.css"],
@@ -462,7 +473,7 @@ test("changed admin assets use targeted cache-busting versions", () => {
     Array(albumDraftReferences.length).fill(albumDraftVersion),
   );
 
-  const featuredNavigationVersion = "20260716-admin-featured-navigation";
+  const featuredNavigationVersion = "20260720-multilevel-tags";
   const navigationReferences = [
     [settingsHtml, /src="\/assets\/admin\/settings-page\.js\?v=([^"]+)"/, "settings-page.js"],
   ];

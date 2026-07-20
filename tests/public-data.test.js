@@ -24,6 +24,7 @@ test("site response failure falls back without blocking public tags", async () =
 
   assert.deepEqual(result.site, DEFAULT_PUBLIC_SITE);
   assert.deepEqual(result.tags, [{ id: 1, name: "人像", slug: "portrait" }]);
+  assert.deepEqual(result.tagGroups, []);
   assert.deepEqual(result.albums, []);
 });
 

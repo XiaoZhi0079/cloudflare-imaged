@@ -30,6 +30,7 @@ function sortImages(images, sort) {
 export function createLibraryState({ initialRenderLimit = 120, renderIncrement = 120 } = {}) {
   let images = [];
   let tags = [];
+  let tagGroups = [];
   let categories = [];
   let query = "";
   let selectedTagNames = new Set();
@@ -49,6 +50,7 @@ export function createLibraryState({ initialRenderLimit = 120, renderIncrement =
   const state = {
     getImages: () => images,
     getTags: () => tags,
+    getTagGroups: () => tagGroups,
     getCategories: () => categories,
     getSelectedIds: () => new Set(selectedIds),
     getFilters: () => ({ query, tagNames: new Set(selectedTagNames), sort }),
@@ -62,6 +64,9 @@ export function createLibraryState({ initialRenderLimit = 120, renderIncrement =
     },
     setTags(next) {
       tags = Array.isArray(next) ? [...next] : [];
+    },
+    setTagGroups(next) {
+      tagGroups = Array.isArray(next) ? [...next] : [];
     },
     setCategories(next) {
       categories = Array.isArray(next) ? [...next] : [];

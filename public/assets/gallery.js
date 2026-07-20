@@ -1,7 +1,7 @@
-import { renderAlbumCards, renderGalleryCards, renderTagChips } from "./templates.js?v=20260717-gallery-list-fix";
-import { DEFAULT_PUBLIC_SITE, fetchPublicJson } from "./public-data.js?v=20260717-gallery-list-fix";
-import { createImageViewer } from "./image-viewer.js?v=20260717-gallery-list-fix";
-import { applyResponsiveImageAttributes } from "./image-variants.js?v=20260717-gallery-list-fix";
+import { renderAlbumCards, renderGalleryCards, renderTagGroups } from "./templates.js?v=20260720-multilevel-tags";
+import { DEFAULT_PUBLIC_SITE, fetchPublicJson } from "./public-data.js?v=20260720-multilevel-tags";
+import { createImageViewer } from "./image-viewer.js?v=20260720-multilevel-tags";
+import { applyResponsiveImageAttributes } from "./image-variants.js?v=20260720-multilevel-tags";
 import { createHeroCarousel } from "./hero-carousel.js";
 
 const siteHero = document.querySelector("#site-hero");
@@ -20,7 +20,8 @@ const heroPause = document.querySelector("#hero-pause");
 const reducedMotionQuery = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)") ?? null;
 
 let tags = [];
-let activeSlug = null;
+let activeSlugs = new Set();
+let tagGroups = [];
 let images = [];
 let featuredImages = [];
 let heroCarousel = null;
@@ -40,10 +41,10 @@ const viewer = createImageViewer({
   getImages: () => images,
 });
 
-function replaceTagUrl(tagSlug, { clearImage = false } = {}) {
+function replaceTagUrl(slugs, { clearImage = false } = {}) {
   const url = new URL(location.href);
-  if (tagSlug) url.searchParams.set("tag", tagSlug);
-  else url.searchParams.delete("tag");
+  url.searchParams.delete("tag");
+  for (const slug of slugs) url.searchParams.append("tag", slug);
   if (clearImage) url.searchParams.delete("image");
   history.replaceState(history.state, "", `${url.pathname}${url.search}${url.hash}`);
 }
@@ -51,16 +52,19 @@ function replaceTagUrl(tagSlug, { clearImage = false } = {}) {
 function bindTagClicks() {
   tagStrip.querySelectorAll("[data-tag-slug]").forEach((button) => {
     button.addEventListener("click", async () => {
-      activeSlug = button.dataset.tagSlug;
-      replaceTagUrl(activeSlug, { clearImage: true });
+      const slug = button.dataset.tagSlug;
+      const next = new Set(activeSlugs);
+      if (next.has(slug)) next.delete(slug); else next.add(slug);
+      activeSlugs = next;
+      replaceTagUrl(activeSlugs, { clearImage: true });
       renderTags();
-      await loadImages(activeSlug);
+      await loadImages(activeSlugs);
     });
   });
 }
 
 function renderTags() {
-  tagStrip.innerHTML = renderTagChips(tags, activeSlug);
+  tagStrip.innerHTML = renderTagGroups(tagGroups, activeSlugs);
   bindTagClicks();
 }
 
@@ -146,8 +150,16 @@ function renderHero(site) {
   heroCarousel.setPauseReason("hidden", document.hidden);
 }
 
-async function loadImages(tagSlug) {
-  const payload = await fetchPublicJson(`/api/public/images?tag=${encodeURIComponent(tagSlug)}`);
+async function loadImages(tagSlugs) {
+  if (!tagSlugs.size) {
+    images = [];
+    renderImages();
+    viewer.syncFromUrl();
+    return;
+  }
+  const params = new URLSearchParams();
+  for (const slug of tagSlugs) params.append("tag", slug);
+  const payload = await fetchPublicJson(`/api/public/images?${params.toString()}`);
   images = payload.images;
   renderImages();
   viewer.syncFromUrl();
@@ -160,12 +172,13 @@ async function bootstrap() {
     .catch(() => ({ albums: [] }));
   const tagsPayload = await fetchPublicJson("/api/public/tags");
   tags = Array.isArray(tagsPayload?.tags) ? tagsPayload.tags : [];
-  const requestedSlug = new URL(location.href).searchParams.get("tag");
-  activeSlug = tags.some((tag) => tag.slug === requestedSlug)
-    ? requestedSlug
-    : tags[0]?.slug ?? null;
-  if (activeSlug && requestedSlug !== activeSlug) {
-    replaceTagUrl(activeSlug);
+  tagGroups = Array.isArray(tagsPayload?.tagGroups) ? tagsPayload.tagGroups : [];
+  const requestedSlugs = new URL(location.href).searchParams.getAll("tag");
+  const validSlugs = new Set(tags.map((tag) => tag.slug));
+  activeSlugs = new Set(requestedSlugs.filter((slug) => validSlugs.has(slug)));
+  if (!activeSlugs.size && tags[0]?.slug) activeSlugs = new Set([tags[0].slug]);
+  if (requestedSlugs.length !== activeSlugs.size || requestedSlugs.some((slug) => !activeSlugs.has(slug))) {
+    replaceTagUrl(activeSlugs);
   }
   renderTags();
 
@@ -177,8 +190,8 @@ async function bootstrap() {
       : `<div class="panel empty-state">还没有公开图集。</div>`;
   });
   let imagesPromise;
-  if (activeSlug) {
-    imagesPromise = loadImages(activeSlug);
+  if (activeSlugs.size) {
+    imagesPromise = loadImages(activeSlugs);
   } else {
     renderImages();
     viewer.syncFromUrl();

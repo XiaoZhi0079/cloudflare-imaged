@@ -1,4 +1,4 @@
-import { applyResponsiveImageAttributes } from "./image-variants.js?v=20260717-gallery-list-fix";
+import { applyResponsiveImageAttributes } from "./image-variants.js?v=20260720-multilevel-tags";
 
 const SWIPE_THRESHOLD = 48;
 

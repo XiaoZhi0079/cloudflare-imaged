@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Gallery 标签与分类</title>
     <link rel="stylesheet" href="/assets/admin/admin.css?v=20260717-centered-viewer-admin-modal" />
-    <link rel="stylesheet" href="/assets/admin/settings.css?v=20260720-album-grid-preview" />
+    <link rel="stylesheet" href="/assets/admin/settings.css?v=20260720-multilevel-tags" />
   </head>
   <body class="admin-body" data-admin-page="settings">
     <section id="admin-auth-view" class="admin-auth-view" hidden>
@@ -24,6 +24,7 @@
         </header>
         <div class="admin-segments" role="tablist">
           <button class="is-active" type="button" data-settings-tab="tags" role="tab">标签 <span id="tag-count">0</span></button>
+          <button type="button" data-settings-tab="tagGroups" role="tab">标签分类 <span id="tag-group-count">0</span></button>
           <button type="button" data-settings-tab="categories" role="tab">主分类 <span id="category-count">0</span></button>
         </div>
 
@@ -41,6 +42,6 @@
       </main>
       <div id="admin-dialog-host"></div><div id="admin-toast-host" class="admin-toast-host" aria-live="polite"></div>
     </div>
-    <script type="module" src="/assets/admin/settings-page.js?v=20260716-admin-featured-navigation"></script>
+    <script type="module" src="/assets/admin/settings-page.js?v=20260720-multilevel-tags"></script>
   </body>
 </html>
