@@ -751,6 +751,47 @@ test("admin images handler renames and moves gallery files inside the gallery bu
   assert.ok(env.GALLERY_BUCKET.objects.has("archive/campus-02.webp"));
 });
 
+test("admin images handler deletes a missing-object record and cleans its relationships", async () => {
+  const env = {
+    ...createTestEnv(),
+    GALLERY_BUCKET: createMockBucket(),
+    GALLERY_PUBLIC_BASE_URL: "https://gallery.example.com/file",
+  };
+  const repository = createGalleryRepository(env.GALLERY_DB);
+  const portrait = await repository.createTag({ name: "待删除标签", sortOrder: 1, isVisible: true });
+  const image = await repository.upsertImage({
+    storageKey: "gallery/missing.webp",
+    fileName: "missing.webp",
+    fileUrl: "https://gallery.example.com/file/gallery/missing.webp",
+    width: 1920,
+    height: 1080,
+    syncStatus: "repair_required",
+    note: "R2 object missing",
+  });
+  await repository.replaceImageTags(image.id, [portrait.id]);
+  const home = (await repository.listAlbums()).find((album) => album.isHome);
+  await repository.updateAlbum(home.id, { imageIds: [image.id], coverImageId: image.id });
+  await repository.setFeaturedImages([image.id]);
+
+  const response = await adminImagesHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/images", {
+      method: "DELETE",
+      headers: {
+        "content-type": "application/json",
+        "x-gallery-admin-key": "gallery-secret",
+      },
+      body: JSON.stringify({ imageId: image.id }),
+    }),
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { deletedImageId: image.id });
+  assert.deepEqual(await repository.listImages(), []);
+  assert.deepEqual(await repository.listFeaturedImages(), []);
+  assert.deepEqual((await repository.getAlbumById(home.id)).images, []);
+});
+
 test("admin image audit finds and repairs a unique D1 to R2 name mismatch", async () => {
   const env = {
     ...createTestEnv(),

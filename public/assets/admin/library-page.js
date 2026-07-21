@@ -3,7 +3,7 @@ import { createAdminKeyStore, fetchAdminTaxonomy } from "./auth.js";
 import { createDialogHost } from "./dialogs.js";
 import { createLibraryState } from "./library-state.js?v=20260715-featured-filter-separation";
 import { createNotifier } from "./notifications.js";
-import { renderImageCard } from "./renderers/image-card.js?v=20260720-multilevel-tags";
+import { renderImageCard } from "./renderers/image-card.js?v=20260721-single-image-delete";
 import { createUploadRunner, describeUploadFailure, measureImageFile } from "./upload.js";
 
 const elements = {
@@ -331,9 +331,13 @@ function openDetail(image, opener) {
   tags.append(createElement("legend", {}, "标签"));
   appendGroupedTagChoices(tags, { selectedNames: new Set(image.tags ?? []) });
   const error = createElement("p", { className: "admin-field-error", "aria-live": "polite" });
+  const remove = createElement("button", { type: "button", className: "admin-button-danger" }, "删除图片");
   const save = createElement("button", { type: "submit", className: "admin-button-primary" }, "保存修改");
-  form.append(nameLabel, categoryLabel, tags, error, save);
+  const actions = createElement("div", { className: "detail-form-actions" });
+  actions.append(remove, save);
+  form.append(nameLabel, categoryLabel, tags, error, actions);
   form.addEventListener("submit", (event) => saveDetail(event, { fileName, category, tags, error, save }));
+  remove.addEventListener("click", () => deleteDetailImage(image, { remove, save, error }));
   const previewPane = createElement("div", { className: "detail-preview-pane" });
   previewPane.append(previewStage, dimensions);
   const editPane = createElement("div", { className: "detail-edit-pane" });
@@ -400,6 +404,43 @@ async function saveDetail(event, controls) {
   } catch (error) {
     if (!(error instanceof AdminUnauthorizedError)) controls.error.textContent = errorMessage(error);
   } finally {
+    controls.save.disabled = false;
+  }
+}
+
+async function deleteDetailImage(image, controls) {
+  const confirmed = await dialogs.confirm({
+    title: "删除图片",
+    message: `确定永久删除“${image.fileName}”吗？图片文件及其标签、图集和精选关系都会被移除，此操作无法撤销。`,
+    confirmLabel: "删除",
+    danger: true,
+  });
+  if (!confirmed) return;
+
+  controls.remove.disabled = true;
+  controls.save.disabled = true;
+  controls.error.textContent = "";
+  try {
+    const payload = await client.request("/api/admin/images", {
+      method: "DELETE",
+      body: JSON.stringify({ imageId: image.id }),
+    });
+    const deletedImageId = Number(payload.deletedImageId ?? image.id);
+    state.syncImages(state.getImages().filter((item) => Number(item.id) !== deletedImageId));
+    closeDetail();
+    renderAll();
+    notifier.success(`已删除图片：${image.fileName}`);
+  } catch (error) {
+    const failedId = Number(error?.payload?.imageId);
+    if (failedId) {
+      replaceImages(state.getImages()
+        .filter((item) => Number(item.id) === failedId)
+        .map((item) => ({ ...item, syncStatus: "delete_failed", note: errorMessage(error) })));
+      renderLibrary();
+    }
+    if (!(error instanceof AdminUnauthorizedError)) controls.error.textContent = errorMessage(error);
+  } finally {
+    controls.remove.disabled = false;
     controls.save.disabled = false;
   }
 }
@@ -740,6 +781,7 @@ elements.detailOverlay.addEventListener("click", (event) => {
   if (event.target === elements.detailOverlay) closeDetail();
 });
 document.addEventListener("keydown", (event) => {
+  if (elements.dialogHost.childElementCount) return;
   if (event.key === "Tab") {
     if (uploadSession) trapFocus(event, uploadSession.panel);
     else if (detailImageId !== null) trapFocus(event, elements.detailOverlay);

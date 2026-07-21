@@ -64,6 +64,8 @@
 .detail-dimensions strong { font-size:13px; }
 .detail-dimensions span { color:var(--admin-muted); font-size:12px; }
 .detail-form { display:grid; gap:14px; }
+.detail-form-actions { display:flex; align-items:center; justify-content:space-between; gap:10px; padding-top:4px; }
+.detail-form-actions button { min-width:112px; }
 .upload-panel { width:min(680px,100%); max-height:calc(100dvh - 32px); overflow:auto; border:1px solid var(--admin-line); border-radius:8px; background:var(--admin-panel); box-shadow:0 22px 60px rgba(39,30,21,.2); }
 .upload-panel header,.upload-panel footer { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 16px; }
 .upload-panel header { border-bottom:1px solid var(--admin-line); }
@@ -117,6 +119,7 @@
   .admin-detail-dialog { width:100%; min-height:100dvh; max-height:100dvh; border:0; border-radius:0; box-shadow:none; }
   .admin-detail-dialog header { padding:12px; }
   .admin-detail-workspace { gap:16px; padding:12px; }
+  .detail-form-actions button { min-width:0; flex:1; }
   .detail-preview-stage { min-height:240px; height:min(46dvh,420px); }
   .admin-overlay { padding:0; }
   .upload-panel { width:100%; max-height:100dvh; min-height:100dvh; border:0; border-radius:0; }

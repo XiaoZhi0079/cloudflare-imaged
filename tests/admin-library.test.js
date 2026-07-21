@@ -238,6 +238,19 @@ test("library controller connects detail and bulk API operations", () => {
   assert.match(source, /elements\.bulkToolbar\.hidden = !bulkMode/);
 });
 
+test("image detail exposes a confirmed single-image delete action", () => {
+  const source = readFileSync(new URL("../public/assets/admin/library-page.js", import.meta.url), "utf8");
+  const workbenchCss = readFileSync(new URL("../public/assets/admin/workbench.css", import.meta.url), "utf8");
+  assert.match(source, /className:\s*"admin-button-danger"[^\n]*"删除图片"/);
+  assert.match(source, /deleteDetailImage/);
+  assert.match(source, /dialogs\.confirm\(\{[\s\S]*title:\s*"删除图片"[\s\S]*danger:\s*true/);
+  assert.match(source, /method:\s*"DELETE"/);
+  assert.match(source, /body:\s*JSON\.stringify\(\{ imageId: image\.id \}\)/);
+  assert.match(source, /state\.syncImages\(state\.getImages\(\)\.filter/);
+  assert.match(source, /if \(elements\.dialogHost\.childElementCount\) return;/);
+  assert.match(workbenchCss, /\.detail-form-actions\s*\{[^}]*justify-content:space-between/s);
+});
+
 test("library controller has no carousel filter and uses neutral image dimensions", () => {
   const source = readFileSync(new URL("../public/assets/admin/library-page.js", import.meta.url), "utf8");
   assert.doesNotMatch(source, /featuredFilters/);
