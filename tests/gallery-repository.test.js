@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { createGalleryRepository } from "../src/server/gallery-repository.js";
-import { createTestDatabase } from "./helpers/test-database.js";
+import { createTestDatabase, enforceBoundParameterLimit } from "./helpers/test-database.js";
 
 function createTestDb() {
   return createTestDatabase();
@@ -89,6 +89,33 @@ test("upsertImage updates imported image metadata instead of duplicating rows", 
   assert.equal(adminImages.length, 1);
   assert.equal(adminImages[0].width, 1080);
   assert.equal(adminImages[0].height, 1620);
+});
+
+test("image lists batch tag lookups within the D1 100-parameter limit", async () => {
+  const database = createTestDb();
+  const tag = createGalleryRepository(database);
+  const portrait = await tag.createTag({ name: "portrait", sortOrder: 1, isVisible: true });
+  const imageIds = [];
+  const insertImage = database.prepare("INSERT INTO images (storage_key, file_name, file_url, width, height) VALUES (?, ?, ?, ?, ?)");
+  const insertTag = database.prepare("INSERT INTO image_tags (image_id, tag_id) VALUES (?, ?)");
+  for (let index = 1; index <= 101; index += 1) {
+    const name = `image-${index}.webp`;
+    insertImage.run(`gallery/${name}`, name, `/file/gallery/${name}`, 1920, 1080);
+    const imageId = Number(database.prepare("SELECT last_insert_rowid() AS id").get().id);
+    insertTag.run(imageId, portrait.id);
+    imageIds.push(imageId);
+  }
+
+  const guarded = enforceBoundParameterLimit(database);
+  const repository = createGalleryRepository(guarded.database);
+  const images = await repository.listImages();
+  const selected = await repository.listImagesByIds([...imageIds].reverse());
+
+  assert.equal(images.length, 101);
+  assert.ok(images.every((image) => image.tags.join(",") === "portrait"));
+  assert.deepEqual(selected.map((image) => image.id), [...imageIds].reverse());
+  assert.ok(guarded.parameterCounts.every((count) => count <= 100));
+  assert.ok(guarded.parameterCounts.filter((count) => count === 100).length >= 3);
 });
 
 test("replaceImageTags rewrites tag assignments and listImagesByTagSlug returns mapped images", async () => {

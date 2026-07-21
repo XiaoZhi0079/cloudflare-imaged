@@ -7,7 +7,7 @@ import {
   signDirectUpload,
 } from "../functions/api/admin/images/upload/init.js";
 import { onRequest as adminUploadCompleteHandler } from "../functions/api/admin/images/upload/complete.js";
-import { createTestDatabase } from "./helpers/test-database.js";
+import { createTestDatabase, enforceBoundParameterLimit } from "./helpers/test-database.js";
 import { copyR2Object, R2RequestError } from "../src/server/r2-direct-upload.js";
 
 function createMockBucket() {
@@ -45,10 +45,10 @@ function createMockBucket() {
   };
 }
 
-function createTestEnv() {
+function createTestEnv({ database = createTestDatabase(), bucket = createMockBucket() } = {}) {
   return {
-    GALLERY_DB: createTestDatabase(),
-    GALLERY_BUCKET: createMockBucket(),
+    GALLERY_DB: database,
+    GALLERY_BUCKET: bucket,
     GALLERY_ADMIN_KEY: "gallery-secret",
     GALLERY_PUBLIC_BASE_URL: "https://gallery.example.com/file",
     GALLERY_UPLOAD_NAME_TYPE: "origin",
@@ -243,6 +243,72 @@ test("admin upload complete handler stores image records after direct upload suc
       },
     ],
   });
+});
+
+test("admin upload complete returns only new images when the library exceeds 100 records", async () => {
+  const database = createTestDatabase();
+  const repository = createGalleryRepository(database);
+  const campus = await repository.createTag({ name: "校园风情", sortOrder: 1, isVisible: true });
+  const insertImage = database.prepare("INSERT INTO images (storage_key, file_name, file_url, width, height) VALUES (?, ?, ?, ?, ?)");
+  for (let index = 1; index <= 101; index += 1) {
+    const name = `existing-${index}.webp`;
+    insertImage.run(`gallery/${name}`, name, `/file/gallery/${name}`, 1920, 1080);
+  }
+  const guarded = enforceBoundParameterLimit(database);
+  const env = createTestEnv({ database: guarded.database });
+  await env.GALLERY_BUCKET.put("gallery/new.webp", new Uint8Array([1, 2, 3]));
+
+  const response = await adminUploadCompleteHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/images/upload/complete", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-gallery-admin-key": "gallery-secret",
+      },
+      body: JSON.stringify({
+        tagIds: [campus.id],
+        files: [{ storageKey: "gallery/new.webp", fileName: "new.webp", width: 1920, height: 1080 }],
+      }),
+    }),
+  });
+
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.equal(payload.uploadedCount, 1);
+  assert.equal(payload.images.length, 1);
+  assert.equal(payload.images[0].fileName, "new.webp");
+  assert.ok(guarded.parameterCounts.every((count) => count <= 100));
+});
+
+test("admin upload complete converts unexpected failures into structured JSON", async () => {
+  const errors = [];
+  const originalError = console.error;
+  console.error = (message) => errors.push(message);
+  try {
+    const response = await adminUploadCompleteHandler({
+      env: createTestEnv(),
+      request: new Request("https://gallery.example.com/api/admin/images/upload/complete", {
+        method: "POST",
+        headers: {
+          "cf-ray": "test-upload-ray",
+          "content-type": "application/json",
+          "x-gallery-admin-key": "gallery-secret",
+        },
+        body: "{invalid-json",
+      }),
+    });
+
+    assert.equal(response.status, 500);
+    assert.deepEqual(await response.json(), {
+      error: "图片已传入存储，但写入图库失败，请重试失败项。",
+      code: "UPLOAD_COMPLETE_FAILED",
+      requestId: "test-upload-ray",
+    });
+  } finally {
+    console.error = originalError;
+  }
+  assert.equal(JSON.parse(errors[0]).service, "gallery-upload-complete");
 });
 
 test("admin upload complete handler rejects missing R2 objects", async () => {

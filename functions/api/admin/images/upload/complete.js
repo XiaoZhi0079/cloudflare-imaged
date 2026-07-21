@@ -22,7 +22,15 @@ function normalizeCompletedFiles(value) {
     .filter((item) => item.storageKey && item.fileName);
 }
 
-export async function onRequest({ env, request }) {
+function errorDetails(error) {
+  return {
+    name: String(error?.name ?? "Error").slice(0, 80),
+    code: String(error?.code ?? "UNKNOWN").slice(0, 80),
+    message: String(error?.message ?? "unknown error").replace(/\s+/g, " ").slice(0, 240),
+  };
+}
+
+async function handleRequest({ env, request }) {
   const authFailure = requireAdminKey(request, env);
   if (authFailure) {
     return authFailure;
@@ -86,7 +94,7 @@ export async function onRequest({ env, request }) {
     uploadedImageIds.push(image.id);
   }
 
-  const images = await repository.listImages();
+  const images = await repository.listImagesByIds(uploadedImageIds);
   const imagesById = new Map(images.map((image) => [image.id, image]));
 
   return jsonResponse({
@@ -96,4 +104,23 @@ export async function onRequest({ env, request }) {
       .filter(Boolean)
       .map(toApiImage),
   });
+}
+
+export async function onRequest(context) {
+  try {
+    return await handleRequest(context);
+  } catch (error) {
+    const requestId = context.request.headers.get("cf-ray") ?? crypto.randomUUID();
+    console.error(JSON.stringify({
+      level: "error",
+      service: "gallery-upload-complete",
+      requestId,
+      error: errorDetails(error),
+    }));
+    return jsonResponse({
+      error: "图片已传入存储，但写入图库失败，请重试失败项。",
+      code: "UPLOAD_COMPLETE_FAILED",
+      requestId,
+    }, 500);
+  }
 }

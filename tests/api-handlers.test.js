@@ -13,7 +13,7 @@ import { onRequest as adminUploadHandler } from "../functions/api/admin/images/u
 import { onRequest as adminTagAssignmentsHandler } from "../functions/api/admin/images/tag-assignments.js";
 import { onRequest as adminBulkTagAssignmentsHandler } from "../functions/api/admin/images/tag-assignments/bulk.js";
 import { onRequest as adminBulkDeleteHandler } from "../functions/api/admin/images/bulk-delete.js";
-import { createTestDatabase } from "./helpers/test-database.js";
+import { createTestDatabase, enforceBoundParameterLimit } from "./helpers/test-database.js";
 
 function createTestEnv() {
   return {
@@ -394,6 +394,62 @@ test("admin images handler returns an empty list on a migrated database", async 
   assert.deepEqual(await response.json(), {
     images: [],
   });
+});
+
+test("admin images handler lists more than 100 tagged images within D1 limits", async () => {
+  const database = createTestDatabase();
+  const repository = createGalleryRepository(database);
+  const portrait = await repository.createTag({ name: "portrait", sortOrder: 1, isVisible: true });
+  const insertImage = database.prepare("INSERT INTO images (storage_key, file_name, file_url, width, height) VALUES (?, ?, ?, ?, ?)");
+  const insertTag = database.prepare("INSERT INTO image_tags (image_id, tag_id) VALUES (?, ?)");
+  for (let index = 1; index <= 101; index += 1) {
+    const name = `admin-${index}.webp`;
+    insertImage.run(`gallery/${name}`, name, `/file/gallery/${name}`, 1920, 1080);
+    const imageId = Number(database.prepare("SELECT last_insert_rowid() AS id").get().id);
+    insertTag.run(imageId, portrait.id);
+  }
+  const guarded = enforceBoundParameterLimit(database);
+
+  const response = await adminImagesHandler({
+    env: { ...createTestEnv(), GALLERY_DB: guarded.database },
+    request: new Request("https://gallery.example.com/api/admin/images", {
+      headers: { "x-gallery-admin-key": "gallery-secret" },
+    }),
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).images.length, 101);
+  assert.ok(guarded.parameterCounts.every((count) => count <= 100));
+});
+
+test("admin images handler converts unexpected failures into structured JSON", async () => {
+  const errors = [];
+  const originalError = console.error;
+  console.error = (message) => errors.push(message);
+  try {
+    const response = await adminImagesHandler({
+      env: {
+        ...createTestEnv(),
+        GALLERY_DB: { prepare() { throw new Error("database unavailable"); } },
+      },
+      request: new Request("https://gallery.example.com/api/admin/images", {
+        headers: {
+          "cf-ray": "test-library-ray",
+          "x-gallery-admin-key": "gallery-secret",
+        },
+      }),
+    });
+
+    assert.equal(response.status, 500);
+    assert.deepEqual(await response.json(), {
+      error: "图片库加载失败，请稍后重试。",
+      code: "ADMIN_IMAGES_READ_FAILED",
+      requestId: "test-library-ray",
+    });
+  } finally {
+    console.error = originalError;
+  }
+  assert.equal(JSON.parse(errors[0]).event, "image_list_failed");
 });
 
 

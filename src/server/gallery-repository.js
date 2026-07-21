@@ -21,6 +21,16 @@ const SELECT_IMAGE_COLUMNS = `
   categories.sort_order AS categorySortOrder
 `;
 
+const D1_MAX_BOUND_PARAMETERS = 100;
+
+function parameterBatches(values, batchSize = D1_MAX_BOUND_PARAMETERS) {
+  const batches = [];
+  for (let index = 0; index < values.length; index += batchSize) {
+    batches.push(values.slice(index, index + batchSize));
+  }
+  return batches;
+}
+
 function bindStatement(database, sql, params) {
   const statement = database.prepare(sql);
 
@@ -113,19 +123,24 @@ async function getImageTagRows(database, imageIds) {
     return [];
   }
 
-  const placeholders = imageIds.map(() => "?").join(", ");
+  const uniqueImageIds = [...new Set(imageIds.map(Number).filter(Number.isInteger))];
+  const rows = [];
+  for (const batch of parameterBatches(uniqueImageIds)) {
+    const placeholders = batch.map(() => "?").join(", ");
+    rows.push(...await all(
+      database,
+      `
+        SELECT image_tags.image_id, tags.name
+        FROM image_tags
+        INNER JOIN tags ON tags.id = image_tags.tag_id
+        WHERE image_tags.image_id IN (${placeholders})
+        ORDER BY tags.sort_order ASC, tags.name ASC
+      `,
+      batch,
+    ));
+  }
 
-  return await all(
-    database,
-    `
-      SELECT image_tags.image_id, tags.name
-      FROM image_tags
-      INNER JOIN tags ON tags.id = image_tags.tag_id
-      WHERE image_tags.image_id IN (${placeholders})
-      ORDER BY tags.sort_order ASC, tags.name ASC
-    `,
-    imageIds,
-  );
+  return rows;
 }
 
 function attachTagNames(images, tagRows) {
@@ -156,6 +171,32 @@ async function getTagById(database, tagId) {
     `,
     [tagId],
   );
+}
+
+async function loadImagesByIds(database, imageIds) {
+  const ids = [...new Set((imageIds ?? [])
+    .map(Number)
+    .filter((imageId) => Number.isInteger(imageId) && imageId > 0))];
+  if (!ids.length) return [];
+
+  const rows = [];
+  for (const batch of parameterBatches(ids)) {
+    const placeholders = batch.map(() => "?").join(", ");
+    rows.push(...await all(
+      database,
+      `
+        SELECT ${SELECT_IMAGE_COLUMNS}
+        FROM images
+        LEFT JOIN categories ON categories.id = images.category_id
+        WHERE images.id IN (${placeholders})
+      `,
+      batch,
+    ));
+  }
+
+  const imagesById = new Map(rows.map((row) => [Number(row.id), mapImageRow(row)]));
+  const images = ids.map((imageId) => imagesById.get(imageId)).filter(Boolean);
+  return attachTagNames(images, await getImageTagRows(database, images.map((image) => image.id)));
 }
 
 async function getTagGroupById(database, groupId) {
@@ -1075,6 +1116,10 @@ export function createGalleryRepository(database) {
 
       const images = imageRows.map(mapImageRow);
       return attachTagNames(images, await getImageTagRows(database, images.map((image) => image.id)));
+    },
+
+    async listImagesByIds(imageIds) {
+      return await loadImagesByIds(database, imageIds);
     },
 
     async updateImage(imageId, changes) {

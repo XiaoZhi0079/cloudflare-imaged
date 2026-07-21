@@ -48,7 +48,7 @@ function relocationResponse(error, imageId) {
   }, status);
 }
 
-export async function onRequest({ env, request }) {
+async function handleRequest({ env, request }) {
   const authFailure = requireAdminKey(request, env);
   if (authFailure) {
     return authFailure;
@@ -144,4 +144,25 @@ export async function onRequest({ env, request }) {
   }
 
   return jsonResponse({ error: "Method not allowed" }, 405);
+}
+
+export async function onRequest(context) {
+  try {
+    return await handleRequest(context);
+  } catch (error) {
+    const requestId = context.request.headers.get("cf-ray") ?? crypto.randomUUID();
+    const isRead = context.request.method === "GET";
+    console.error(JSON.stringify({
+      level: "error",
+      service: "gallery-admin-images",
+      event: isRead ? "image_list_failed" : "image_request_failed",
+      requestId,
+      error: errorDetails(error),
+    }));
+    return jsonResponse({
+      error: isRead ? "图片库加载失败，请稍后重试。" : "图片库操作失败，请稍后重试。",
+      code: isRead ? "ADMIN_IMAGES_READ_FAILED" : "ADMIN_IMAGES_REQUEST_FAILED",
+      requestId,
+    }, 500);
+  }
 }

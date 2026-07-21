@@ -18,3 +18,28 @@ export function createTestDatabase() {
   database.exec(BASELINE_SQL);
   return database;
 }
+
+export function enforceBoundParameterLimit(database, limit = 100) {
+  const parameterCounts = [];
+  const wrapStatement = (statement) => new Proxy(statement, {
+    get(target, property) {
+      const value = Reflect.get(target, property, target);
+      if (typeof value !== "function" || !["all", "get", "run"].includes(property)) {
+        return typeof value === "function" ? value.bind(target) : value;
+      }
+      return (...params) => {
+        parameterCounts.push(params.length);
+        if (params.length > limit) throw new RangeError(`too many bound parameters: ${params.length}`);
+        return value.apply(target, params);
+      };
+    },
+  });
+  const guarded = new Proxy(database, {
+    get(target, property) {
+      if (property === "prepare") return (sql) => wrapStatement(target.prepare(sql));
+      const value = Reflect.get(target, property, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  return { database: guarded, parameterCounts };
+}
