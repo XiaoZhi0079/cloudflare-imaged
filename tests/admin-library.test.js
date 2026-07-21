@@ -6,7 +6,7 @@ import {
   createLibraryState,
   filterImages,
 } from "../public/assets/admin/library-state.js";
-import { renderImageCard } from "../public/assets/admin/renderers/image-card.js";
+import { buildImagePreviewUrl, renderImageCard } from "../public/assets/admin/renderers/image-card.js";
 
 const images = [
   { id: 1, fileName: "a.webp", tags: ["人像", "自然光"], category: { id: 3, name: "人像" } },
@@ -131,6 +131,25 @@ test("image card escapes values and exposes selection and detail actions", () =>
   assert.match(html, />三</);
 });
 
+test("image previews use the database record id to bypass a stale missing-file cache", () => {
+  assert.equal(
+    buildImagePreviewUrl("/file/gallery/reuploaded.png", 142),
+    "/file/gallery/reuploaded.png?gallery-preview=142",
+  );
+  assert.equal(
+    buildImagePreviewUrl("/file/gallery/reuploaded.png?size=card#preview", 143),
+    "/file/gallery/reuploaded.png?size=card&gallery-preview=143#preview",
+  );
+
+  const html = renderImageCard({
+    id: 142,
+    fileName: "reuploaded.png",
+    fileUrl: "/file/gallery/reuploaded.png",
+    tags: [],
+  });
+  assert.match(html, /src="\/file\/gallery\/reuploaded\.png\?gallery-preview=142"/);
+});
+
 test("image card keeps selection controls out of normal browsing mode", () => {
   const normalHtml = renderImageCard({ id: 16, fileName: "normal.webp", tags: [] });
   const batchHtml = renderImageCard({ id: 16, fileName: "normal.webp", tags: [] }, { selectionMode: true });
@@ -236,6 +255,8 @@ test("library controller connects detail and bulk API operations", () => {
   assert.match(source, /bulkMode/);
   assert.match(source, /selectionMode: bulkMode/);
   assert.match(source, /elements\.bulkToolbar\.hidden = !bulkMode/);
+  assert.match(source, /gallery-preview-retry/);
+  assert.match(source, /addEventListener\("load"/);
 });
 
 test("image detail exposes a confirmed single-image delete action", () => {

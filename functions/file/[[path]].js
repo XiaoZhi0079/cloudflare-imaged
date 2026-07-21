@@ -1,4 +1,12 @@
 const FILE_CACHE_CONTROL = "public, max-age=3600, must-revalidate";
+const NOT_FOUND_CACHE_CONTROL = "no-store, max-age=0";
+
+function notFoundResponse() {
+  return new Response("Not found", {
+    status: 404,
+    headers: { "cache-control": NOT_FOUND_CACHE_CONTROL },
+  });
+}
 
 export async function onRequest({ env, params, request }) {
   const pathParts = Array.isArray(params?.path)
@@ -9,12 +17,12 @@ export async function onRequest({ env, params, request }) {
   const fileId = pathParts.join("/");
 
   if (!fileId) {
-    return new Response("Not found", { status: 404 });
+    return notFoundResponse();
   }
 
   const object = await env.GALLERY_BUCKET.get(fileId);
   if (!object?.body) {
-    return new Response("Not found", { status: 404 });
+    return notFoundResponse();
   }
 
   const headers = new Headers();

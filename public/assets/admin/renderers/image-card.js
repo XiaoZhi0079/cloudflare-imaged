@@ -15,12 +15,24 @@ function normalizedLabel(value) {
   return String(value ?? "").trim();
 }
 
+export function buildImagePreviewUrl(fileUrl, version) {
+  const value = String(fileUrl ?? "").trim();
+  if (!value) return "";
+
+  const hashIndex = value.indexOf("#");
+  const source = hashIndex >= 0 ? value.slice(0, hashIndex) : value;
+  const hash = hashIndex >= 0 ? value.slice(hashIndex) : "";
+  const separator = source.includes("?") ? "&" : "?";
+  return `${source}${separator}gallery-preview=${encodeURIComponent(String(version ?? ""))}${hash}`;
+}
+
 export function renderImageCard(image, { selected = false, selectionMode = false } = {}) {
   const id = escapeHtml(image.id);
   const fileName = escapeHtml(image.fileName || "未命名图片");
   const fileUrl = String(image.fileUrl ?? "").trim();
+  const previewUrl = buildImagePreviewUrl(fileUrl, image.id);
   const preview = fileUrl
-    ? `<img src="${escapeHtml(fileUrl)}" alt="${fileName}" loading="lazy" decoding="async" data-preview-image /><span class="image-preview-fallback" data-preview-fallback hidden>预览不可用</span>`
+    ? `<img src="${escapeHtml(previewUrl)}" alt="${fileName}" loading="lazy" decoding="async" data-preview-image /><span class="image-preview-fallback" data-preview-fallback hidden>预览不可用</span>`
     : `<span class="image-preview-fallback" data-preview-fallback>预览不可用</span>`;
   const tagNames = [...new Set((image.tags ?? [])
     .map(imageTagName)

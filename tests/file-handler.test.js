@@ -72,3 +72,14 @@ test("file handler returns 304 when the R2 etag already matches", async () => {
   assert.equal(response.headers.get("cache-control"), "public, max-age=3600, must-revalidate");
   assert.equal(await response.text(), "");
 });
+
+test("file handler prevents browsers from caching missing objects", async () => {
+  const response = await onRequest({
+    env: { GALLERY_BUCKET: createMockBucket() },
+    params: { path: ["gallery", "missing.webp"] },
+    request: new Request("https://gallery.example.com/file/gallery/missing.webp"),
+  });
+
+  assert.equal(response.status, 404);
+  assert.equal(response.headers.get("cache-control"), "no-store, max-age=0");
+});

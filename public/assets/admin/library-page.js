@@ -3,7 +3,7 @@ import { createAdminKeyStore, fetchAdminTaxonomy } from "./auth.js";
 import { createDialogHost } from "./dialogs.js";
 import { createLibraryState } from "./library-state.js?v=20260715-featured-filter-separation";
 import { createNotifier } from "./notifications.js";
-import { renderImageCard } from "./renderers/image-card.js?v=20260721-single-image-delete";
+import { buildImagePreviewUrl, renderImageCard } from "./renderers/image-card.js?v=20260721-preview-recovery";
 import { createUploadRunner, describeUploadFailure, measureImageFile } from "./upload.js";
 
 const elements = {
@@ -310,7 +310,7 @@ function openDetail(image, opener) {
   header.append(heading, close);
 
   const preview = image.fileUrl
-    ? createElement("img", { className: "detail-preview", src: image.fileUrl, alt: image.fileName })
+    ? createElement("img", { className: "detail-preview", src: buildImagePreviewUrl(image.fileUrl, image.id), alt: image.fileName })
     : createElement("div", { className: "detail-preview image-preview-fallback" }, "预览不可用");
   const previewStage = createElement("div", { className: "detail-preview-stage" });
   previewStage.append(preview);
@@ -769,8 +769,20 @@ elements.imageList.addEventListener("click", (event) => {
 });
 elements.imageList.addEventListener("error", (event) => {
   if (!event.target.matches("[data-preview-image]")) return;
+  if (event.target.dataset.previewRetry !== "1") {
+    event.target.dataset.previewRetry = "1";
+    const retryUrl = new URL(event.target.src, window.location.href);
+    retryUrl.searchParams.set("gallery-preview-retry", Date.now().toString(36));
+    event.target.src = retryUrl.href;
+    return;
+  }
   event.target.hidden = true;
   event.target.nextElementSibling.hidden = false;
+}, true);
+elements.imageList.addEventListener("load", (event) => {
+  if (!event.target.matches("[data-preview-image]")) return;
+  event.target.hidden = false;
+  event.target.nextElementSibling.hidden = true;
 }, true);
 elements.bulkClear.addEventListener("click", () => setBulkMode(false));
 elements.bulkTags.addEventListener("click", bulkAssignTags);

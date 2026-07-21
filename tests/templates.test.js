@@ -437,7 +437,7 @@ test("changed admin assets use targeted cache-busting versions", () => {
     Array(centeredModalReferences.length).fill(centeredModalVersion),
   );
 
-  const libraryCardTagsVersion = "20260721-single-image-delete";
+  const libraryCardTagsVersion = "20260721-preview-recovery";
   const libraryCardTagsReferences = [
     [libraryEntry, /from "\.\/renderers\/image-card\.js\?v=([^"]+)"/, "image-card.js"],
     [libraryHtml, /href="\/assets\/admin\/workbench\.css\?v=([^"]+)"/, "workbench.css"],
