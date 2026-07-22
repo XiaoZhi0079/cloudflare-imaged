@@ -364,11 +364,20 @@ async function confirmDiscardDetailChanges() {
   if (detailSaving) return false;
   captureActiveDetailDraft();
   if (!detailDraftsHaveChanges()) return true;
-  return await dialogs.confirm({
+  return await confirmDetailAction({
     title: "放弃未保存修改",
     message: `当前有 ${detailDraftCount()} 张图片的信息尚未保存，关闭后将丢弃这些修改。`,
     confirmLabel: "放弃修改",
   });
+}
+
+async function confirmDetailAction(options) {
+  elements.detailOverlay.setAttribute("aria-hidden", "true");
+  try {
+    return await dialogs.confirm(options);
+  } finally {
+    if (detailImageId !== null) elements.detailOverlay.removeAttribute("aria-hidden");
+  }
 }
 
 async function requestCloseDetail() {
@@ -655,7 +664,7 @@ async function saveDetail(event) {
 async function deleteDetailImage(image, controls) {
   const navigation = detailNavigationState(image.id);
   const fallbackId = navigation.nextId ?? navigation.previousId;
-  const confirmed = await dialogs.confirm({
+  const confirmed = await confirmDetailAction({
     title: "删除图片",
     message: `确定永久删除“${image.fileName}”吗？图片文件及其标签、图集和精选关系都会被移除，此操作无法撤销。`,
     confirmLabel: "删除",

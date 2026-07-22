@@ -264,7 +264,8 @@ test("image detail exposes a confirmed single-image delete action", () => {
   const workbenchCss = readFileSync(new URL("../public/assets/admin/workbench.css", import.meta.url), "utf8");
   assert.match(source, /className:\s*"admin-button-danger"[^\n]*"删除图片"/);
   assert.match(source, /deleteDetailImage/);
-  assert.match(source, /dialogs\.confirm\(\{[\s\S]*title:\s*"删除图片"[\s\S]*danger:\s*true/);
+  assert.match(source, /confirmDetailAction\(\{[\s\S]*title:\s*"删除图片"[\s\S]*danger:\s*true/);
+  assert.match(source, /function confirmDetailAction[\s\S]*setAttribute\("aria-hidden", "true"\)[\s\S]*dialogs\.confirm\(options\)[\s\S]*removeAttribute\("aria-hidden"\)/s);
   assert.match(source, /method:\s*"DELETE"/);
   assert.match(source, /body:\s*JSON\.stringify\(\{ imageId: image\.id \}\)/);
   assert.match(source, /detailDrafts\.delete\(deletedImageId\)/);
@@ -295,6 +296,7 @@ test("image detail uses a centered responsive modal workspace", () => {
   assert.match(source, /detailOverlay: document\.querySelector\("#admin-detail-overlay"\)/);
   assert.match(source, /event\.target === elements\.detailOverlay[^}]*requestCloseDetail\(\)/s);
   assert.match(workbenchCss, /\.admin-detail-dialog\s*\{[^}]*width:\s*min\(1180px,\s*calc\(100vw - 40px\)\)[^}]*max-height:\s*calc\(100dvh - 40px\)[^}]*overflow:\s*auto/s);
+  assert.match(workbenchCss, /#admin-dialog-host \.admin-dialog-backdrop\s*\{[^}]*z-index:\s*90/s);
   assert.match(workbenchCss, /\.admin-detail-workspace\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1\.4fr\)\s+minmax\(320px,\s*1fr\)/s);
   assert.match(workbenchCss, /\.detail-preview-stage\s*\{[^}]*height:\s*min\(68dvh,\s*720px\)/s);
   assert.match(workbenchCss, /\.detail-preview\s*\{[^}]*width:\s*100%[^}]*height:\s*100%[^}]*object-fit:\s*contain[^}]*object-position:\s*center/s);
@@ -326,7 +328,7 @@ test("image detail navigates drafts quickly and saves every edited image", () =>
   assert.match(source, /const entries = \[\.\.\.detailDrafts\.entries\(\)\]/);
   assert.match(source, /Promise\.all\(entries\.map/);
   assert.match(source, /detailDrafts\.get\(Number\(result\.imageId\)\) === result\.draft[\s\S]*detailDrafts\.delete/s);
-  assert.match(source, /dialogs\.confirm\(\{[\s\S]*title:\s*"放弃未保存修改"/);
+  assert.match(source, /confirmDetailAction\(\{[\s\S]*title:\s*"放弃未保存修改"/);
   assert.match(source, /message:\s*`当前有 \$\{detailDraftCount\(\)\} 张图片的信息尚未保存/);
   assert.match(source, /form\.addEventListener\("input",\s*\(\) => captureDetailDraft/);
   assert.match(source, /buildImageVariantUrl\(image\.fileUrl, 1280\)/);

@@ -52,6 +52,7 @@
 .admin-bulk-toolbar > div { display:flex; gap:7px; }
 .admin-bulk-toolbar button { min-height:40px; }
 .admin-detail-overlay { z-index:70; padding:20px; }
+#admin-dialog-host .admin-dialog-backdrop { z-index:90; }
 .admin-detail-dialog { width:min(1180px,calc(100vw - 40px)); max-height:calc(100dvh - 40px); overflow:auto; border:1px solid var(--admin-line); border-radius:10px; background:var(--admin-panel); box-shadow:0 24px 70px rgba(39,30,21,.24); }
 .admin-detail-dialog header { position:sticky; top:0; z-index:2; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:15px 18px; border-bottom:1px solid var(--admin-line); background:var(--admin-panel); }
 .admin-detail-dialog h2 { margin:0; font-size:19px; }

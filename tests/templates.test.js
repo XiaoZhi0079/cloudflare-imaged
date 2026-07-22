@@ -442,7 +442,6 @@ test("changed admin assets use targeted cache-busting versions", () => {
     [libraryEntry, /from "\.\/renderers\/image-card\.js\?v=([^"]+)"/, "image-card.js"],
     [libraryEntry, /from "\.\/upload\.js\?v=([^"]+)"/, "upload.js"],
     [libraryEntry, /from "\.\.\/image-variants\.js\?v=([^"]+)"/, "image-variants.js"],
-    [libraryHtml, /href="\/assets\/admin\/workbench\.css\?v=([^"]+)"/, "workbench.css"],
     [libraryHtml, /src="\/assets\/admin\/library-page\.js\?v=([^"]+)"/, "library-page.js"],
   ];
   const libraryCardTagsVersions = libraryCardTagsReferences.map(([source, pattern, asset]) => {
@@ -454,6 +453,11 @@ test("changed admin assets use targeted cache-busting versions", () => {
     libraryCardTagsVersions,
     Array(libraryCardTagsReferences.length).fill(libraryCardTagsVersion),
   );
+
+  const workbenchDialogVersion = "20260722-dialog-layer";
+  const workbenchDialogMatch = libraryHtml.match(/href="\/assets\/admin\/workbench\.css\?v=([^"]+)"/);
+  assert.ok(workbenchDialogMatch, "workbench.css must include a cache-busting release version");
+  assert.equal(workbenchDialogMatch[1], workbenchDialogVersion);
 
   const albumsRedesignVersion = "20260722-directory-preview-fit";
   const albumsRedesignReferences = [
