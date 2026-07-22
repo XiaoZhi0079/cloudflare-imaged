@@ -437,7 +437,7 @@ test("changed admin assets use targeted cache-busting versions", () => {
     Array(centeredModalReferences.length).fill(centeredModalVersion),
   );
 
-  const libraryCardTagsVersion = "20260722-background-upload";
+  const libraryCardTagsVersion = "20260722-detail-navigation";
   const libraryCardTagsReferences = [
     [libraryEntry, /from "\.\/renderers\/image-card\.js\?v=([^"]+)"/, "image-card.js"],
     [libraryEntry, /from "\.\/upload\.js\?v=([^"]+)"/, "upload.js"],

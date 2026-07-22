@@ -57,8 +57,15 @@
 .admin-detail-dialog h2 { margin:0; font-size:19px; }
 .admin-detail-workspace { display:grid; grid-template-columns:minmax(0,1.4fr) minmax(320px,1fr); gap:22px; margin:0; padding:20px; }
 .detail-preview-pane,.detail-edit-pane { min-width:0; }
-.detail-preview-stage { width:100%; min-width:0; min-height:360px; height:min(68dvh,720px); display:grid; place-items:center; overflow:hidden; border-radius:8px; background:#252321; }
+.detail-preview-stage { position:relative; width:100%; min-width:0; min-height:360px; height:min(68dvh,720px); display:grid; place-items:center; overflow:hidden; border-radius:8px; background:#252321; }
 .detail-preview { width:100%; height:100%; min-width:0; min-height:0; max-width:none; max-height:none; display:block; object-fit:contain; object-position:center; }
+.detail-preview-nav { position:absolute; top:50%; z-index:1; width:44px; height:56px; display:grid; place-items:center; padding:0; border:1px solid rgba(255,255,255,.45); border-radius:6px; background:rgba(39,35,33,.7); color:#fff; font-size:34px; font-weight:300; line-height:1; transform:translateY(-50%); }
+.detail-preview-nav:hover:not(:disabled) { background:rgba(39,35,33,.9); }
+.detail-preview-nav:disabled { opacity:.28; cursor:not-allowed; }
+.detail-preview-prev { left:12px; }
+.detail-preview-next { right:12px; }
+.detail-header-actions { display:flex; align-items:center; gap:12px; }
+.detail-position { min-width:58px; color:var(--admin-muted); font-size:12px; font-weight:750; text-align:right; }
 .detail-dimensions { min-width:0; display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:-8px 0 18px; padding:10px 12px; border:1px solid var(--admin-line); border-left:4px solid #77706a; border-radius:6px; background:var(--admin-surface); overflow-wrap:anywhere; }
 .detail-preview-stage + .detail-dimensions { margin:12px 0 0; }
 .detail-dimensions strong { font-size:13px; }
@@ -139,6 +146,9 @@
   .admin-detail-workspace { gap:16px; padding:12px; }
   .detail-form-actions button { min-width:0; flex:1; }
   .detail-preview-stage { min-height:240px; height:min(46dvh,420px); }
+  .detail-preview-nav { width:40px; height:50px; }
+  .detail-preview-prev { left:8px; }
+  .detail-preview-next { right:8px; }
   .admin-overlay { padding:0; }
   .upload-panel { width:100%; max-height:100dvh; min-height:100dvh; border:0; border-radius:0; }
   .upload-fields { grid-template-columns:1fr; }

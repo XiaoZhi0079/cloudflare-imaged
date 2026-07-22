@@ -3,8 +3,8 @@ import { createAdminKeyStore, fetchAdminTaxonomy } from "./auth.js";
 import { createDialogHost } from "./dialogs.js";
 import { createLibraryState } from "./library-state.js?v=20260715-featured-filter-separation";
 import { createNotifier } from "./notifications.js";
-import { buildImagePreviewUrl, renderImageCard } from "./renderers/image-card.js?v=20260722-background-upload";
-import { createUploadRunner, describeUploadFailure, measureImageFile } from "./upload.js?v=20260722-background-upload";
+import { buildImagePreviewUrl, renderImageCard } from "./renderers/image-card.js?v=20260722-detail-navigation";
+import { createUploadRunner, describeUploadFailure, measureImageFile } from "./upload.js?v=20260722-detail-navigation";
 
 const elements = {
   authView: document.querySelector("#admin-auth-view"),
@@ -50,6 +50,9 @@ let compact = false;
 let bulkMode = false;
 let detailImageId = null;
 let detailOpener = null;
+let detailDirty = false;
+let detailSaving = false;
+let detailSequenceIds = [];
 let uploadSession = null;
 let uploadRenderFrame = null;
 
@@ -279,8 +282,47 @@ function closeDetail({ restoreFocus = true } = {}) {
   elements.detailOverlay.hidden = true;
   elements.detailOverlay.replaceChildren();
   detailImageId = null;
+  detailDirty = false;
+  detailSaving = false;
+  detailSequenceIds = [];
   if (restoreFocus) detailOpener?.focus();
   detailOpener = null;
+}
+
+async function allowDiscardDetailChanges() {
+  if (detailSaving) return false;
+  if (!detailDirty) return true;
+  return await dialogs.confirm({
+    title: "放弃未保存修改",
+    message: "当前图片的信息尚未保存，继续操作将丢弃这些修改。",
+    confirmLabel: "放弃修改",
+  });
+}
+
+async function requestCloseDetail() {
+  if (!await allowDiscardDetailChanges()) return;
+  closeDetail();
+}
+
+function detailNavigationState(imageId) {
+  const currentIds = new Set(state.getImages().map((image) => Number(image.id)));
+  detailSequenceIds = detailSequenceIds.filter((id) => currentIds.has(Number(id)));
+  const index = detailSequenceIds.findIndex((id) => Number(id) === Number(imageId));
+  return {
+    index,
+    total: detailSequenceIds.length,
+    previousId: index > 0 ? detailSequenceIds[index - 1] : null,
+    nextId: index >= 0 && index < detailSequenceIds.length - 1 ? detailSequenceIds[index + 1] : null,
+  };
+}
+
+async function navigateDetail(direction) {
+  if (detailSaving) return;
+  const navigation = detailNavigationState(detailImageId);
+  const targetId = direction < 0 ? navigation.previousId : navigation.nextId;
+  if (!targetId || !await allowDiscardDetailChanges()) return;
+  const target = state.getImages().find((image) => Number(image.id) === Number(targetId));
+  if (target) openDetail(target, detailOpener, { focusField: false });
 }
 
 function checkboxField(tag, checked) {
@@ -302,20 +344,33 @@ function imageDimensionsDetail(image) {
   return details;
 }
 
-function openDetail(image, opener) {
+function openDetail(image, opener, { sequenceIds = null, focusField = true } = {}) {
   detailImageId = Number(image.id);
-  detailOpener = opener;
+  if (opener) detailOpener = opener;
+  if (sequenceIds) detailSequenceIds = [...new Set(sequenceIds.map(Number))];
+  if (!detailSequenceIds.length) detailSequenceIds = state.visibleImages().map((item) => Number(item.id));
+  detailDirty = false;
+  const navigation = detailNavigationState(image.id);
   const header = createElement("header");
   const heading = createElement("h2", { id: "detail-title" }, "图片详情");
+  const headerActions = createElement("div", { className: "detail-header-actions" });
+  const position = createElement("span", { className: "detail-position" }, navigation.index >= 0 ? `${navigation.index + 1} / ${navigation.total}` : "");
   const close = createElement("button", { type: "button", "aria-label": "关闭详情", title: "关闭" }, "×");
-  close.addEventListener("click", () => closeDetail());
-  header.append(heading, close);
+  close.addEventListener("click", () => { void requestCloseDetail(); });
+  headerActions.append(position, close);
+  header.append(heading, headerActions);
 
   const preview = image.fileUrl
     ? createElement("img", { className: "detail-preview", src: buildImagePreviewUrl(image.fileUrl, image.id), alt: image.fileName })
     : createElement("div", { className: "detail-preview image-preview-fallback" }, "预览不可用");
   const previewStage = createElement("div", { className: "detail-preview-stage" });
-  previewStage.append(preview);
+  const previous = createElement("button", { type: "button", className: "detail-preview-nav detail-preview-prev", "aria-label": "上一张", title: "上一张" }, "‹");
+  const next = createElement("button", { type: "button", className: "detail-preview-nav detail-preview-next", "aria-label": "下一张", title: "下一张" }, "›");
+  previous.disabled = navigation.previousId === null;
+  next.disabled = navigation.nextId === null;
+  previous.addEventListener("click", () => { void navigateDetail(-1); });
+  next.addEventListener("click", () => { void navigateDetail(1); });
+  previewStage.append(previous, preview, next);
   const dimensions = imageDimensionsDetail(image);
   const form = createElement("form", { className: "detail-form" });
   const nameLabel = createElement("label", { className: "admin-field" });
@@ -338,6 +393,8 @@ function openDetail(image, opener) {
   const actions = createElement("div", { className: "detail-form-actions" });
   actions.append(remove, save);
   form.append(nameLabel, categoryLabel, tags, error, actions);
+  form.addEventListener("input", () => { detailDirty = true; });
+  form.addEventListener("change", () => { detailDirty = true; });
   form.addEventListener("submit", (event) => saveDetail(event, { fileName, category, tags, error, save }));
   remove.addEventListener("click", () => deleteDetailImage(image, { remove, save, error }));
   const previewPane = createElement("div", { className: "detail-preview-pane" });
@@ -355,7 +412,12 @@ function openDetail(image, opener) {
   dialog.append(header, workspace);
   elements.detailOverlay.replaceChildren(dialog);
   elements.detailOverlay.hidden = false;
-  requestAnimationFrame(() => fileName.focus());
+  requestAnimationFrame(() => {
+    if (focusField) fileName.focus();
+    else if (!next.disabled) next.focus();
+    else if (!previous.disabled) previous.focus();
+    else fileName.focus();
+  });
 }
 
 async function saveDetail(event, controls) {
@@ -368,6 +430,7 @@ async function saveDetail(event, controls) {
     return;
   }
   controls.save.disabled = true;
+  detailSaving = true;
   controls.error.textContent = "";
   try {
     if (nextName !== current.fileName) {
@@ -401,11 +464,13 @@ async function saveDetail(event, controls) {
       replaceImages([current]);
       renderAll();
     }
-    closeDetail();
+    detailDirty = false;
+    openDetail(current, detailOpener, { focusField: false });
     notifier.success("图片信息已保存");
   } catch (error) {
     if (!(error instanceof AdminUnauthorizedError)) controls.error.textContent = errorMessage(error);
   } finally {
+    detailSaving = false;
     controls.save.disabled = false;
   }
 }
@@ -901,7 +966,9 @@ elements.imageList.addEventListener("click", (event) => {
   const image = state.getImages().find((item) => String(item.id) === card.dataset.imageId);
   if (!image) return;
   if (action === "toggle-selection") { state.toggleSelection(image.id); renderLibrary(); }
-  if (action === "open-detail") openDetail(image, event.target);
+  if (action === "open-detail") openDetail(image, event.target, {
+    sequenceIds: state.visibleImages().map((item) => Number(item.id)),
+  });
 });
 elements.imageList.addEventListener("error", (event) => {
   if (!event.target.matches("[data-preview-image]")) return;
@@ -926,7 +993,7 @@ elements.bulkCategory.addEventListener("click", bulkAssignCategory);
 elements.bulkDelete.addEventListener("click", bulkDelete);
 elements.uploadOpen.addEventListener("click", openUploadDialog);
 elements.detailOverlay.addEventListener("click", (event) => {
-  if (event.target === elements.detailOverlay) closeDetail();
+  if (event.target === elements.detailOverlay) void requestCloseDetail();
 });
 document.addEventListener("keydown", (event) => {
   if (elements.dialogHost.childElementCount) return;
@@ -935,9 +1002,16 @@ document.addEventListener("keydown", (event) => {
     else if (detailImageId !== null) trapFocus(event, elements.detailOverlay);
     return;
   }
+  const editing = event.target instanceof HTMLElement
+    && (event.target.matches("input,select,textarea") || event.target.isContentEditable);
+  if (detailImageId !== null && !editing && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
+    event.preventDefault();
+    void navigateDetail(event.key === "ArrowLeft" ? -1 : 1);
+    return;
+  }
   if (event.key === "Escape") {
     if (uploadSession?.modalOpen) closeUpload();
-    else if (detailImageId !== null) closeDetail();
+    else if (detailImageId !== null) void requestCloseDetail();
   }
 });
 window.addEventListener("beforeunload", (event) => {

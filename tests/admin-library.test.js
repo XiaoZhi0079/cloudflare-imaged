@@ -291,7 +291,7 @@ test("image detail uses a centered responsive modal workspace", () => {
   assert.match(source, /detail-preview-pane/);
   assert.match(source, /detail-edit-pane/);
   assert.match(source, /detailOverlay: document\.querySelector\("#admin-detail-overlay"\)/);
-  assert.match(source, /event\.target === elements\.detailOverlay[^}]*closeDetail\(\)/s);
+  assert.match(source, /event\.target === elements\.detailOverlay[^}]*requestCloseDetail\(\)/s);
   assert.match(workbenchCss, /\.admin-detail-dialog\s*\{[^}]*width:\s*min\(1180px,\s*calc\(100vw - 40px\)\)[^}]*max-height:\s*calc\(100dvh - 40px\)[^}]*overflow:\s*auto/s);
   assert.match(workbenchCss, /\.admin-detail-workspace\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1\.4fr\)\s+minmax\(320px,\s*1fr\)/s);
   assert.match(workbenchCss, /\.detail-preview-stage\s*\{[^}]*height:\s*min\(68dvh,\s*720px\)/s);
@@ -302,6 +302,27 @@ test("image detail uses a centered responsive modal workspace", () => {
   assert.match(workbenchCss, /@media \(max-width:900px\)[\s\S]*\.admin-detail-workspace\s*\{[^}]*grid-template-columns:\s*1fr/);
   assert.match(workbenchCss, /@media \(max-width:720px\)[\s\S]*\.admin-detail-overlay\s*\{[^}]*padding:\s*0/);
   assert.match(workbenchCss, /@media \(max-width:720px\)[\s\S]*\.admin-detail-dialog\s*\{[^}]*width:\s*100%[^}]*min-height:\s*100dvh[^}]*max-height:\s*100dvh[^}]*border:\s*0[^}]*border-radius:\s*0/s);
+});
+
+test("image detail navigates the current filtered sequence without losing unsaved edits", () => {
+  const source = readFileSync(new URL("../public/assets/admin/library-page.js", import.meta.url), "utf8");
+  const workbenchCss = readFileSync(new URL("../public/assets/admin/workbench.css", import.meta.url), "utf8");
+
+  assert.match(source, /sequenceIds:\s*state\.visibleImages\(\)\.map/);
+  assert.match(source, /className:\s*"detail-preview-nav detail-preview-prev"[^\n]*"aria-label":\s*"上一张"/);
+  assert.match(source, /className:\s*"detail-preview-nav detail-preview-next"[^\n]*"aria-label":\s*"下一张"/);
+  assert.match(source, /previous\.disabled = navigation\.previousId === null/);
+  assert.match(source, /next\.disabled = navigation\.nextId === null/);
+  assert.match(source, /function detailNavigationState/);
+  assert.match(source, /dialogs\.confirm\(\{[\s\S]*title:\s*"放弃未保存修改"/);
+  assert.match(source, /form\.addEventListener\("input",\s*\(\) => \{ detailDirty = true; \}\)/);
+  assert.match(source, /detailDirty = false;\s*openDetail\(current, detailOpener, \{ focusField: false \}\)/);
+  assert.match(source, /event\.key === "ArrowLeft" \|\| event\.key === "ArrowRight"/);
+  assert.doesNotMatch(source, /closeDetail\(\);\s*notifier\.success\("图片信息已保存"\)/);
+  assert.match(workbenchCss, /\.detail-preview-nav\s*\{[^}]*position:absolute[^}]*transform:translateY\(-50%\)/s);
+  assert.match(workbenchCss, /\.detail-preview-prev\s*\{[^}]*left:12px/s);
+  assert.match(workbenchCss, /\.detail-preview-next\s*\{[^}]*right:12px/s);
+  assert.match(workbenchCss, /\.detail-position\s*\{[^}]*text-align:right/s);
 });
 
 test("image card tag rows wrap instead of clipping assigned tags", () => {
