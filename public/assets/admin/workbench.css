@@ -86,6 +86,23 @@
 .upload-task-state { color:var(--admin-warning); font-size:11px; font-weight:800; }
 .upload-task.is-success { border-color:#9fbdaf; }.upload-task.is-success .upload-task-state { color:var(--admin-success); }
 .upload-task.is-error { border-color:#d5a293; }.upload-task.is-error .upload-task-state,.upload-task.is-error small { color:var(--admin-danger); }
+.upload-task-limit { margin:4px 0 0; color:var(--admin-muted); font-size:11px; text-align:center; }
+.admin-upload-status { position:fixed; right:18px; bottom:88px; z-index:55; width:min(440px,calc(100vw - 36px)); }
+.admin-upload-status[hidden] { display:none; }
+.admin-upload-status-panel { overflow:hidden; border:1px solid #aa9785; border-radius:8px; background:var(--admin-panel); box-shadow:0 16px 42px rgba(39,30,21,.22); }
+.admin-upload-status-panel > header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 12px 10px 14px; }
+.admin-upload-status-copy { min-width:0; display:grid; gap:3px; }
+.admin-upload-status-copy strong { font-size:14px; }
+.admin-upload-status-copy span { color:var(--admin-muted); font-size:11px; }
+.admin-upload-status-actions { display:flex; flex:0 0 auto; gap:6px; }
+.admin-upload-status-actions button { min-height:34px; padding:0 9px; font-size:11px; }
+.admin-upload-status-actions button:last-child { width:34px; padding:0; font-size:17px; }
+.admin-upload-status progress { width:calc(100% - 28px); height:7px; display:block; margin:0 14px 12px; border:0; border-radius:4px; overflow:hidden; accent-color:var(--admin-accent); }
+.admin-upload-status progress::-webkit-progress-bar { background:#e8e1d8; }
+.admin-upload-status progress::-webkit-progress-value { background:var(--admin-accent); }
+.admin-upload-status progress::-moz-progress-bar { background:var(--admin-accent); }
+.admin-upload-status-tasks { max-height:min(360px,46dvh); display:grid; gap:6px; overflow:auto; padding:0 12px 12px; }
+.admin-upload-status-tasks .upload-task { min-height:46px; background:var(--admin-surface); }
 .detail-tags { display:flex; flex-wrap:wrap; gap:6px; margin:0; padding:10px; border:1px solid var(--admin-line); border-radius:6px; }
 .detail-tags legend { padding:0 5px; color:var(--admin-muted); font-size:12px; font-weight:750; }
 .detail-tags > .tag-choice-group { flex:1 1 100%; }
@@ -115,6 +132,7 @@
   .admin-bulk-toolbar strong { display:none; }
   .admin-bulk-toolbar > div { width:100%; display:grid; grid-template-columns:repeat(4,1fr); }
   .admin-bulk-toolbar button { min-width:0; padding:0 5px; font-size:11px; }
+  .admin-upload-status { right:8px; bottom:76px; width:calc(100vw - 16px); }
   .admin-detail-overlay { padding:0; }
   .admin-detail-dialog { width:100%; min-height:100dvh; max-height:100dvh; border:0; border-radius:0; box-shadow:none; }
   .admin-detail-dialog header { padding:12px; }

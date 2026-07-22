@@ -317,3 +317,23 @@ test("image workbench enters batch mode before exposing selection controls", () 
   assert.match(source, /bulkToggle: document\.querySelector\("#admin-bulk-toggle"\)/);
   assert.match(source, /setBulkMode\(!bulkMode\)/);
 });
+
+test("image uploads continue in a bounded background task panel", () => {
+  const html = readFileSync(new URL("../public/admin/index.html", import.meta.url), "utf8");
+  const source = readFileSync(new URL("../public/assets/admin/library-page.js", import.meta.url), "utf8");
+  const workbenchCss = readFileSync(new URL("../public/assets/admin/workbench.css", import.meta.url), "utf8");
+
+  assert.match(html, /id="admin-upload-status"[^>]*aria-label="后台上传任务"/);
+  assert.match(source, /prepareFile:\s*measureImageFile/);
+  assert.match(source, /startUploadInBackground/);
+  assert.match(source, /hideUploadDialog\(\);[\s\S]*runBackgroundUpload\(\)/);
+  assert.match(source, /window\.addEventListener\("beforeunload"/);
+  assert.match(source, /if \(!uploadIsBusy\(\)\) return;/);
+  assert.match(source, /visibleUploadTasks\(tasks, limit = 80\)/);
+  assert.match(source, /function scheduleUploadRender\(\)[\s\S]*requestAnimationFrame/);
+  assert.match(source, /onChange:\s*scheduleUploadRender/);
+  assert.doesNotMatch(source, /Promise\.all\(selected\.map\(\(file\) => measureImageFile/);
+  assert.match(workbenchCss, /\.admin-upload-status\s*\{[^}]*position:fixed[^}]*width:min\(440px,calc\(100vw - 36px\)\)/s);
+  assert.match(workbenchCss, /\.admin-upload-status-tasks\s*\{[^}]*max-height:min\(360px,46dvh\)[^}]*overflow:auto/s);
+  assert.match(workbenchCss, /@media \(max-width:720px\)[\s\S]*\.admin-upload-status\s*\{[^}]*width:calc\(100vw - 16px\)/s);
+});

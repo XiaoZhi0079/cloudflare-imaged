@@ -219,7 +219,7 @@ test("image workbench exposes filtering details upload and bulk controls", () =>
   const html = readFileSync(new URL("../public/admin/index.html", import.meta.url), "utf8");
   for (const id of [
     "admin-search", "admin-sort", "admin-density", "tag-filter-list",
-    "image-list", "admin-load-more", "admin-upload-open", "admin-upload-dialog",
+    "image-list", "admin-load-more", "admin-upload-open", "admin-upload-dialog", "admin-upload-status",
     "admin-detail-overlay", "admin-bulk-toolbar", "bulk-assign-tags",
     "bulk-assign-category", "bulk-delete", "admin-dialog-host", "admin-toast-host",
   ]) {
@@ -437,9 +437,10 @@ test("changed admin assets use targeted cache-busting versions", () => {
     Array(centeredModalReferences.length).fill(centeredModalVersion),
   );
 
-  const libraryCardTagsVersion = "20260722-directory-preview-fit";
+  const libraryCardTagsVersion = "20260722-background-upload";
   const libraryCardTagsReferences = [
     [libraryEntry, /from "\.\/renderers\/image-card\.js\?v=([^"]+)"/, "image-card.js"],
+    [libraryEntry, /from "\.\/upload\.js\?v=([^"]+)"/, "upload.js"],
     [libraryHtml, /href="\/assets\/admin\/workbench\.css\?v=([^"]+)"/, "workbench.css"],
     [libraryHtml, /src="\/assets\/admin\/library-page\.js\?v=([^"]+)"/, "library-page.js"],
   ];

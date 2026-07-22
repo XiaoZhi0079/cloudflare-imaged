@@ -1,4 +1,4 @@
-const ACTIVE_STATES = new Set(["signing", "uploading", "completing"]);
+const ACTIVE_STATES = new Set(["preparing", "signing", "uploading", "completing"]);
 
 function responseMessage(body, contentType, statusText) {
   const title = body.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]
@@ -75,6 +75,7 @@ function errorText(error) {
 
 export function createUploadRunner({
   batchSize = 12,
+  prepareFile,
   requestUploadUrls,
   uploadFile,
   completeUploads,
@@ -88,6 +89,7 @@ export function createUploadRunner({
   let metadata = { categoryId: null, tagIds: [] };
   let running = false;
   let nextId = 1;
+  const hasPreparer = typeof prepareFile === "function";
 
   function snapshot() {
     return taskList.map((task) => ({ ...task }));
@@ -103,21 +105,40 @@ export function createUploadRunner({
   }
 
   async function processBatch(batch) {
-    batch.forEach((task) => transition(task, "signing", { error: null, upload: null }));
+    await Promise.all(batch.map(async (task) => {
+      if (task.prepared || !hasPreparer) return;
+      transition(task, "preparing", { error: null, upload: null });
+      try {
+        const dimensions = await prepareFile(task.file, { ...task });
+        const width = Number(dimensions?.width);
+        const height = Number(dimensions?.height);
+        Object.assign(task.draft, {
+          width: Number.isSafeInteger(width) && width > 0 ? width : null,
+          height: Number.isSafeInteger(height) && height > 0 ? height : null,
+        });
+        task.prepared = true;
+      } catch (error) {
+        transition(task, "error", { error: errorText(error) });
+      }
+    }));
+
+    const ready = batch.filter((task) => task.status !== "error");
+    if (!ready.length) return;
+    ready.forEach((task) => transition(task, "signing", { error: null, upload: null }));
     let uploads;
     try {
-      uploads = await requestUploadUrls(snapshot().filter((candidate) => batch.some((task) => task.id === candidate.id)), { ...metadata, tagIds: [...metadata.tagIds] });
-      if (!Array.isArray(uploads) || uploads.length !== batch.length) {
+      uploads = await requestUploadUrls(snapshot().filter((candidate) => ready.some((task) => task.id === candidate.id)), { ...metadata, tagIds: [...metadata.tagIds] });
+      if (!Array.isArray(uploads) || uploads.length !== ready.length) {
         throw new Error("服务端返回的上传任务数量不正确。");
       }
     } catch (error) {
-      batch.forEach((task) => transition(task, "error", { error: errorText(error) }));
+      ready.forEach((task) => transition(task, "error", { error: errorText(error) }));
       return;
     }
 
     const uploadsByTaskId = new Map(uploads.filter((upload) => upload?.taskId !== undefined).map((upload) => [String(upload.taskId), upload]));
     const uploaded = [];
-    await Promise.all(batch.map(async (task, index) => {
+    await Promise.all(ready.map(async (task, index) => {
       const upload = uploadsByTaskId.get(String(task.id)) ?? uploads[index];
       transition(task, "uploading", { upload });
       try {
@@ -170,6 +191,10 @@ export function createUploadRunner({
     setFiles(files, dimensions = []) {
       taskList = [...files].map((file, index) => {
         const size = dimensions[index] ?? {};
+        const width = Number(size.width);
+        const height = Number(size.height);
+        const hasDimensions = Number.isSafeInteger(width) && width > 0
+          && Number.isSafeInteger(height) && height > 0;
         return {
           id: `upload-${nextId++}`,
           file,
@@ -177,9 +202,10 @@ export function createUploadRunner({
             name: file.name,
             type: file.type,
             size: file.size,
-            width: size.width ?? null,
-            height: size.height ?? null,
+            width: hasDimensions ? width : null,
+            height: hasDimensions ? height : null,
           },
+          prepared: !hasPreparer || hasDimensions,
           status: "queued",
           error: null,
           upload: null,

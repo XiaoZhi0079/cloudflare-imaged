@@ -3,8 +3,8 @@ import { createAdminKeyStore, fetchAdminTaxonomy } from "./auth.js";
 import { createDialogHost } from "./dialogs.js";
 import { createLibraryState } from "./library-state.js?v=20260715-featured-filter-separation";
 import { createNotifier } from "./notifications.js";
-import { buildImagePreviewUrl, renderImageCard } from "./renderers/image-card.js?v=20260722-directory-preview-fit";
-import { createUploadRunner, describeUploadFailure, measureImageFile } from "./upload.js";
+import { buildImagePreviewUrl, renderImageCard } from "./renderers/image-card.js?v=20260722-background-upload";
+import { createUploadRunner, describeUploadFailure, measureImageFile } from "./upload.js?v=20260722-background-upload";
 
 const elements = {
   authView: document.querySelector("#admin-auth-view"),
@@ -30,6 +30,7 @@ const elements = {
   uploadOpen: document.querySelector("#admin-upload-open"),
   bulkToggle: document.querySelector("#admin-bulk-toggle"),
   uploadDialog: document.querySelector("#admin-upload-dialog"),
+  uploadStatus: document.querySelector("#admin-upload-status"),
   detailOverlay: document.querySelector("#admin-detail-overlay"),
   bulkToolbar: document.querySelector("#admin-bulk-toolbar"),
   bulkCount: document.querySelector("#bulk-selected-count"),
@@ -50,6 +51,7 @@ let bulkMode = false;
 let detailImageId = null;
 let detailOpener = null;
 let uploadSession = null;
+let uploadRenderFrame = null;
 
 function showAuth(message = "") {
   state = createLibraryState();
@@ -583,6 +585,7 @@ function mergeUploadResults(runner) {
 function uploadStatusText(task) {
   return {
     queued: "等待上传",
+    preparing: "读取图片尺寸",
     signing: "申请地址",
     uploading: "正在上传",
     completing: "正在写入",
@@ -591,36 +594,157 @@ function uploadStatusText(task) {
   }[task.status];
 }
 
-function renderUploadTasks(runner, controls) {
-  const tasks = runner.tasks();
-  controls.tasks.replaceChildren();
-  for (const task of tasks) {
+function visibleUploadTasks(tasks, limit = 80) {
+  if (tasks.length <= limit) return tasks;
+  const important = tasks.filter((task) => task.status === "error" || ["preparing", "signing", "uploading", "completing"].includes(task.status));
+  const selected = new Set(important.slice(0, limit).map((task) => task.id));
+  for (let index = tasks.length - 1; index >= 0 && selected.size < limit; index -= 1) selected.add(tasks[index].id);
+  return tasks.filter((task) => selected.has(task.id));
+}
+
+function renderUploadTaskRows(tasks, container) {
+  const visible = visibleUploadTasks(tasks);
+  container.replaceChildren();
+  for (const task of visible) {
     const row = createElement("div", { className: `upload-task is-${task.status}` });
     const copy = createElement("div", { className: "upload-task-copy" });
     copy.append(createElement("strong", {}, task.file.name), createElement("small", {}, uploadStatusText(task)));
     row.append(copy, createElement("span", { className: "upload-task-state" }, task.status === "success" ? "完成" : task.status === "error" ? "失败" : "处理中"));
-    controls.tasks.append(row);
+    container.append(row);
   }
+  if (visible.length < tasks.length) container.append(createElement("p", { className: "upload-task-limit" }, `仅显示 ${visible.length} / ${tasks.length} 项`));
+}
+
+function renderUploadDialogTasks(runner, controls) {
+  const tasks = runner.tasks();
+  renderUploadTaskRows(tasks, controls.tasks);
   const counts = runner.counts();
-  controls.summary.textContent = counts.total ? `${counts.success} / ${counts.total} 已完成` : "尚未选择图片";
-  controls.retry.hidden = counts.error === 0;
-  controls.start.disabled = counts.total === 0 || counts.active > 0 || counts.queued === 0;
-  controls.files.disabled = counts.active > 0;
-  controls.category.disabled = counts.active > 0;
-  controls.tagInputs.forEach((input) => { input.disabled = counts.active > 0; });
+  controls.summary.textContent = counts.total ? `${counts.total} 张图片等待后台处理` : "尚未选择图片";
+  controls.start.disabled = counts.total === 0;
+}
+
+function uploadIsBusy() {
+  if (!uploadSession?.started) return false;
+  const counts = uploadSession.runner.counts();
+  return uploadSession.runner.isRunning() || counts.queued > 0 || counts.active > 0;
+}
+
+function hideUploadDialog({ restoreFocus = true } = {}) {
+  elements.uploadDialog.hidden = true;
+  elements.uploadDialog.replaceChildren();
+  elements.uploadDialog.onclick = null;
+  if (uploadSession) uploadSession.modalOpen = false;
+  if (restoreFocus) uploadSession?.opener?.focus();
 }
 
 function closeUpload({ restoreFocus = true } = {}) {
-  if (uploadSession?.runner.isRunning()) return;
-  elements.uploadDialog.hidden = true;
-  elements.uploadDialog.replaceChildren();
-  if (restoreFocus) uploadSession?.opener?.focus();
+  if (uploadSession?.started) return;
+  hideUploadDialog({ restoreFocus });
   uploadSession = null;
 }
 
-async function runUpload(runner, controls, retry = false) {
+function dismissUploadSession({ restoreFocus = false } = {}) {
+  if (uploadIsBusy()) return;
+  const opener = uploadSession?.opener;
+  hideUploadDialog({ restoreFocus: false });
+  elements.uploadStatus.hidden = true;
+  elements.uploadStatus.replaceChildren();
+  elements.uploadOpen.textContent = "上传图片";
+  uploadSession = null;
+  if (restoreFocus) opener?.focus();
+}
+
+function renderBackgroundUpload() {
+  if (!uploadSession?.started) {
+    elements.uploadStatus.hidden = true;
+    elements.uploadStatus.replaceChildren();
+    return;
+  }
+  const { runner } = uploadSession;
+  const counts = runner.counts();
+  const completed = counts.success + counts.error;
+  const busy = uploadIsBusy();
+  const panel = createElement("div", { className: "admin-upload-status-panel" });
+  const header = createElement("header");
+  const copy = createElement("div", { className: "admin-upload-status-copy" });
+  copy.append(
+    createElement("strong", {}, busy ? "后台上传中" : counts.error ? "上传需要处理" : "上传已完成"),
+    createElement("span", { "aria-live": "polite" }, counts.error
+      ? `${counts.success} 张成功，${counts.error} 张失败`
+      : `${completed} / ${counts.total} 已完成`),
+  );
+  const actions = createElement("div", { className: "admin-upload-status-actions" });
+  const toggle = createElement("button", { type: "button" }, uploadSession.expanded ? "收起" : "展开");
+  const retry = createElement("button", { type: "button" }, "重试失败项");
+  retry.hidden = busy || counts.error === 0;
+  const dismiss = createElement("button", { type: "button", "aria-label": "关闭上传任务", title: "关闭" }, "×");
+  dismiss.disabled = busy;
+  actions.append(toggle, retry, dismiss);
+  header.append(copy, actions);
+
+  const progress = createElement("progress", {
+    max: Math.max(1, counts.total),
+    value: completed,
+    "aria-label": `上传进度 ${completed} / ${counts.total}`,
+  });
+  panel.append(header, progress);
+  if (uploadSession.expanded) {
+    const tasks = createElement("div", { className: "admin-upload-status-tasks" });
+    renderUploadTaskRows(runner.tasks(), tasks);
+    panel.append(tasks);
+  }
+  toggle.addEventListener("click", () => { uploadSession.expanded = !uploadSession.expanded; renderBackgroundUpload(); });
+  retry.addEventListener("click", () => retryBackgroundUpload());
+  dismiss.addEventListener("click", () => dismissUploadSession({ restoreFocus: true }));
+  elements.uploadStatus.classList.toggle("is-collapsed", !uploadSession.expanded);
+  elements.uploadStatus.replaceChildren(panel);
+  elements.uploadStatus.hidden = false;
+  elements.uploadOpen.textContent = busy ? "查看上传" : counts.error ? "查看失败项" : "上传图片";
+}
+
+function renderUploadSession() {
+  if (!uploadSession) return;
+  if (!uploadSession.started && uploadSession.controls) renderUploadDialogTasks(uploadSession.runner, uploadSession.controls);
+  renderBackgroundUpload();
+}
+
+function scheduleUploadRender() {
+  if (uploadRenderFrame !== null) return;
+  uploadRenderFrame = requestAnimationFrame(() => {
+    uploadRenderFrame = null;
+    renderUploadSession();
+  });
+}
+
+async function runBackgroundUpload({ retry = false } = {}) {
+  const session = uploadSession;
+  if (!session?.started || session.runner.isRunning()) return;
+  try {
+    if (retry) await session.runner.retryFailed(); else await session.runner.run();
+  } finally {
+    if (uploadSession !== session) return;
+    mergeUploadResults(session.runner);
+    renderUploadSession();
+    const counts = session.runner.counts();
+    if (counts.error) notifier.error(`${counts.success} 张上传成功，${counts.error} 张失败，可在上传任务中重试。`);
+    else if (counts.total) notifier.success(`已上传 ${counts.success} 张图片`);
+  }
+}
+
+function retryBackgroundUpload() {
+  if (!uploadSession?.started || uploadIsBusy()) return;
+  uploadSession.expanded = true;
+  void runBackgroundUpload({ retry: true });
+}
+
+function startUploadInBackground(runner, controls) {
   const categoryId = Number(controls.category.value);
   const tagIds = controls.tagInputs.filter((input) => input.checked).map((input) => Number(input.value));
+  const counts = runner.counts();
+  if (!counts.total) {
+    controls.error.textContent = "请至少选择一张图片。";
+    return;
+  }
   if (!categoryId) {
     controls.error.textContent = "请选择一个目录。";
     return;
@@ -631,16 +755,26 @@ async function runUpload(runner, controls, retry = false) {
   }
   controls.error.textContent = "";
   runner.setMetadata({ categoryId, tagIds });
-  if (retry) await runner.retryFailed(); else await runner.run();
-  mergeUploadResults(runner);
-  const counts = runner.counts();
-  if (counts.error === 0 && counts.total > 0) {
-    closeUpload();
-    notifier.success(`已上传 ${counts.success} 张图片`);
-  }
+  uploadSession.started = true;
+  uploadSession.expanded = true;
+  uploadSession.controls = null;
+  hideUploadDialog();
+  renderUploadSession();
+  notifier.success(`${counts.total} 张图片已转入后台上传`);
+  void runBackgroundUpload();
 }
 
 function openUploadDialog() {
+  if (uploadSession?.started) {
+    const counts = uploadSession.runner.counts();
+    if (!uploadIsBusy() && counts.error === 0) dismissUploadSession();
+    else {
+      uploadSession.expanded = true;
+      renderBackgroundUpload();
+      elements.uploadStatus.querySelector("button")?.focus();
+      return;
+    }
+  }
   if (uploadSession) return;
   const opener = document.activeElement;
   const panel = createElement("section", { className: "upload-panel", role: "dialog", "aria-modal": "true", "aria-labelledby": "upload-title" });
@@ -671,16 +805,16 @@ function openUploadDialog() {
   body.append(formGrid, error, summary, tasks);
   const footer = createElement("footer");
   const cancel = createElement("button", { type: "button" }, "取消");
-  const retry = createElement("button", { type: "button", hidden: "" }, "重试失败项");
-  const start = createElement("button", { type: "button", className: "admin-button-primary", disabled: "" }, "开始上传");
-  footer.append(cancel, retry, start);
+  const start = createElement("button", { type: "button", className: "admin-button-primary", disabled: "" }, "开始后台上传");
+  footer.append(cancel, start);
   panel.append(header, body, footer);
   elements.uploadDialog.replaceChildren(panel);
   elements.uploadDialog.hidden = false;
 
-  const controls = { files, category, tagInputs, error, summary, tasks, retry, start };
+  const controls = { files, category, tagInputs, error, summary, tasks, start };
   const runner = createUploadRunner({
     batchSize: 12,
+    prepareFile: measureImageFile,
     requestUploadUrls: async (batch, metadata) => {
       const payload = await client.request("/api/admin/images/upload/init", {
         method: "POST",
@@ -704,25 +838,19 @@ function openUploadDialog() {
       });
       return payload.images ?? [];
     },
-    onChange: () => renderUploadTasks(runner, controls),
+    onChange: scheduleUploadRender,
   });
-  uploadSession = { runner, opener, panel };
-  renderUploadTasks(runner, controls);
+  uploadSession = { runner, opener, panel, controls, modalOpen: true, started: false, expanded: true };
+  renderUploadSession();
 
-  files.addEventListener("change", async () => {
-    start.disabled = true;
-    error.textContent = "正在读取图片尺寸...";
-    const selected = [...files.files];
-    const dimensions = await Promise.all(selected.map((file) => measureImageFile(file)));
-    if (!uploadSession || uploadSession.runner !== runner) return;
-    runner.setFiles(selected, dimensions);
+  files.addEventListener("change", () => {
+    runner.setFiles([...files.files]);
     error.textContent = "";
   });
   close.addEventListener("click", () => closeUpload());
   cancel.addEventListener("click", () => closeUpload());
   elements.uploadDialog.onclick = (event) => { if (event.target === elements.uploadDialog) closeUpload(); };
-  start.addEventListener("click", () => runUpload(runner, controls));
-  retry.addEventListener("click", () => runUpload(runner, controls, true));
+  start.addEventListener("click", () => startUploadInBackground(runner, controls));
   requestAnimationFrame(() => files.focus());
 }
 
@@ -733,7 +861,15 @@ elements.passwordToggle.addEventListener("click", () => {
   elements.passwordToggle.textContent = visible ? "显示" : "隐藏";
   elements.passwordToggle.setAttribute("aria-label", visible ? "显示管理密钥" : "隐藏管理密钥");
 });
-elements.logout.addEventListener("click", () => { keyStore.clear(); showAuth(); });
+elements.logout.addEventListener("click", () => {
+  if (uploadIsBusy()) {
+    notifier.error("图片仍在后台上传，请等待任务完成后再退出。");
+    return;
+  }
+  dismissUploadSession();
+  keyStore.clear();
+  showAuth();
+});
 elements.search.addEventListener("input", () => {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(() => { state.setQuery(elements.search.value); renderLibrary(); }, 150);
@@ -795,14 +931,19 @@ elements.detailOverlay.addEventListener("click", (event) => {
 document.addEventListener("keydown", (event) => {
   if (elements.dialogHost.childElementCount) return;
   if (event.key === "Tab") {
-    if (uploadSession) trapFocus(event, uploadSession.panel);
+    if (uploadSession?.modalOpen) trapFocus(event, uploadSession.panel);
     else if (detailImageId !== null) trapFocus(event, elements.detailOverlay);
     return;
   }
   if (event.key === "Escape") {
-    if (uploadSession) closeUpload();
+    if (uploadSession?.modalOpen) closeUpload();
     else if (detailImageId !== null) closeDetail();
   }
+});
+window.addEventListener("beforeunload", (event) => {
+  if (!uploadIsBusy()) return;
+  event.preventDefault();
+  event.returnValue = "";
 });
 
 if (keyStore.get()) {

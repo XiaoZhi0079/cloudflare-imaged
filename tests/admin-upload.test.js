@@ -59,6 +59,39 @@ test("upload runner batches signing and preserves metadata drafts", async () => 
   assert.deepEqual(runner.counts(), { total: 3, queued: 0, active: 0, success: 3, error: 0 });
 });
 
+test("upload runner prepares image dimensions asynchronously and isolates preparation failures", async () => {
+  const statusSnapshots = [];
+  const signedDrafts = [];
+  const runner = createUploadRunner({
+    batchSize: 3,
+    prepareFile: async (source) => {
+      await Promise.resolve();
+      if (source.name === "broken") throw new Error("无法读取图片尺寸");
+      return source.name === "wide" ? { width: 3840, height: 2160 } : { width: 1080, height: 1920 };
+    },
+    requestUploadUrls: async (tasks) => {
+      signedDrafts.push(...tasks.map((task) => ({ ...task.draft })));
+      return tasks.map((task) => ({ taskId: task.id, storageKey: task.file.name, fileName: task.file.name }));
+    },
+    uploadFile: async () => {},
+    completeUploads: async (tasks) => tasks.map((task) => ({ imageId: task.id })),
+    onChange: (tasks) => statusSnapshots.push(tasks.map((task) => task.status)),
+  });
+
+  runner.setFiles([file("wide"), file("portrait"), file("broken")]);
+  const running = runner.run();
+
+  assert.equal(runner.isRunning(), true);
+  await running;
+  assert.ok(statusSnapshots.some((statuses) => statuses.includes("preparing")));
+  assert.deepEqual(signedDrafts.map(({ name, width, height }) => ({ name, width, height })), [
+    { name: "wide", width: 3840, height: 2160 },
+    { name: "portrait", width: 1080, height: 1920 },
+  ]);
+  assert.deepEqual(runner.tasks().map((task) => task.status), ["success", "success", "error"]);
+  assert.equal(runner.tasks()[2].error, "无法读取图片尺寸");
+});
+
 test("image measurement falls back without blocking when decoding fails", async () => {
   const dimensions = await measureImageFile(file("broken"), {
     createBitmap: async () => { throw new Error("decode failed"); },

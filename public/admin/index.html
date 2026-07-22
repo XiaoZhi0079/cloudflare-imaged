@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Gallery 图片工作台</title>
     <link rel="stylesheet" href="/assets/admin/admin.css?v=20260721-admin-layout" />
-    <link rel="stylesheet" href="/assets/admin/workbench.css?v=20260722-directory-preview-fit" />
+    <link rel="stylesheet" href="/assets/admin/workbench.css?v=20260722-background-upload" />
   </head>
   <body class="admin-body" data-admin-page="library">
     <section id="admin-auth-view" class="admin-auth-view" data-auth-fallback="visible">
@@ -38,9 +38,10 @@
       </main>
       <section id="admin-bulk-toolbar" class="admin-bulk-toolbar" hidden><strong id="bulk-selected-count">已选择 0 张</strong><div><button id="bulk-assign-tags" type="button" disabled>设置标签</button><button id="bulk-assign-category" type="button" disabled>移动目录</button><button id="bulk-delete" class="admin-button-danger" type="button" disabled>删除</button><button id="bulk-clear-selection" type="button">完成</button></div></section>
       <section id="admin-upload-dialog" class="admin-overlay" hidden aria-label="上传图片"></section>
+      <section id="admin-upload-status" class="admin-upload-status" hidden aria-label="后台上传任务"></section>
       <section id="admin-detail-overlay" class="admin-overlay admin-detail-overlay" hidden></section>
       <div id="admin-dialog-host"></div><div id="admin-toast-host" class="admin-toast-host" aria-live="polite"></div>
     </div>
-    <script type="module" src="/assets/admin/library-page.js?v=20260722-directory-preview-fit"></script>
+    <script type="module" src="/assets/admin/library-page.js?v=20260722-background-upload"></script>
   </body>
 </html>
