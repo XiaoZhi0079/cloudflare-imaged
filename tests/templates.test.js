@@ -437,7 +437,7 @@ test("changed admin assets use targeted cache-busting versions", () => {
     Array(centeredModalReferences.length).fill(centeredModalVersion),
   );
 
-  const libraryCardTagsVersion = "20260721-preview-recovery";
+  const libraryCardTagsVersion = "20260722-directory-preview-fit";
   const libraryCardTagsReferences = [
     [libraryEntry, /from "\.\/renderers\/image-card\.js\?v=([^"]+)"/, "image-card.js"],
     [libraryHtml, /href="\/assets\/admin\/workbench\.css\?v=([^"]+)"/, "workbench.css"],
@@ -453,7 +453,7 @@ test("changed admin assets use targeted cache-busting versions", () => {
     Array(libraryCardTagsReferences.length).fill(libraryCardTagsVersion),
   );
 
-  const albumsRedesignVersion = "20260721-unified-taxonomy";
+  const albumsRedesignVersion = "20260722-directory-preview-fit";
   const albumsRedesignReferences = [
     [settingsHtml, /href="\/assets\/admin\/settings\.css\?v=([^"]+)"/, "settings.css"],
     [featuredHtml, /href="\/assets\/admin\/settings\.css\?v=([^"]+)"/, "featured settings.css"],
@@ -484,7 +484,7 @@ test("changed admin assets use targeted cache-busting versions", () => {
     Array(albumDraftReferences.length).fill(albumDraftVersion),
   );
 
-  const featuredNavigationVersion = "20260721-unified-taxonomy";
+  const featuredNavigationVersion = "20260722-directory-preview-fit";
   const navigationReferences = [
     [settingsHtml, /src="\/assets\/admin\/settings-page\.js\?v=([^"]+)"/, "settings-page.js"],
   ];

@@ -76,7 +76,7 @@ test("admin upload init handler requires a category and uses its directory slug 
 
   assert.equal(failureResponse.status, 400);
   assert.deepEqual(await failureResponse.json(), {
-    error: "请选择一个主分类。",
+    error: "请选择一个目录。",
   });
 
   const successResponse = await adminUploadInitHandler({

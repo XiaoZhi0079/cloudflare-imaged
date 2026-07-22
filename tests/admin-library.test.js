@@ -295,7 +295,7 @@ test("image detail uses a centered responsive modal workspace", () => {
   assert.match(workbenchCss, /\.admin-detail-dialog\s*\{[^}]*width:\s*min\(1180px,\s*calc\(100vw - 40px\)\)[^}]*max-height:\s*calc\(100dvh - 40px\)[^}]*overflow:\s*auto/s);
   assert.match(workbenchCss, /\.admin-detail-workspace\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1\.4fr\)\s+minmax\(320px,\s*1fr\)/s);
   assert.match(workbenchCss, /\.detail-preview-stage\s*\{[^}]*height:\s*min\(68dvh,\s*720px\)/s);
-  assert.match(workbenchCss, /\.detail-preview\s*\{[^}]*object-fit:\s*contain/s);
+  assert.match(workbenchCss, /\.detail-preview\s*\{[^}]*width:\s*100%[^}]*height:\s*100%[^}]*object-fit:\s*contain[^}]*object-position:\s*center/s);
   assert.doesNotMatch(source, /detailDrawer|admin-detail-drawer/);
   assert.doesNotMatch(adminCss, /\.admin-drawer/);
   assert.doesNotMatch(workbenchCss, /admin-detail-drawer/);

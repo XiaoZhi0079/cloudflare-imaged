@@ -40,7 +40,7 @@ export async function onRequest({ env, request }) {
   const repository = getRepository(env);
   const category = await repository.getCategoryById(categoryId);
   if (!category) {
-    return jsonResponse({ error: "所选主分类无效。" }, 400);
+    return jsonResponse({ error: "所选目录无效。" }, 400);
   }
 
   const images = await Promise.all(imageIds.map((imageId) => repository.getImageById(imageId)));

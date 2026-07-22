@@ -3,7 +3,7 @@ import { createAdminKeyStore, fetchAdminTaxonomy } from "./auth.js";
 import { createDialogHost } from "./dialogs.js";
 import { createLibraryState } from "./library-state.js?v=20260715-featured-filter-separation";
 import { createNotifier } from "./notifications.js";
-import { buildImagePreviewUrl, renderImageCard } from "./renderers/image-card.js?v=20260721-preview-recovery";
+import { buildImagePreviewUrl, renderImageCard } from "./renderers/image-card.js?v=20260722-directory-preview-fit";
 import { createUploadRunner, describeUploadFailure, measureImageFile } from "./upload.js";
 
 const elements = {
@@ -326,7 +326,7 @@ function openDetail(image, opener) {
     option.selected = Number(item.id) === Number(image.category?.id);
     category.append(option);
   }
-  categoryLabel.append(createElement("span", {}, "主分类"), category);
+  categoryLabel.append(createElement("span", {}, "目录"), category);
   const tags = createElement("fieldset", { className: "detail-tags" });
   tags.append(createElement("legend", {}, "标签"));
   appendGroupedTagChoices(tags, { selectedNames: new Set(image.tags ?? []) });
@@ -522,7 +522,7 @@ async function bulkAssignTags() {
 
 async function bulkAssignCategory() {
   const imageIds = [...state.getSelectedIds()];
-  const categoryId = await openChoiceDialog({ title: "批量移动主分类", options: state.getCategories(), single: true, confirmLabel: "移动" });
+  const categoryId = await openChoiceDialog({ title: "批量移动目录", options: state.getCategories(), single: true, confirmLabel: "移动" });
   if (categoryId === null) return;
   try {
     const payload = await client.request("/api/admin/images/category-assignments/bulk", {
@@ -530,7 +530,7 @@ async function bulkAssignCategory() {
       body: JSON.stringify({ imageIds, categoryId }),
     });
     const failures = new Set((payload.failed ?? []).map((item) => Number(item.imageId)));
-    const failedUpdates = state.getImages().filter((image) => failures.has(Number(image.id))).map((image) => ({ ...image, syncStatus: "move_failed", note: "批量移动分类时底层文件移动失败。" }));
+    const failedUpdates = state.getImages().filter((image) => failures.has(Number(image.id))).map((image) => ({ ...image, syncStatus: "move_failed", note: "批量移动目录时底层文件移动失败。" }));
     replaceImages([...(payload.images ?? []), ...failedUpdates]);
     state.selectImages(failures);
     renderAll();
@@ -622,7 +622,7 @@ async function runUpload(runner, controls, retry = false) {
   const categoryId = Number(controls.category.value);
   const tagIds = controls.tagInputs.filter((input) => input.checked).map((input) => Number(input.value));
   if (!categoryId) {
-    controls.error.textContent = "请选择一个主分类。";
+    controls.error.textContent = "请选择一个目录。";
     return;
   }
   if (!tagIds.length) {
@@ -654,12 +654,12 @@ function openUploadDialog() {
   filesLabel.append(createElement("span", {}, "图片文件"), files);
   const categoryLabel = createElement("label", { className: "admin-field" });
   const category = createElement("select");
-  category.append(createElement("option", { value: "" }, "选择主分类"));
+  category.append(createElement("option", { value: "" }, "选择目录"));
   for (const item of state.getCategories()) {
     const option = createElement("option", { value: item.id }, `${item.name} /${item.directorySlug}`);
     category.append(option);
   }
-  categoryLabel.append(createElement("span", {}, "主分类"), category);
+  categoryLabel.append(createElement("span", {}, "目录"), category);
   const tagsField = createElement("fieldset", { className: "upload-tags" });
   tagsField.append(createElement("legend", {}, "标签（至少一个）"));
   const activeTags = state.getFilters().tagNames;

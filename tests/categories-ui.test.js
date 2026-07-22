@@ -16,6 +16,12 @@ test("settings page presents tag and category management in one workspace", () =
   assert.match(html, /id="tag-taxonomy-save-order"/);
   assert.match(html, /id="category-taxonomy-save-order"/);
   assert.match(html, /settings-page\.js/);
+
+  const overview = html.match(/<div class="settings-overview"[\s\S]*?<\/div>\s*<\/div>/)?.[0] ?? "";
+  assert.match(overview, /<span>目录<\/span><strong id="category-count">/);
+  assert.ok(overview.indexOf('id="category-count"') < overview.indexOf('id="tag-group-count"'));
+  assert.ok(overview.indexOf('id="tag-group-count"') < overview.indexOf('id="tag-count"'));
+  assert.doesNotMatch(html, /主分类/);
 });
 
 test("admin layout keeps the unified taxonomy workspace wide and stable", () => {
@@ -23,6 +29,7 @@ test("admin layout keeps the unified taxonomy workspace wide and stable", () => 
   const adminCss = readFileSync(new URL("../public/assets/admin/admin.css", import.meta.url), "utf8");
   assert.match(settingsCss, /\.settings-page\s*\{[^}]*width:min\(1500px,100%\)/s);
   assert.match(settingsCss, /\.settings-overview\s*\{[^}]*grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/s);
+  assert.match(settingsCss, /\.settings-overview-item\s*\{[^}]*align-items:center/s);
   assert.match(settingsCss, /\.settings-taxonomy-section-heading\s*\{[^}]*justify-content:space-between/s);
   assert.match(settingsCss, /\.settings-heading-actions button\s*\{[^}]*display:inline-flex[^}]*align-items:center[^}]*justify-content:center/s);
   assert.doesNotMatch(settingsCss, /\.admin-segments/);

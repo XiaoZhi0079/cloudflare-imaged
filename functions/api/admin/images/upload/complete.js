@@ -63,12 +63,12 @@ async function handleRequest({ env, request }) {
   if (Number.isInteger(categoryId) && categoryId > 0) {
     category = await repository.getCategoryById(categoryId);
     if (!category) {
-      return jsonResponse({ error: "所选主分类无效。" }, 400);
+      return jsonResponse({ error: "所选目录无效。" }, 400);
     }
   }
 
   if (!category && !String(env.GALLERY_UPLOAD_FOLDER ?? "").trim()) {
-    return jsonResponse({ error: "请选择一个主分类。" }, 400);
+    return jsonResponse({ error: "请选择一个目录。" }, 400);
   }
 
   const uploadedImageIds = [];

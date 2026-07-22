@@ -86,7 +86,7 @@ function updateOrderAction(type, reset, save, status, label) {
 
 function updateOrderActions() {
   updateOrderAction("tagGroups", elements.tagReset, elements.tagSave, elements.tagStatus, "标签分类");
-  updateOrderAction("categories", elements.categoryReset, elements.categorySave, elements.categoryStatus, "主分类");
+  updateOrderAction("categories", elements.categoryReset, elements.categorySave, elements.categoryStatus, "目录");
 }
 
 function tagGroupId(tag) {
@@ -291,7 +291,7 @@ async function createTagGroup() {
 }
 
 async function createCategory() {
-  const name = await dialogs.textInput({ title: "新增主分类", label: "分类名称", confirmLabel: "下一步" });
+  const name = await dialogs.textInput({ title: "新增目录", label: "显示名称", confirmLabel: "下一步" });
   if (!name) return;
   const directorySlug = await dialogs.textInput({ title: "设置目录", label: "目录名称", helper: "创建后不可在管理台修改。", confirmLabel: "新增" });
   if (!directorySlug) return;
@@ -303,7 +303,7 @@ async function createCategory() {
     });
     state.appendItem("categories", category);
     render();
-    notifier.success(`已新增主分类：${category.name}`);
+    notifier.success(`已新增目录：${category.name}`);
   } catch (error) {
     if (!(error instanceof AdminUnauthorizedError)) notifier.error(messageFor(error));
   } finally {
@@ -351,7 +351,7 @@ async function renameGroup(group) {
 }
 
 async function renameCategory(category) {
-  const name = await dialogs.textInput({ title: "重命名主分类", label: "名称", value: category.name });
+  const name = await dialogs.textInput({ title: "重命名目录", label: "名称", value: category.name });
   if (!name || name === category.name) return;
   setBusy(true);
   try {

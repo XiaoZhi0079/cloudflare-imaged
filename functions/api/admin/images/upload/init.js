@@ -46,7 +46,7 @@ async function resolveSelectedCategory(repository, env, payload) {
   if (Number.isInteger(categoryId) && categoryId > 0) {
     const category = await repository.getCategoryById(categoryId);
     if (!category) {
-      return { error: "所选主分类无效。" };
+      return { error: "所选目录无效。" };
     }
 
     return { category, uploadFolder: category.directory_slug };
@@ -57,7 +57,7 @@ async function resolveSelectedCategory(repository, env, payload) {
     return { category: null, uploadFolder };
   }
 
-  return { error: "请选择一个主分类。" };
+  return { error: "请选择一个目录。" };
 }
 
 async function handleRequest({ env, request }) {

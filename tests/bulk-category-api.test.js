@@ -117,6 +117,6 @@ test("bulk category assignment rejects an unknown category before moving", async
   });
 
   assert.equal(response.status, 400);
-  assert.deepEqual(await response.json(), { error: "所选主分类无效。" });
+  assert.deepEqual(await response.json(), { error: "所选目录无效。" });
   assert.equal(env.GALLERY_BUCKET.objects.size, 0);
 });
