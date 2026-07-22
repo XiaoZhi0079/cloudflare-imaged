@@ -267,6 +267,8 @@ test("image detail exposes a confirmed single-image delete action", () => {
   assert.match(source, /dialogs\.confirm\(\{[\s\S]*title:\s*"删除图片"[\s\S]*danger:\s*true/);
   assert.match(source, /method:\s*"DELETE"/);
   assert.match(source, /body:\s*JSON\.stringify\(\{ imageId: image\.id \}\)/);
+  assert.match(source, /detailDrafts\.delete\(deletedImageId\)/);
+  assert.match(source, /if \(fallback\) openDetail\(fallback, detailOpener/);
   assert.match(source, /state\.syncImages\(state\.getImages\(\)\.filter/);
   assert.match(source, /if \(elements\.dialogHost\.childElementCount\) return;/);
   assert.match(workbenchCss, /\.detail-form-actions\s*\{[^}]*justify-content:space-between/s);
@@ -304,7 +306,7 @@ test("image detail uses a centered responsive modal workspace", () => {
   assert.match(workbenchCss, /@media \(max-width:720px\)[\s\S]*\.admin-detail-dialog\s*\{[^}]*width:\s*100%[^}]*min-height:\s*100dvh[^}]*max-height:\s*100dvh[^}]*border:\s*0[^}]*border-radius:\s*0/s);
 });
 
-test("image detail navigates the current filtered sequence without losing unsaved edits", () => {
+test("image detail navigates drafts quickly and saves every edited image", () => {
   const source = readFileSync(new URL("../public/assets/admin/library-page.js", import.meta.url), "utf8");
   const workbenchCss = readFileSync(new URL("../public/assets/admin/workbench.css", import.meta.url), "utf8");
 
@@ -314,11 +316,24 @@ test("image detail navigates the current filtered sequence without losing unsave
   assert.match(source, /previous\.disabled = navigation\.previousId === null/);
   assert.match(source, /next\.disabled = navigation\.nextId === null/);
   assert.match(source, /function detailNavigationState/);
+  assert.match(source, /let detailDrafts = new Map\(\)/);
+  assert.match(source, /function captureDetailDraft/);
+  assert.match(source, /function navigateDetail[\s\S]*captureActiveDetailDraft\(\)[\s\S]*openDetail\(target/s);
+  assert.doesNotMatch(source, /function navigateDetail[\s\S]*confirmDiscardDetailChanges\(\)/s);
+  assert.match(source, /detailControls\.save\.textContent = detailSaving[\s\S]*`保存全部（\$\{count\}）`/);
+  assert.match(source, /detailControls\.tags\.disabled = detailSaving/);
+  assert.match(source, /detailControls\.previous\.disabled = detailSaving/);
+  assert.match(source, /const entries = \[\.\.\.detailDrafts\.entries\(\)\]/);
+  assert.match(source, /Promise\.all\(entries\.map/);
+  assert.match(source, /detailDrafts\.get\(Number\(result\.imageId\)\) === result\.draft[\s\S]*detailDrafts\.delete/s);
   assert.match(source, /dialogs\.confirm\(\{[\s\S]*title:\s*"放弃未保存修改"/);
-  assert.match(source, /form\.addEventListener\("input",\s*\(\) => \{ detailDirty = true; \}\)/);
-  assert.match(source, /detailDirty = false;\s*openDetail\(current, detailOpener, \{ focusField: false \}\)/);
+  assert.match(source, /message:\s*`当前有 \$\{detailDraftCount\(\)\} 张图片的信息尚未保存/);
+  assert.match(source, /form\.addEventListener\("input",\s*\(\) => captureDetailDraft/);
+  assert.match(source, /buildImageVariantUrl\(image\.fileUrl, 1280\)/);
+  assert.match(source, /function preloadDetailNeighbors/);
+  assert.match(source, /preload\.fetchPriority = "low"/);
   assert.match(source, /event\.key === "ArrowLeft" \|\| event\.key === "ArrowRight"/);
-  assert.doesNotMatch(source, /closeDetail\(\);\s*notifier\.success\("图片信息已保存"\)/);
+  assert.match(source, /!uploadIsBusy\(\) && !detailDraftsHaveChanges\(\)/);
   assert.match(workbenchCss, /\.detail-preview-nav\s*\{[^}]*position:absolute[^}]*transform:translateY\(-50%\)/s);
   assert.match(workbenchCss, /\.detail-preview-prev\s*\{[^}]*left:12px/s);
   assert.match(workbenchCss, /\.detail-preview-next\s*\{[^}]*right:12px/s);
@@ -349,7 +364,7 @@ test("image uploads continue in a bounded background task panel", () => {
   assert.match(source, /startUploadInBackground/);
   assert.match(source, /hideUploadDialog\(\);[\s\S]*runBackgroundUpload\(\)/);
   assert.match(source, /window\.addEventListener\("beforeunload"/);
-  assert.match(source, /if \(!uploadIsBusy\(\)\) return;/);
+  assert.match(source, /if \(!uploadIsBusy\(\) && !detailDraftsHaveChanges\(\)\) return;/);
   assert.match(source, /visibleUploadTasks\(tasks, limit = 80\)/);
   assert.match(source, /function scheduleUploadRender\(\)[\s\S]*requestAnimationFrame/);
   assert.match(source, /onChange:\s*scheduleUploadRender/);

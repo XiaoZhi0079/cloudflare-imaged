@@ -3,8 +3,9 @@ import { createAdminKeyStore, fetchAdminTaxonomy } from "./auth.js";
 import { createDialogHost } from "./dialogs.js";
 import { createLibraryState } from "./library-state.js?v=20260715-featured-filter-separation";
 import { createNotifier } from "./notifications.js";
-import { buildImagePreviewUrl, renderImageCard } from "./renderers/image-card.js?v=20260722-detail-navigation";
-import { createUploadRunner, describeUploadFailure, measureImageFile } from "./upload.js?v=20260722-detail-navigation";
+import { buildImagePreviewUrl, renderImageCard } from "./renderers/image-card.js?v=20260722-detail-drafts";
+import { createUploadRunner, describeUploadFailure, measureImageFile } from "./upload.js?v=20260722-detail-drafts";
+import { buildImageVariantUrl } from "../image-variants.js?v=20260722-detail-drafts";
 
 const elements = {
   authView: document.querySelector("#admin-auth-view"),
@@ -50,9 +51,11 @@ let compact = false;
 let bulkMode = false;
 let detailImageId = null;
 let detailOpener = null;
-let detailDirty = false;
+let detailControls = null;
+let detailDrafts = new Map();
 let detailSaving = false;
 let detailSequenceIds = [];
+let detailPreloadImages = new Map();
 let uploadSession = null;
 let uploadRenderFrame = null;
 
@@ -282,25 +285,94 @@ function closeDetail({ restoreFocus = true } = {}) {
   elements.detailOverlay.hidden = true;
   elements.detailOverlay.replaceChildren();
   detailImageId = null;
-  detailDirty = false;
+  detailControls = null;
+  detailDrafts = new Map();
   detailSaving = false;
   detailSequenceIds = [];
+  detailPreloadImages.clear();
   if (restoreFocus) detailOpener?.focus();
   detailOpener = null;
 }
 
-async function allowDiscardDetailChanges() {
+function detailDraftCount() {
+  return detailDrafts.size;
+}
+
+function detailDraftsHaveChanges() {
+  return detailDraftCount() > 0;
+}
+
+function sortedTagIds(tagIds) {
+  return [...new Set(tagIds.map(Number).filter(Number.isSafeInteger))].sort((left, right) => left - right);
+}
+
+function detailDraftFor(image) {
+  const draft = detailDrafts.get(Number(image.id));
+  if (draft) return draft;
+  return {
+    fileName: String(image.fileName ?? ""),
+    categoryId: Number(image.category?.id ?? 0),
+    tagIds: sortedTagIds(state.getTags()
+      .filter((tag) => (image.tags ?? []).includes(tag.name))
+      .map((tag) => Number(tag.id))),
+  };
+}
+
+function detailDraftMatchesImage(image, draft) {
+  const currentTagIds = sortedTagIds(state.getTags()
+    .filter((tag) => (image.tags ?? []).includes(tag.name))
+    .map((tag) => Number(tag.id)));
+  return String(draft.fileName ?? "").trim() === String(image.fileName ?? "").trim()
+    && Number(draft.categoryId) === Number(image.category?.id ?? 0)
+    && JSON.stringify(sortedTagIds(draft.tagIds ?? [])) === JSON.stringify(currentTagIds);
+}
+
+function renderDetailSaveState() {
+  if (!detailControls) return;
+  const count = detailDraftCount();
+  detailControls.save.textContent = detailSaving
+    ? `正在保存 ${count} 张...`
+    : count > 1 ? `保存全部（${count}）` : "保存修改";
+  detailControls.save.disabled = detailSaving;
+  detailControls.remove.disabled = detailSaving;
+  detailControls.fileName.disabled = detailSaving;
+  detailControls.category.disabled = detailSaving;
+  detailControls.tags.disabled = detailSaving;
+  detailControls.previous.disabled = detailSaving || !detailControls.canPrevious;
+  detailControls.next.disabled = detailSaving || !detailControls.canNext;
+}
+
+function captureDetailDraft(imageId = detailImageId, controls = detailControls) {
+  if (!controls || imageId === null) return;
+  const image = state.getImages().find((item) => Number(item.id) === Number(imageId));
+  if (!image) return;
+  const draft = {
+    fileName: controls.fileName.value,
+    categoryId: Number(controls.category.value),
+    tagIds: sortedTagIds([...controls.tags.querySelectorAll("input:checked")].map((input) => Number(input.value))),
+  };
+  if (detailDraftMatchesImage(image, draft)) detailDrafts.delete(Number(imageId));
+  else detailDrafts.set(Number(imageId), draft);
+  renderDetailSaveState();
+}
+
+function captureActiveDetailDraft() {
+  captureDetailDraft(detailImageId, detailControls);
+}
+
+async function confirmDiscardDetailChanges() {
   if (detailSaving) return false;
-  if (!detailDirty) return true;
+  captureActiveDetailDraft();
+  if (!detailDraftsHaveChanges()) return true;
   return await dialogs.confirm({
     title: "放弃未保存修改",
-    message: "当前图片的信息尚未保存，继续操作将丢弃这些修改。",
+    message: `当前有 ${detailDraftCount()} 张图片的信息尚未保存，关闭后将丢弃这些修改。`,
     confirmLabel: "放弃修改",
   });
 }
 
 async function requestCloseDetail() {
-  if (!await allowDiscardDetailChanges()) return;
+  if (!await confirmDiscardDetailChanges()) return;
   closeDetail();
 }
 
@@ -316,11 +388,34 @@ function detailNavigationState(imageId) {
   };
 }
 
-async function navigateDetail(direction) {
+function detailPreviewUrl(image) {
+  return buildImageVariantUrl(image.fileUrl, 1280) ?? buildImagePreviewUrl(image.fileUrl, image.id);
+}
+
+function preloadDetailNeighbors(imageId) {
+  const navigation = detailNavigationState(imageId);
+  for (const neighborId of [navigation.previousId, navigation.nextId]) {
+    if (!neighborId) continue;
+    const neighbor = state.getImages().find((image) => Number(image.id) === Number(neighborId));
+    const url = neighbor ? detailPreviewUrl(neighbor) : "";
+    if (!url || detailPreloadImages.has(url)) continue;
+    const preload = new Image();
+    preload.decoding = "async";
+    preload.fetchPriority = "low";
+    preload.src = url;
+    detailPreloadImages.set(url, preload);
+    while (detailPreloadImages.size > 8) {
+      detailPreloadImages.delete(detailPreloadImages.keys().next().value);
+    }
+  }
+}
+
+function navigateDetail(direction) {
   if (detailSaving) return;
+  captureActiveDetailDraft();
   const navigation = detailNavigationState(detailImageId);
   const targetId = direction < 0 ? navigation.previousId : navigation.nextId;
-  if (!targetId || !await allowDiscardDetailChanges()) return;
+  if (!targetId) return;
   const target = state.getImages().find((image) => Number(image.id) === Number(targetId));
   if (target) openDetail(target, detailOpener, { focusField: false });
 }
@@ -349,7 +444,7 @@ function openDetail(image, opener, { sequenceIds = null, focusField = true } = {
   if (opener) detailOpener = opener;
   if (sequenceIds) detailSequenceIds = [...new Set(sequenceIds.map(Number))];
   if (!detailSequenceIds.length) detailSequenceIds = state.visibleImages().map((item) => Number(item.id));
-  detailDirty = false;
+  const draft = detailDraftFor(image);
   const navigation = detailNavigationState(image.id);
   const header = createElement("header");
   const heading = createElement("h2", { id: "detail-title" }, "图片详情");
@@ -361,7 +456,7 @@ function openDetail(image, opener, { sequenceIds = null, focusField = true } = {
   header.append(heading, headerActions);
 
   const preview = image.fileUrl
-    ? createElement("img", { className: "detail-preview", src: buildImagePreviewUrl(image.fileUrl, image.id), alt: image.fileName })
+    ? createElement("img", { className: "detail-preview", src: detailPreviewUrl(image), alt: image.fileName, decoding: "async", fetchpriority: "high" })
     : createElement("div", { className: "detail-preview image-preview-fallback" }, "预览不可用");
   const previewStage = createElement("div", { className: "detail-preview-stage" });
   const previous = createElement("button", { type: "button", className: "detail-preview-nav detail-preview-prev", "aria-label": "上一张", title: "上一张" }, "‹");
@@ -374,28 +469,45 @@ function openDetail(image, opener, { sequenceIds = null, focusField = true } = {
   const dimensions = imageDimensionsDetail(image);
   const form = createElement("form", { className: "detail-form" });
   const nameLabel = createElement("label", { className: "admin-field" });
-  const fileName = createElement("input", { name: "fileName", value: image.fileName, required: "" });
+  const fileName = createElement("input", { name: "fileName", value: draft.fileName, required: "" });
   nameLabel.append(createElement("span", {}, "文件名"), fileName);
   const categoryLabel = createElement("label", { className: "admin-field" });
   const category = createElement("select", { name: "categoryId" });
   for (const item of state.getCategories()) {
     const option = createElement("option", { value: item.id }, `${item.name} /${item.directorySlug}`);
-    option.selected = Number(item.id) === Number(image.category?.id);
+    option.selected = Number(item.id) === Number(draft.categoryId);
     category.append(option);
   }
   categoryLabel.append(createElement("span", {}, "目录"), category);
   const tags = createElement("fieldset", { className: "detail-tags" });
   tags.append(createElement("legend", {}, "标签"));
-  appendGroupedTagChoices(tags, { selectedNames: new Set(image.tags ?? []) });
+  const selectedTagIds = new Set(draft.tagIds.map(Number));
+  appendGroupedTagChoices(tags, {
+    selectedNames: new Set(state.getTags().filter((tag) => selectedTagIds.has(Number(tag.id))).map((tag) => tag.name)),
+  });
   const error = createElement("p", { className: "admin-field-error", "aria-live": "polite" });
   const remove = createElement("button", { type: "button", className: "admin-button-danger" }, "删除图片");
   const save = createElement("button", { type: "submit", className: "admin-button-primary" }, "保存修改");
   const actions = createElement("div", { className: "detail-form-actions" });
   actions.append(remove, save);
   form.append(nameLabel, categoryLabel, tags, error, actions);
-  form.addEventListener("input", () => { detailDirty = true; });
-  form.addEventListener("change", () => { detailDirty = true; });
-  form.addEventListener("submit", (event) => saveDetail(event, { fileName, category, tags, error, save }));
+  const controls = {
+    imageId: Number(image.id),
+    fileName,
+    category,
+    tags,
+    error,
+    remove,
+    save,
+    previous,
+    next,
+    canPrevious: navigation.previousId !== null,
+    canNext: navigation.nextId !== null,
+  };
+  detailControls = controls;
+  form.addEventListener("input", () => captureDetailDraft(image.id, controls));
+  form.addEventListener("change", () => captureDetailDraft(image.id, controls));
+  form.addEventListener("submit", saveDetail);
   remove.addEventListener("click", () => deleteDetailImage(image, { remove, save, error }));
   const previewPane = createElement("div", { className: "detail-preview-pane" });
   previewPane.append(previewStage, dimensions);
@@ -412,6 +524,8 @@ function openDetail(image, opener, { sequenceIds = null, focusField = true } = {
   dialog.append(header, workspace);
   elements.detailOverlay.replaceChildren(dialog);
   elements.detailOverlay.hidden = false;
+  renderDetailSaveState();
+  preloadDetailNeighbors(image.id);
   requestAnimationFrame(() => {
     if (focusField) fileName.focus();
     else if (!next.disabled) next.focus();
@@ -420,62 +534,127 @@ function openDetail(image, opener, { sequenceIds = null, focusField = true } = {
   });
 }
 
-async function saveDetail(event, controls) {
+async function persistDetailDraft(image, draft) {
+  let current = image;
+  const nextName = String(draft.fileName ?? "").trim();
+  if (!nextName) throw new Error(`“${image.fileName}”的文件名不能为空。`);
+
+  if (nextName !== current.fileName) {
+    const payload = await client.request("/api/admin/images", {
+      method: "PATCH",
+      body: JSON.stringify({ imageId: current.id, fileName: nextName }),
+    });
+    current = payload.image;
+    replaceImages([current]);
+  }
+
+  if (Number(draft.categoryId) !== Number(current.category?.id)) {
+    const payload = await client.request("/api/admin/images/category-assignments/bulk", {
+      method: "POST",
+      body: JSON.stringify({ imageIds: [current.id], categoryId: Number(draft.categoryId) }),
+    });
+    if (payload.failed?.length) throw new Error(payload.failed[0].error);
+    current = payload.images[0];
+    replaceImages([current]);
+  }
+
+  const tagIds = sortedTagIds(draft.tagIds ?? []);
+  const currentTagIds = sortedTagIds(state.getTags()
+    .filter((tag) => (current.tags ?? []).includes(tag.name))
+    .map((tag) => Number(tag.id)));
+  if (JSON.stringify(tagIds) !== JSON.stringify(currentTagIds)) {
+    await client.request("/api/admin/images/tag-assignments", {
+      method: "POST",
+      body: JSON.stringify({ imageId: current.id, tagIds }),
+    });
+    const selected = new Set(tagIds);
+    current = {
+      ...current,
+      tags: state.getTags().filter((tag) => selected.has(Number(tag.id))).map((tag) => tag.name),
+    };
+    replaceImages([current]);
+  }
+
+  return current;
+}
+
+async function saveDetail(event) {
   event.preventDefault();
-  let current = state.getImages().find((image) => Number(image.id) === detailImageId);
-  if (!current) return;
-  const nextName = controls.fileName.value.trim();
-  if (!nextName) {
-    controls.error.textContent = "文件名不能为空。";
+  if (detailSaving) return;
+  captureActiveDetailDraft();
+  const entries = [...detailDrafts.entries()];
+  if (!entries.length) {
+    detailControls.error.textContent = "没有需要保存的修改。";
     return;
   }
-  controls.save.disabled = true;
+
+  const invalid = entries.find(([, draft]) => !String(draft.fileName ?? "").trim());
+  if (invalid) {
+    const image = state.getImages().find((item) => Number(item.id) === Number(invalid[0]));
+    if (image && Number(image.id) !== Number(detailImageId)) openDetail(image, detailOpener);
+    detailControls.error.textContent = "文件名不能为空。";
+    detailControls.fileName.focus();
+    return;
+  }
+
   detailSaving = true;
-  controls.error.textContent = "";
+  detailControls.error.textContent = "";
+  detailControls.remove.disabled = true;
+  renderDetailSaveState();
   try {
-    if (nextName !== current.fileName) {
-      const payload = await client.request("/api/admin/images", {
-        method: "PATCH",
-        body: JSON.stringify({ imageId: current.id, fileName: nextName }),
-      });
-      current = payload.image;
-      replaceImages([current]);
-      renderLibrary();
+    const results = await Promise.all(entries.map(async ([imageId, draft]) => {
+      const image = state.getImages().find((item) => Number(item.id) === Number(imageId));
+      if (!image) return { imageId, image: null, error: new Error("图片已不存在。") };
+      try {
+        return { imageId, draft, image: await persistDetailDraft(image, draft), error: null };
+      } catch (error) {
+        return { imageId, draft, image, error };
+      }
+    }));
+
+    const unauthorized = results.find((result) => result.error instanceof AdminUnauthorizedError);
+    if (unauthorized) return;
+
+    const failures = [];
+    let savedCount = 0;
+    for (const result of results) {
+      if (result.error) {
+        failures.push(result);
+        continue;
+      }
+      if (detailDrafts.get(Number(result.imageId)) === result.draft) {
+        detailDrafts.delete(Number(result.imageId));
+      }
+      savedCount += 1;
     }
-    if (Number(controls.category.value) !== Number(current.category?.id)) {
-      const payload = await client.request("/api/admin/images/category-assignments/bulk", {
-        method: "POST",
-        body: JSON.stringify({ imageIds: [current.id], categoryId: Number(controls.category.value) }),
-      });
-      if (payload.failed?.length) throw new Error(payload.failed[0].error);
-      current = payload.images[0];
-      replaceImages([current]);
-      renderAll();
+
+    renderAll();
+    const active = state.getImages().find((image) => Number(image.id) === Number(detailImageId));
+    const firstFailedImage = failures.length
+      ? state.getImages().find((image) => Number(image.id) === Number(failures[0].imageId))
+      : null;
+    const displayImage = firstFailedImage ?? active;
+    if (displayImage) openDetail(displayImage, detailOpener, { focusField: false });
+    if (failures.length) {
+      detailControls.error.textContent = failures.length === 1
+        ? `“${firstFailedImage?.fileName ?? "图片"}”：${errorMessage(failures[0].error)}`
+        : `${failures.length} 张图片保存失败，请重试。`;
+      notifier.error(savedCount ? `已保存 ${savedCount} 张，${failures.length} 张失败` : "图片信息保存失败");
+    } else {
+      notifier.success(`已保存 ${savedCount} 张图片`);
     }
-    const tagIds = [...controls.tags.querySelectorAll("input:checked")].map((input) => Number(input.value));
-    const currentTagIds = state.getTags().filter((tag) => (current.tags ?? []).includes(tag.name)).map((tag) => Number(tag.id));
-    if (tagIds.length !== currentTagIds.length || tagIds.some((id) => !currentTagIds.includes(id))) {
-      await client.request("/api/admin/images/tag-assignments", {
-        method: "POST",
-        body: JSON.stringify({ imageId: current.id, tagIds }),
-      });
-      const selected = new Set(tagIds);
-      current = { ...current, tags: state.getTags().filter((tag) => selected.has(Number(tag.id))).map((tag) => tag.name) };
-      replaceImages([current]);
-      renderAll();
-    }
-    detailDirty = false;
-    openDetail(current, detailOpener, { focusField: false });
-    notifier.success("图片信息已保存");
-  } catch (error) {
-    if (!(error instanceof AdminUnauthorizedError)) controls.error.textContent = errorMessage(error);
   } finally {
     detailSaving = false;
-    controls.save.disabled = false;
+    if (detailControls) {
+      detailControls.remove.disabled = false;
+      renderDetailSaveState();
+    }
   }
 }
 
 async function deleteDetailImage(image, controls) {
+  const navigation = detailNavigationState(image.id);
+  const fallbackId = navigation.nextId ?? navigation.previousId;
   const confirmed = await dialogs.confirm({
     title: "删除图片",
     message: `确定永久删除“${image.fileName}”吗？图片文件及其标签、图集和精选关系都会被移除，此操作无法撤销。`,
@@ -493,9 +672,13 @@ async function deleteDetailImage(image, controls) {
       body: JSON.stringify({ imageId: image.id }),
     });
     const deletedImageId = Number(payload.deletedImageId ?? image.id);
+    detailDrafts.delete(deletedImageId);
+    detailSequenceIds = detailSequenceIds.filter((id) => Number(id) !== deletedImageId);
     state.syncImages(state.getImages().filter((item) => Number(item.id) !== deletedImageId));
-    closeDetail();
     renderAll();
+    const fallback = state.getImages().find((item) => Number(item.id) === Number(fallbackId));
+    if (fallback) openDetail(fallback, detailOpener, { focusField: false });
+    else closeDetail();
     notifier.success(`已删除图片：${image.fileName}`);
   } catch (error) {
     const failedId = Number(error?.payload?.imageId);
@@ -1015,7 +1198,8 @@ document.addEventListener("keydown", (event) => {
   }
 });
 window.addEventListener("beforeunload", (event) => {
-  if (!uploadIsBusy()) return;
+  captureActiveDetailDraft();
+  if (!uploadIsBusy() && !detailDraftsHaveChanges()) return;
   event.preventDefault();
   event.returnValue = "";
 });
