@@ -440,9 +440,7 @@ test("changed admin assets use targeted cache-busting versions", () => {
   const libraryCardTagsVersion = "20260722-detail-drafts";
   const libraryCardTagsReferences = [
     [libraryEntry, /from "\.\/renderers\/image-card\.js\?v=([^"]+)"/, "image-card.js"],
-    [libraryEntry, /from "\.\/upload\.js\?v=([^"]+)"/, "upload.js"],
     [libraryEntry, /from "\.\.\/image-variants\.js\?v=([^"]+)"/, "image-variants.js"],
-    [libraryHtml, /src="\/assets\/admin\/library-page\.js\?v=([^"]+)"/, "library-page.js"],
   ];
   const libraryCardTagsVersions = libraryCardTagsReferences.map(([source, pattern, asset]) => {
     const match = source.match(pattern);
@@ -452,6 +450,21 @@ test("changed admin assets use targeted cache-busting versions", () => {
   assert.deepEqual(
     libraryCardTagsVersions,
     Array(libraryCardTagsReferences.length).fill(libraryCardTagsVersion),
+  );
+
+  const uploadIdempotencyVersion = "20260726-upload-idempotency";
+  const uploadIdempotencyReferences = [
+    [libraryEntry, /from "\.\/upload\.js\?v=([^"]+)"/, "upload.js"],
+    [libraryHtml, /src="\/assets\/admin\/library-page\.js\?v=([^"]+)"/, "library-page.js"],
+  ];
+  const uploadIdempotencyVersions = uploadIdempotencyReferences.map(([source, pattern, asset]) => {
+    const match = source.match(pattern);
+    assert.ok(match, `${asset} must include a cache-busting release version`);
+    return match[1];
+  });
+  assert.deepEqual(
+    uploadIdempotencyVersions,
+    Array(uploadIdempotencyReferences.length).fill(uploadIdempotencyVersion),
   );
 
   const workbenchDialogVersion = "20260722-dialog-layer";

@@ -4,7 +4,7 @@ import { createDialogHost } from "./dialogs.js";
 import { createLibraryState } from "./library-state.js?v=20260715-featured-filter-separation";
 import { createNotifier } from "./notifications.js";
 import { buildImagePreviewUrl, renderImageCard } from "./renderers/image-card.js?v=20260722-detail-drafts";
-import { createUploadRunner, describeUploadFailure, measureImageFile } from "./upload.js?v=20260722-detail-drafts";
+import { createUploadRunner, describeUploadFailure, measureImageFile } from "./upload.js?v=20260726-upload-idempotency";
 import { buildImageVariantUrl } from "../image-variants.js?v=20260722-detail-drafts";
 
 const elements = {
@@ -1075,7 +1075,10 @@ function openUploadDialog() {
     requestUploadUrls: async (batch, metadata) => {
       const payload = await client.request("/api/admin/images/upload/init", {
         method: "POST",
-        body: JSON.stringify({ files: batch.map((task) => task.draft), ...metadata }),
+        body: JSON.stringify({
+          files: batch.map((task) => ({ ...task.draft, uploadId: task.uploadId })),
+          ...metadata,
+        }),
       });
       return (payload.uploads ?? []).map((upload, index) => ({ ...upload, taskId: batch[index]?.id }));
     },
@@ -1085,6 +1088,7 @@ function openUploadDialog() {
         method: "POST",
         body: JSON.stringify({
           files: batch.map((task) => ({
+            uploadId: task.upload.uploadId,
             storageKey: task.upload.storageKey,
             fileName: task.upload.fileName,
             width: task.draft.width,

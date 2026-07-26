@@ -339,7 +339,119 @@ test("admin upload complete handler rejects missing R2 objects", async () => {
   });
 
   assert.equal(response.status, 400);
-  assert.deepEqual(await response.json(), {
-    error: "存在未完成上传的图片，请重新上传后再提交。",
+  const payload = await response.json();
+  assert.equal(payload.error, "存在未完成上传的图片，请重新上传后再提交。");
+  assert.equal(payload.code, "UPLOAD_OBJECT_MISSING");
+  assert.match(payload.requestId, /^[0-9a-f-]+$/i);
+});
+
+test("direct upload completion is idempotent for the same upload ID", async () => {
+  const env = createTestEnv();
+  const repository = createGalleryRepository(env.GALLERY_DB);
+  const tag = await repository.createTag({ name: "幂等标签", sortOrder: 1, isVisible: true });
+  const uploadId = "6af0b175-3c6b-4a20-a1ab-52b77fbab671";
+  const initResponse = await adminUploadInitHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/images/upload/init", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-gallery-admin-key": "gallery-secret" },
+      body: JSON.stringify({
+        tagIds: [tag.id],
+        files: [{ uploadId, name: "idempotent.webp", type: "image/webp", size: 3, width: 1920, height: 1080 }],
+      }),
+    }),
   });
+  assert.equal(initResponse.status, 200);
+  const descriptor = (await initResponse.json()).uploads[0];
+  assert.equal(descriptor.uploadId, uploadId);
+  await env.GALLERY_BUCKET.put(descriptor.storageKey, new Uint8Array([1, 2, 3]));
+
+  const complete = () => adminUploadCompleteHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/images/upload/complete", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-gallery-admin-key": "gallery-secret" },
+      body: JSON.stringify({
+        tagIds: [tag.id],
+        files: [{
+          uploadId,
+          storageKey: descriptor.storageKey,
+          fileName: descriptor.fileName,
+          width: 1920,
+          height: 1080,
+        }],
+      }),
+    }),
+  });
+
+  const first = await complete();
+  const second = await complete();
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+  const firstPayload = await first.json();
+  const secondPayload = await second.json();
+  assert.equal(secondPayload.images[0].id, firstPayload.images[0].id);
+  assert.equal(env.GALLERY_DB.prepare("SELECT COUNT(*) AS count FROM images").get().count, 1);
+  assert.equal(env.GALLERY_DB.prepare("SELECT COUNT(*) AS count FROM image_tags").get().count, 1);
+  assert.equal(env.GALLERY_DB.prepare("SELECT status FROM upload_sessions WHERE id = ?").get(uploadId).status, "completed");
+});
+
+test("upload init rejects a different session targeting a reserved storage key", async () => {
+  const env = createTestEnv();
+  const repository = createGalleryRepository(env.GALLERY_DB);
+  const tag = await repository.createTag({ name: "冲突标签", sortOrder: 1, isVisible: true });
+  const requestInit = (uploadId) => adminUploadInitHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/images/upload/init", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-gallery-admin-key": "gallery-secret" },
+      body: JSON.stringify({
+        tagIds: [tag.id],
+        files: [{ uploadId, name: "reserved.webp", type: "image/webp", size: 3, width: 1920, height: 1080 }],
+      }),
+    }),
+  });
+
+  assert.equal((await requestInit("6af0b175-3c6b-4a20-a1ab-52b77fbab671")).status, 200);
+  const conflict = await requestInit("2f204b26-d2c7-46d0-95cb-8cad1176f639");
+  assert.equal(conflict.status, 409);
+  assert.equal((await conflict.json()).code, "UPLOAD_CONFLICT");
+  assert.equal(env.GALLERY_DB.prepare("SELECT COUNT(*) AS count FROM upload_sessions").get().count, 1);
+});
+
+test("upload completion rejects changed tags without mutating D1", async () => {
+  const env = createTestEnv();
+  const repository = createGalleryRepository(env.GALLERY_DB);
+  const firstTag = await repository.createTag({ name: "原始标签", sortOrder: 1, isVisible: true });
+  const changedTag = await repository.createTag({ name: "篡改标签", sortOrder: 2, isVisible: true });
+  const uploadId = "6af0b175-3c6b-4a20-a1ab-52b77fbab671";
+  const initResponse = await adminUploadInitHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/images/upload/init", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-gallery-admin-key": "gallery-secret" },
+      body: JSON.stringify({
+        tagIds: [firstTag.id],
+        files: [{ uploadId, name: "immutable.webp", type: "image/webp", size: 3, width: 1920, height: 1080 }],
+      }),
+    }),
+  });
+  const descriptor = (await initResponse.json()).uploads[0];
+  await env.GALLERY_BUCKET.put(descriptor.storageKey, new Uint8Array([1, 2, 3]));
+
+  const response = await adminUploadCompleteHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/images/upload/complete", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-gallery-admin-key": "gallery-secret" },
+      body: JSON.stringify({
+        tagIds: [changedTag.id],
+        files: [{ uploadId, storageKey: descriptor.storageKey, fileName: descriptor.fileName, width: 1920, height: 1080 }],
+      }),
+    }),
+  });
+
+  assert.equal(response.status, 409);
+  assert.equal(env.GALLERY_DB.prepare("SELECT COUNT(*) AS count FROM images").get().count, 0);
+  assert.equal(env.GALLERY_DB.prepare("SELECT status FROM upload_sessions WHERE id = ?").get(uploadId).status, "pending");
 });

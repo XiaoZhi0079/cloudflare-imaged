@@ -21,6 +21,24 @@ const SELECT_IMAGE_COLUMNS = `
   categories.sort_order AS categorySortOrder
 `;
 
+const SELECT_UPLOAD_SESSION_COLUMNS = `
+  id,
+  storage_key AS storageKey,
+  file_name AS fileName,
+  file_url AS fileUrl,
+  content_type AS contentType,
+  file_size AS fileSize,
+  width,
+  height,
+  category_id AS categoryId,
+  tag_ids AS tagIdsJson,
+  status,
+  image_id AS imageId,
+  created_at AS createdAt,
+  updated_at AS updatedAt,
+  expires_at AS expiresAt
+`;
+
 const D1_MAX_BOUND_PARAMETERS = 100;
 
 function parameterBatches(values, batchSize = D1_MAX_BOUND_PARAMETERS) {
@@ -130,7 +148,7 @@ async function getImageTagRows(database, imageIds) {
     rows.push(...await all(
       database,
       `
-        SELECT image_tags.image_id, tags.name
+        SELECT image_tags.image_id, image_tags.tag_id AS tagId, tags.name
         FROM image_tags
         INNER JOIN tags ON tags.id = image_tags.tag_id
         WHERE image_tags.image_id IN (${placeholders})
@@ -141,6 +159,49 @@ async function getImageTagRows(database, imageIds) {
   }
 
   return rows;
+}
+
+function normalizeIntegerIds(values) {
+  return [...new Set((Array.isArray(values) ? values : [])
+    .map(Number)
+    .filter((value) => Number.isInteger(value) && value > 0))]
+    .sort((left, right) => left - right);
+}
+
+function mapUploadSession(row) {
+  if (!row) return null;
+
+  let parsedTagIds = [];
+  try {
+    parsedTagIds = JSON.parse(row.tagIdsJson);
+  } catch {
+    parsedTagIds = [];
+  }
+
+  return {
+    id: row.id,
+    storageKey: row.storageKey,
+    fileName: row.fileName,
+    fileUrl: row.fileUrl,
+    contentType: row.contentType,
+    fileSize: Number(row.fileSize ?? 0),
+    width: row.width === null ? null : Number(row.width),
+    height: row.height === null ? null : Number(row.height),
+    categoryId: row.categoryId === null ? null : Number(row.categoryId),
+    tagIds: normalizeIntegerIds(parsedTagIds),
+    status: row.status,
+    imageId: row.imageId === null ? null : Number(row.imageId),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    expiresAt: row.expiresAt,
+  };
+}
+
+function sameIntegerIds(left, right) {
+  const normalizedLeft = normalizeIntegerIds(left);
+  const normalizedRight = normalizeIntegerIds(right);
+  return normalizedLeft.length === normalizedRight.length
+    && normalizedLeft.every((value, index) => value === normalizedRight[index]);
 }
 
 function attachTagNames(images, tagRows) {
@@ -1034,6 +1095,202 @@ export function createGalleryRepository(database) {
       return await getCategoryById(database, categoryId);
     },
 
+    async getUploadSessionById(uploadId) {
+      return mapUploadSession(await first(
+        database,
+        `SELECT ${SELECT_UPLOAD_SESSION_COLUMNS} FROM upload_sessions WHERE id = ?`,
+        [uploadId],
+      ));
+    },
+
+    async getUploadSessionByStorageKey(storageKey) {
+      return mapUploadSession(await first(
+        database,
+        `SELECT ${SELECT_UPLOAD_SESSION_COLUMNS} FROM upload_sessions WHERE storage_key = ?`,
+        [storageKey],
+      ));
+    },
+
+    async reserveUploadSession({
+      id,
+      storageKey,
+      fileName,
+      fileUrl,
+      contentType,
+      fileSize = 0,
+      width = null,
+      height = null,
+      categoryId = null,
+      tagIds,
+    }) {
+      const normalizedTagIds = normalizeIntegerIds(tagIds);
+      await runBatch(database, [
+        {
+          sql: `
+            DELETE FROM upload_sessions
+            WHERE storage_key = ? AND status = 'pending' AND expires_at <= CURRENT_TIMESTAMP
+          `,
+          params: [storageKey],
+        },
+        {
+          sql: `
+            INSERT OR IGNORE INTO upload_sessions (
+              id, storage_key, file_name, file_url, content_type, file_size,
+              width, height, category_id, tag_ids
+            )
+            SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            WHERE NOT EXISTS (
+              SELECT 1 FROM images WHERE storage_key = ?
+            )
+          `,
+          params: [
+            id,
+            storageKey,
+            fileName,
+            fileUrl,
+            contentType,
+            Number(fileSize ?? 0),
+            width,
+            height,
+            categoryId,
+            JSON.stringify(normalizedTagIds),
+            storageKey,
+          ],
+        },
+      ]);
+
+      const session = await this.getUploadSessionById(id);
+      if (session) {
+        return {
+          session,
+          storageSession: session.storageKey === storageKey ? session : null,
+          existingImage: null,
+        };
+      }
+
+      return {
+        session: null,
+        storageSession: await this.getUploadSessionByStorageKey(storageKey),
+        existingImage: await this.getImageByStorageKey(storageKey),
+      };
+    },
+
+    async deletePendingUploadSession(uploadId) {
+      const result = await run(
+        database,
+        `DELETE FROM upload_sessions WHERE id = ? AND status = 'pending'`,
+        [uploadId],
+      );
+      return Number(result?.meta?.changes ?? result?.changes ?? 0) > 0;
+    },
+
+    async getImageTagIds(imageId) {
+      const rows = await all(
+        database,
+        `SELECT tag_id AS tagId FROM image_tags WHERE image_id = ? ORDER BY tag_id`,
+        [imageId],
+      );
+      return normalizeIntegerIds(rows.map((row) => row.tagId));
+    },
+
+    async completeUploadSession(uploadId) {
+      const initialSession = await this.getUploadSessionById(uploadId);
+      if (!initialSession) return null;
+
+      if (initialSession.status === "pending") {
+        const entries = [
+          {
+            sql: `
+              INSERT OR IGNORE INTO images (
+                storage_key, file_name, file_url, width, height,
+                sync_status, note, category_id, upload_id
+              )
+              SELECT
+                storage_key, file_name, file_url, width, height,
+                'ok', NULL, category_id, id
+              FROM upload_sessions
+              WHERE id = ? AND status = 'pending'
+            `,
+            params: [uploadId],
+          },
+          ...initialSession.tagIds.map((tagId) => ({
+            sql: `
+              INSERT INTO image_tags (image_id, tag_id)
+              SELECT images.id, ?
+              FROM images
+              WHERE images.upload_id = ?
+                AND EXISTS (
+                  SELECT 1 FROM upload_sessions
+                  WHERE id = ? AND status = 'pending'
+                )
+            `,
+            params: [tagId, uploadId, uploadId],
+          })),
+          {
+            sql: `
+              UPDATE upload_sessions
+              SET
+                status = 'completed',
+                image_id = (SELECT id FROM images WHERE upload_id = ?),
+                updated_at = CURRENT_TIMESTAMP
+              WHERE id = ?
+                AND status = 'pending'
+                AND EXISTS (SELECT 1 FROM images WHERE upload_id = ?)
+            `,
+            params: [uploadId, uploadId, uploadId],
+          },
+        ];
+        await runBatch(database, entries);
+      }
+
+      const session = await this.getUploadSessionById(uploadId);
+      if (!session || session.status !== "completed" || !session.imageId) {
+        const error = new Error("The upload storage key is already owned by another image.");
+        error.code = "UPLOAD_STORAGE_CONFLICT";
+        error.uploadId = uploadId;
+        error.storageKey = initialSession.storageKey;
+        throw error;
+      }
+
+      const imageRow = await first(
+        database,
+        `
+          SELECT ${SELECT_IMAGE_COLUMNS}
+          FROM images
+          LEFT JOIN categories ON categories.id = images.category_id
+          WHERE images.id = ?
+        `,
+        [session.imageId],
+      );
+      if (!imageRow) {
+        const error = new Error("The completed upload session has no image record.");
+        error.code = "UPLOAD_IMAGE_MISSING";
+        error.uploadId = uploadId;
+        throw error;
+      }
+
+      const tagRows = await getImageTagRows(database, [session.imageId]);
+      const image = attachTagNames([mapImageRow(imageRow)], tagRows)[0];
+      const actualTagIds = normalizeIntegerIds(tagRows.map((row) => row.tagId));
+      if (!sameIntegerIds(session.tagIds, actualTagIds)) {
+        const error = new Error("The saved image tags do not match the upload session.");
+        error.code = "UPLOAD_TAG_VERIFICATION_FAILED";
+        error.uploadId = uploadId;
+        error.imageId = image.id;
+        error.expectedTagIds = session.tagIds;
+        error.actualTagIds = actualTagIds;
+        throw error;
+      }
+
+      return {
+        session,
+        image,
+        expectedTagIds: [...session.tagIds],
+        actualTagIds,
+        idempotent: initialSession.status === "completed",
+      };
+    },
+
     async upsertImage({ storageKey, fileName, fileUrl, width, height, syncStatus, note = null, categoryId = null }) {
       await run(
         database,
@@ -1223,18 +1480,48 @@ export function createGalleryRepository(database) {
     },
 
     async replaceImageTags(imageId, tagIds) {
-      await run(database, `DELETE FROM image_tags WHERE image_id = ?`, [imageId]);
+      const normalizedTagIds = normalizeIntegerIds(tagIds);
+      await runBatch(database, [
+        {
+          sql: `DELETE FROM image_tags WHERE image_id = ?`,
+          params: [imageId],
+        },
+        ...normalizedTagIds.map((tagId) => ({
+          sql: `INSERT INTO image_tags (image_id, tag_id) VALUES (?, ?)`,
+          params: [imageId, tagId],
+        })),
+      ]);
+    },
 
-      for (const tagId of tagIds) {
-        await run(
-          database,
-          `
-            INSERT INTO image_tags (image_id, tag_id)
-            VALUES (?, ?)
+    async replaceImageTagsForImages(imageIds, tagIds) {
+      const normalizedImageIds = normalizeIntegerIds(imageIds);
+      const normalizedTagIds = normalizeIntegerIds(tagIds);
+      if (!normalizedImageIds.length) return;
+
+      await runBatch(database, [
+        {
+          sql: `
+            DELETE FROM image_tags
+            WHERE image_id IN (
+              SELECT CAST(value AS INTEGER) FROM json_each(?)
+            )
           `,
-          [imageId, tagId],
-        );
-      }
+          params: [JSON.stringify(normalizedImageIds)],
+        },
+        ...(normalizedTagIds.length
+          ? [{
+              sql: `
+                INSERT INTO image_tags (image_id, tag_id)
+                SELECT
+                  CAST(image_values.value AS INTEGER),
+                  CAST(tag_values.value AS INTEGER)
+                FROM json_each(?) AS image_values
+                CROSS JOIN json_each(?) AS tag_values
+              `,
+              params: [JSON.stringify(normalizedImageIds), JSON.stringify(normalizedTagIds)],
+            }]
+          : []),
+      ]);
     },
 
     async listImagesByTagSlugs(tagSlugs) {

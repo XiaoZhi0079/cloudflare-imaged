@@ -6,6 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 const baselineUrl = new URL("../migrations/0001_baseline.sql", import.meta.url);
 const albumsUrl = new URL("../migrations/0002_albums.sql", import.meta.url);
 const tagGroupsUrl = new URL("../migrations/0003_tag_groups.sql", import.meta.url);
+const uploadSessionsUrl = new URL("../migrations/0004_upload_sessions.sql", import.meta.url);
 const schemaUrl = new URL("../schema.sql", import.meta.url);
 
 const BUSINESS_TABLES = [
@@ -18,6 +19,7 @@ const BUSINESS_TABLES = [
   "site_settings",
   "tag_groups",
   "tags",
+  "upload_sessions",
 ];
 
 const BUSINESS_INDEXES = [
@@ -31,9 +33,11 @@ const BUSINESS_INDEXES = [
   "idx_image_tags_tag_id",
   "idx_images_category_id",
   "idx_images_file_id",
+  "idx_images_upload_id",
   "idx_tag_groups_order",
   "idx_tags_group_order",
   "idx_tags_visible_order",
+  "idx_upload_sessions_status_expiry",
 ];
 
 function objectNames(database, type) {
@@ -65,11 +69,13 @@ test("migrations prepare a fresh database and are idempotent", () => {
   const baseline = readFileSync(baselineUrl, "utf8");
   const albums = readFileSync(albumsUrl, "utf8");
   const tagGroups = readFileSync(tagGroupsUrl, "utf8");
+  const uploadSessions = readFileSync(uploadSessionsUrl, "utf8");
   const database = new DatabaseSync(":memory:");
 
   database.exec(baseline);
   database.exec(albums);
   database.exec(tagGroups);
+  database.exec(uploadSessions);
   database.exec(baseline);
   database.exec(albums);
 
@@ -100,6 +106,7 @@ test("schema snapshot and baseline migration define identical objects", () => {
   migrationDatabase.exec(readFileSync(baselineUrl, "utf8"));
   migrationDatabase.exec(readFileSync(albumsUrl, "utf8"));
   migrationDatabase.exec(readFileSync(tagGroupsUrl, "utf8"));
+  migrationDatabase.exec(readFileSync(uploadSessionsUrl, "utf8"));
   snapshotDatabase.exec(readFileSync(schemaUrl, "utf8"));
 
   assert.deepEqual(normalizedObjects(migrationDatabase), normalizedObjects(snapshotDatabase));
@@ -111,7 +118,6 @@ test("tag group migration preserves existing tags and assigns the default group"
   database.prepare("INSERT INTO tags (name, slug, sort_order, is_visible) VALUES (?, ?, ?, ?)").run("旧标签", "legacy", 1, 1);
 
   database.exec(readFileSync(tagGroupsUrl, "utf8"));
-
   assert.deepEqual(
     { ...database.prepare(`SELECT tags.name, tag_groups.slug AS group_slug FROM tags INNER JOIN tag_groups ON tag_groups.id = tags.group_id WHERE tags.slug = 'legacy'`).get() },
     { name: "旧标签", group_slug: "uncategorized" },

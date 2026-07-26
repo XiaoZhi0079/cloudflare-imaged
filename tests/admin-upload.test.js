@@ -59,6 +59,43 @@ test("upload runner batches signing and preserves metadata drafts", async () => 
   assert.deepEqual(runner.counts(), { total: 3, queued: 0, active: 0, success: 3, error: 0 });
 });
 
+test("upload runner retries D1 completion without signing or uploading R2 again", async () => {
+  let signingCalls = 0;
+  let uploadCalls = 0;
+  let completionCalls = 0;
+  let capturedUploadId = null;
+  const runner = createUploadRunner({
+    requestUploadUrls: async (tasks) => {
+      signingCalls += 1;
+      capturedUploadId = tasks[0].uploadId;
+      return [{
+        taskId: tasks[0].id,
+        uploadId: tasks[0].uploadId,
+        storageKey: "gallery/retry.webp",
+        fileName: "retry.webp",
+      }];
+    },
+    uploadFile: async () => { uploadCalls += 1; },
+    completeUploads: async () => {
+      completionCalls += 1;
+      if (completionCalls === 1) throw new Error("temporary D1 failure");
+      return [{ id: 42 }];
+    },
+  });
+
+  runner.setFiles([file("retry.webp")]);
+  await runner.run();
+  assert.equal(runner.tasks()[0].status, "error");
+  await runner.retryFailed();
+
+  assert.match(capturedUploadId, /^[0-9a-f-]+$/i);
+  assert.equal(runner.tasks()[0].uploadId, capturedUploadId);
+  assert.equal(runner.tasks()[0].status, "success");
+  assert.equal(signingCalls, 1);
+  assert.equal(uploadCalls, 1);
+  assert.equal(completionCalls, 2);
+});
+
 test("upload runner prepares image dimensions asynchronously and isolates preparation failures", async () => {
   const statusSnapshots = [];
   const signedDrafts = [];

@@ -47,7 +47,7 @@ export async function onRequest({ env, request }) {
     return jsonResponse({ error: "存在无效图片，无法完成批量设置。" }, 400);
   }
 
-  await Promise.all(imageIds.map((imageId) => repository.replaceImageTags(imageId, tagIds)));
+  await repository.replaceImageTagsForImages(imageIds, tagIds);
 
   return jsonResponse({
     updatedCount: imageIds.length,

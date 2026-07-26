@@ -124,31 +124,40 @@ export function createUploadRunner({
 
     const ready = batch.filter((task) => task.status !== "error");
     if (!ready.length) return;
-    ready.forEach((task) => transition(task, "signing", { error: null, upload: null }));
-    let uploads;
-    try {
-      uploads = await requestUploadUrls(snapshot().filter((candidate) => ready.some((task) => task.id === candidate.id)), { ...metadata, tagIds: [...metadata.tagIds] });
-      if (!Array.isArray(uploads) || uploads.length !== ready.length) {
-        throw new Error("服务端返回的上传任务数量不正确。");
+    const needsSigning = ready.filter((task) => !task.upload);
+    if (needsSigning.length) {
+      needsSigning.forEach((task) => transition(task, "signing", { error: null }));
+      try {
+        const uploads = await requestUploadUrls(
+          snapshot().filter((candidate) => needsSigning.some((task) => task.id === candidate.id)),
+          { ...metadata, tagIds: [...metadata.tagIds] },
+        );
+        if (!Array.isArray(uploads) || uploads.length !== needsSigning.length) {
+          throw new Error("服务端返回的上传任务数量不正确。");
+        }
+        const uploadsByTaskId = new Map(uploads
+          .filter((upload) => upload?.taskId !== undefined)
+          .map((upload) => [String(upload.taskId), upload]));
+        needsSigning.forEach((task, index) => {
+          task.upload = uploadsByTaskId.get(String(task.id)) ?? uploads[index];
+        });
+      } catch (error) {
+        needsSigning.forEach((task) => transition(task, "error", { error: errorText(error) }));
       }
-    } catch (error) {
-      ready.forEach((task) => transition(task, "error", { error: errorText(error) }));
-      return;
     }
 
-    const uploadsByTaskId = new Map(uploads.filter((upload) => upload?.taskId !== undefined).map((upload) => [String(upload.taskId), upload]));
-    const uploaded = [];
-    await Promise.all(ready.map(async (task, index) => {
-      const upload = uploadsByTaskId.get(String(task.id)) ?? uploads[index];
-      transition(task, "uploading", { upload });
+    const needsObjectUpload = ready.filter((task) => task.status !== "error" && !task.objectUploaded);
+    await Promise.all(needsObjectUpload.map(async (task) => {
+      transition(task, "uploading");
       try {
-        await uploadFile(task.file, upload, task);
-        uploaded.push(task);
+        await uploadFile(task.file, task.upload, task);
+        task.objectUploaded = true;
       } catch (error) {
         transition(task, "error", { error: errorText(error) });
       }
     }));
 
+    const uploaded = ready.filter((task) => task.status !== "error" && task.objectUploaded);
     if (!uploaded.length) return;
     uploaded.forEach((task) => transition(task, "completing"));
     try {
@@ -197,6 +206,7 @@ export function createUploadRunner({
           && Number.isSafeInteger(height) && height > 0;
         return {
           id: `upload-${nextId++}`,
+          uploadId: globalThis.crypto.randomUUID(),
           file,
           draft: {
             name: file.name,
@@ -209,6 +219,7 @@ export function createUploadRunner({
           status: "queued",
           error: null,
           upload: null,
+          objectUploaded: false,
           result: null,
         };
       });
@@ -227,7 +238,7 @@ export function createUploadRunner({
     run: runQueued,
     async retryFailed() {
       taskList.filter((task) => task.status === "error").forEach((task) => {
-        Object.assign(task, { status: "queued", error: null, upload: null, result: null });
+        Object.assign(task, { status: "queued", error: null, result: null });
       });
       notify();
       await runQueued();
