@@ -118,6 +118,53 @@ test("image lists batch tag lookups within the D1 100-parameter limit", async ()
   assert.ok(guarded.parameterCounts.filter((count) => count === 100).length >= 3);
 });
 
+test("listImagesPage reads only one page from a 1698-image library", async () => {
+  const database = createTestDb();
+  const insertImage = database.prepare("INSERT INTO images (storage_key, file_name, file_url, width, height) VALUES (?, ?, ?, ?, ?)");
+  database.exec("BEGIN");
+  for (let index = 1; index <= 1698; index += 1) {
+    const name = `page-${String(index).padStart(4, "0")}.webp`;
+    insertImage.run(`gallery/${name}`, name, `/file/gallery/${name}`, 1920, 1080);
+  }
+  database.exec("COMMIT");
+
+  const executions = [];
+  const observedDatabase = new Proxy(database, {
+    get(target, property) {
+      if (property !== "prepare") {
+        const value = Reflect.get(target, property, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      }
+      return (sql) => {
+        const statement = target.prepare(sql);
+        return new Proxy(statement, {
+          get(statementTarget, statementProperty) {
+            const value = Reflect.get(statementTarget, statementProperty, statementTarget);
+            if (typeof value !== "function" || !["all", "get", "run"].includes(statementProperty)) {
+              return typeof value === "function" ? value.bind(statementTarget) : value;
+            }
+            return (...params) => {
+              executions.push({ sql: String(sql).replace(/\s+/g, " ").trim(), params });
+              return value.apply(statementTarget, params);
+            };
+          },
+        });
+      };
+    },
+  });
+
+  const page = await createGalleryRepository(observedDatabase).listImagesPage({ limit: 50, offset: 100 });
+
+  assert.equal(page.totalCount, 1698);
+  assert.equal(page.count, 50);
+  assert.equal(page.images.length, 50);
+  assert.equal(page.hasMore, true);
+  assert.equal(page.nextOffset, 150);
+  assert.equal(executions.length, 3);
+  assert.deepEqual(executions[1].params, [50, 100]);
+  assert.equal(executions[2].params.length, 50);
+});
+
 test("replaceImageTags rewrites tag assignments and listImagesByTagSlug returns mapped images", async () => {
   const database = createTestDb();
   const repository = createGalleryRepository(database);

@@ -1,4 +1,4 @@
-const ALLOWED_NAME_TYPES = new Set(["default", "origin", "index", "short"]);
+const ALLOWED_NAME_TYPES = new Set(["default", "origin", "original-unique", "index", "short"]);
 
 export function normalizeTagIds(value) {
   if (!Array.isArray(value)) {
@@ -22,8 +22,8 @@ export function normalizeUploadNameType(value) {
   return ALLOWED_NAME_TYPES.has(normalized) ? normalized : null;
 }
 
-export function resolveUploadPolicy(env) {
-  const uploadNameType = normalizeUploadNameType(env.GALLERY_UPLOAD_NAME_TYPE);
+export function resolveUploadPolicy(env, requestedNameType) {
+  const uploadNameType = normalizeUploadNameType(requestedNameType ?? env.GALLERY_UPLOAD_NAME_TYPE);
   if (!uploadNameType) {
     return { error: "无效的上传文件命名策略。" };
   }

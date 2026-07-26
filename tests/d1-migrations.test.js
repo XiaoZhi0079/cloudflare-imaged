@@ -7,6 +7,7 @@ const baselineUrl = new URL("../migrations/0001_baseline.sql", import.meta.url);
 const albumsUrl = new URL("../migrations/0002_albums.sql", import.meta.url);
 const tagGroupsUrl = new URL("../migrations/0003_tag_groups.sql", import.meta.url);
 const uploadSessionsUrl = new URL("../migrations/0004_upload_sessions.sql", import.meta.url);
+const uploadOperationsUrl = new URL("../migrations/0005_upload_operations_and_paging.sql", import.meta.url);
 const schemaUrl = new URL("../schema.sql", import.meta.url);
 
 const BUSINESS_TABLES = [
@@ -32,11 +33,13 @@ const BUSINESS_INDEXES = [
   "idx_image_tags_image_id",
   "idx_image_tags_tag_id",
   "idx_images_category_id",
+  "idx_images_created_id",
   "idx_images_file_id",
   "idx_images_upload_id",
   "idx_tag_groups_order",
   "idx_tags_group_order",
   "idx_tags_visible_order",
+  "idx_upload_sessions_operation",
   "idx_upload_sessions_status_expiry",
 ];
 
@@ -70,12 +73,14 @@ test("migrations prepare a fresh database and are idempotent", () => {
   const albums = readFileSync(albumsUrl, "utf8");
   const tagGroups = readFileSync(tagGroupsUrl, "utf8");
   const uploadSessions = readFileSync(uploadSessionsUrl, "utf8");
+  const uploadOperations = readFileSync(uploadOperationsUrl, "utf8");
   const database = new DatabaseSync(":memory:");
 
   database.exec(baseline);
   database.exec(albums);
   database.exec(tagGroups);
   database.exec(uploadSessions);
+  database.exec(uploadOperations);
   database.exec(baseline);
   database.exec(albums);
 
@@ -107,6 +112,7 @@ test("schema snapshot and baseline migration define identical objects", () => {
   migrationDatabase.exec(readFileSync(albumsUrl, "utf8"));
   migrationDatabase.exec(readFileSync(tagGroupsUrl, "utf8"));
   migrationDatabase.exec(readFileSync(uploadSessionsUrl, "utf8"));
+  migrationDatabase.exec(readFileSync(uploadOperationsUrl, "utf8"));
   snapshotDatabase.exec(readFileSync(schemaUrl, "utf8"));
 
   assert.deepEqual(normalizedObjects(migrationDatabase), normalizedObjects(snapshotDatabase));

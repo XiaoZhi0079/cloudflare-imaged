@@ -7,6 +7,7 @@ import { onRequest as publicImagesHandler } from "../functions/api/public/images
 import { onRequest as adminTagsHandler } from "../functions/api/admin/tags.js";
 import { onRequest as adminTagGroupsHandler } from "../functions/api/admin/tag-groups.js";
 import { onRequest as adminImagesHandler } from "../functions/api/admin/images.js";
+import { onRequest as adminImageHandler } from "../functions/api/admin/images/[id].js";
 import { onRequest as adminImagesAuditHandler } from "../functions/api/admin/images/audit.js";
 import { onRequest as adminImportHandler } from "../functions/api/admin/images/import.js";
 import { onRequest as adminUploadHandler } from "../functions/api/admin/images/upload/index.js";
@@ -396,6 +397,36 @@ test("admin images handler returns an empty list on a migrated database", async 
   });
 });
 
+test("admin exact image handler returns one image and a typed 404", async () => {
+  const env = createTestEnv();
+  const repository = createGalleryRepository(env.GALLERY_DB);
+  const image = await repository.upsertImage({
+    storageKey: "gallery/exact.webp",
+    fileName: "exact.webp",
+    fileUrl: "/file/gallery/exact.webp",
+    width: 1920,
+    height: 1080,
+    syncStatus: "ok",
+  });
+  const headers = { "x-gallery-admin-key": "gallery-secret" };
+
+  const found = await adminImageHandler({
+    env,
+    request: new Request(`https://gallery.example.com/api/admin/images/${image.id}`, { headers }),
+    params: { id: String(image.id) },
+  });
+  assert.equal(found.status, 200);
+  assert.equal((await found.json()).image.id, image.id);
+
+  const missing = await adminImageHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/images/99999", { headers }),
+    params: { id: "99999" },
+  });
+  assert.equal(missing.status, 404);
+  assert.deepEqual(await missing.json(), { error: "Image not found", code: "IMAGE_NOT_FOUND" });
+});
+
 test("admin images handler lists more than 100 tagged images within D1 limits", async () => {
   const database = createTestDatabase();
   const repository = createGalleryRepository(database);
@@ -483,6 +514,7 @@ test("admin tag assignment handler rejects missing tag ids", async () => {
   assert.equal(response.status, 400);
   assert.deepEqual(await response.json(), {
     error: "存在无效标签，无法完成设置。",
+    code: "TAG_NOT_FOUND",
   });
 });
 
@@ -749,6 +781,24 @@ test("admin images handler renames and moves gallery files inside the gallery bu
   assert.equal(moveResponse.status, 200);
   assert.equal(env.GALLERY_BUCKET.objects.has("gallery/campus-02.webp"), false);
   assert.ok(env.GALLERY_BUCKET.objects.has("archive/campus-02.webp"));
+});
+
+test("admin tag assignment handler returns 404 for a missing image even with an empty tag set", async () => {
+  const env = createTestEnv();
+  const response = await adminTagAssignmentsHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/images/tag-assignments", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-gallery-admin-key": "gallery-secret",
+      },
+      body: JSON.stringify({ imageId: 99999, tagIds: [] }),
+    }),
+  });
+
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), { error: "Image not found", code: "IMAGE_NOT_FOUND" });
 });
 
 test("admin images handler deletes a missing-object record and cleans its relationships", async () => {

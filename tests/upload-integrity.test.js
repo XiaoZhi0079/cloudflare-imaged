@@ -75,7 +75,7 @@ test("replaceImageTags rolls back the complete tag set when one insert fails", a
   const failingRepository = createGalleryRepository(databaseWithInjectedRunFailure(
     database,
     /INSERT INTO image_tags/i,
-    2,
+    1,
   ));
   await assert.rejects(
     failingRepository.replaceImageTags(image.id, tags.map((tag) => tag.id)),
@@ -83,6 +83,46 @@ test("replaceImageTags rolls back the complete tag set when one insert fails", a
   );
 
   assert.deepEqual(await repository.getImageTagIds(image.id), [tags[0].id]);
+});
+
+test("one atomic batch replaces 100 heterogeneous image tag sets", async () => {
+  const { database, repository, tags } = await fixture();
+  const assignments = [];
+  for (let index = 1; index <= 100; index += 1) {
+    const image = await repository.upsertImage({
+      storageKey: `gallery/batch-${index}.png`,
+      fileName: `batch-${index}.png`,
+      fileUrl: `/file/gallery/batch-${index}.png`,
+      width: 1920,
+      height: 1080,
+      syncStatus: "ok",
+    });
+    assignments.push({
+      imageId: image.id,
+      tagIds: index % 2 === 0 ? [tags[0].id] : [tags[0].id, tags[1].id],
+    });
+  }
+
+  const verified = await repository.replaceImageTagAssignments(assignments);
+  assert.deepEqual(verified, assignments);
+
+  const failingRepository = createGalleryRepository(databaseWithInjectedRunFailure(
+    database,
+    /INSERT INTO image_tags/i,
+    1,
+  ));
+  const replacements = assignments.map((assignment) => ({
+    imageId: assignment.imageId,
+    tagIds: assignment.tagIds.length === 1 ? [tags[1].id] : [tags[0].id],
+  }));
+  await assert.rejects(
+    failingRepository.replaceImageTagAssignments(replacements),
+    /injected database failure/,
+  );
+
+  for (const assignment of assignments) {
+    assert.deepEqual(await repository.getImageTagIds(assignment.imageId), assignment.tagIds);
+  }
 });
 
 test("upload completion atomically creates the image and its full tag set", async () => {
@@ -94,7 +134,7 @@ test("upload completion atomically creates the image and its full tag set", asyn
   const failingRepository = createGalleryRepository(databaseWithInjectedRunFailure(
     database,
     /INSERT INTO image_tags/i,
-    2,
+    1,
   ));
   await assert.rejects(
     failingRepository.completeUploadSession(input.id),
@@ -114,6 +154,31 @@ test("upload completion atomically creates the image and its full tag set", asyn
   assert.equal(retried.idempotent, true);
 });
 
+test("multi-session upload completion rolls back every image when tag insertion fails", async () => {
+  const { database, repository, tags, category } = await fixture();
+  const inputs = [
+    uploadSessionInput({ category, tags, id: "11111111-1111-4111-8111-111111111111", storageKey: "gallery/chunk-a.png" }),
+    uploadSessionInput({ category, tags, id: "22222222-2222-4222-8222-222222222222", storageKey: "gallery/chunk-b.png" }),
+    uploadSessionInput({ category, tags, id: "33333333-3333-4333-8333-333333333333", storageKey: "gallery/chunk-c.png" }),
+  ];
+  for (const input of inputs) await repository.reserveUploadSession(input);
+
+  const failingRepository = createGalleryRepository(databaseWithInjectedRunFailure(
+    database,
+    /INSERT INTO image_tags/i,
+    1,
+  ));
+  await assert.rejects(
+    failingRepository.completeUploadSessions(inputs.map((input) => input.id)),
+    /injected database failure/,
+  );
+
+  for (const input of inputs) {
+    assert.equal(await repository.getImageByStorageKey(input.storageKey), null);
+    assert.equal((await repository.getUploadSessionById(input.id)).status, "pending");
+  }
+});
+
 test("upload reservations reject another session targeting the same storage key", async () => {
   const { repository, tags, category } = await fixture();
   const firstInput = uploadSessionInput({ category, tags });
@@ -128,6 +193,31 @@ test("upload reservations reject another session targeting the same storage key"
   assert.equal(second.session, null);
   assert.equal(second.storageSession.id, firstInput.id);
   assert.equal(second.existingImage, null);
+});
+
+test("batch upload reservation leaves no partial sessions when one storage key conflicts", async () => {
+  const { repository, tags, category } = await fixture();
+  const existing = uploadSessionInput({ category, tags });
+  await repository.reserveUploadSession(existing);
+  const conflict = uploadSessionInput({
+    category,
+    tags,
+    id: "2f204b26-d2c7-46d0-95cb-8cad1176f639",
+    storageKey: existing.storageKey,
+  });
+  const otherwiseValid = uploadSessionInput({
+    category,
+    tags,
+    id: "33333333-3333-4333-8333-333333333333",
+    storageKey: "gallery/otherwise-valid.png",
+  });
+
+  const reservations = await repository.reserveUploadSessions([conflict, otherwiseValid]);
+
+  assert.equal(reservations[0].session, null);
+  assert.equal(reservations[0].storageSession.id, existing.id);
+  assert.equal(reservations[1].session, null);
+  assert.equal(await repository.getUploadSessionById(otherwiseValid.id), null);
 });
 
 test("deleting a completed image releases its upload reservation", async () => {

@@ -1,7 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { createGalleryStorage, resolvePublicBaseUrl } from "../src/server/gallery-storage.js";
+import { createGalleryStorage, createStoredFileName, resolvePublicBaseUrl } from "../src/server/gallery-storage.js";
+
+test("original-unique names are deterministic per upload and distinct across uploads", () => {
+  const firstId = "6af0b175-3c6b-4a20-a1ab-52b77fbab671";
+  const secondId = "2f204b26-d2c7-46d0-95cb-8cad1176f639";
+  assert.equal(createStoredFileName({ name: "portrait.png" }, "original-unique", firstId), "portrait--6af0b175.png");
+  assert.equal(createStoredFileName({ name: "portrait.png" }, "original-unique", firstId), "portrait--6af0b175.png");
+  assert.equal(createStoredFileName({ name: "portrait.png" }, "original-unique", secondId), "portrait--2f204b26.png");
+});
 
 function createMockBucket() {
   const objects = new Map();

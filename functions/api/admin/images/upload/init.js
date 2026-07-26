@@ -33,11 +33,14 @@ function normalizeFileDrafts(value) {
   return value
     .map((item) => ({
       uploadId: String(item?.uploadId ?? "").trim() || null,
+      clientItemId: String(item?.clientItemId ?? "").trim() || null,
       name: String(item?.name ?? "").trim(),
       type: String(item?.type ?? "").trim(),
       size: Number(item?.size ?? 0),
       width: normalizeImageDimension(item?.width),
       height: normalizeImageDimension(item?.height),
+      categoryId: Number(item?.categoryId),
+      tagIds: Array.isArray(item?.tagIds) ? normalizeTagIds(item.tagIds) : null,
     }))
     .filter((item) => item.name);
 }
@@ -66,33 +69,18 @@ function sessionMatches(session, expected) {
     && session.width === expected.width
     && session.height === expected.height
     && session.categoryId === expected.categoryId
-    && sameIds(session.tagIds, expected.tagIds);
+    && sameIds(session.tagIds, expected.tagIds)
+    && session.operationId === expected.operationId
+    && session.clientItemId === expected.clientItemId;
 }
 
 function conflictResponse(message, details = {}) {
   return jsonResponse({ error: message, code: "UPLOAD_CONFLICT", ...details }, 409);
 }
 
-async function resolveSelectedCategory(repository, env, payload) {
-  const categoryId = Number(payload?.categoryId);
-  if (Number.isInteger(categoryId) && categoryId > 0) {
-    const category = await repository.getCategoryById(categoryId);
-    if (!category) {
-      return { error: "所选目录无效。" };
-    }
-
-    return { category, uploadFolder: category.directory_slug };
-  }
-
-  const uploadFolder = String(env.GALLERY_UPLOAD_FOLDER ?? "").trim().replace(/^\/+|\/+$/g, "");
-  if (uploadFolder) {
-    return { category: null, uploadFolder };
-  }
-
-  return { error: "请选择一个目录。" };
-}
-
 async function handleRequest({ env, request }) {
+  const startedAt = Date.now();
+  const requestId = request.headers.get("cf-ray") ?? crypto.randomUUID();
   const authFailure = requireAdminKey(request, env);
   if (authFailure) {
     return authFailure;
@@ -107,16 +95,18 @@ async function handleRequest({ env, request }) {
     return jsonResponse({ error: directUploadConfig.error }, 500);
   }
 
-  const uploadPolicy = resolveUploadPolicy(env);
-  if (uploadPolicy.error) {
-    return jsonResponse({ error: uploadPolicy.error }, 500);
-  }
-
   const payload = await request.json();
+  const uploadPolicy = resolveUploadPolicy(env, payload?.namingStrategy);
+  if (uploadPolicy.error) {
+    return jsonResponse({ error: uploadPolicy.error }, 400);
+  }
   const publicBaseUrl = resolvePublicBaseUrl(env.GALLERY_PUBLIC_BASE_URL, request.url);
   const files = normalizeFileDrafts(payload?.files);
   if (files.length === 0) {
     return jsonResponse({ error: "请至少选择一张图片。" }, 400);
+  }
+  if (files.length > 50) {
+    return jsonResponse({ error: "每次最多初始化 50 张图片。" }, 400);
   }
 
   if (files.some((file) => !isImageContentType(file.type))) {
@@ -127,31 +117,68 @@ async function handleRequest({ env, request }) {
     return jsonResponse({ error: "上传任务标识无效。" }, 400);
   }
 
-  const tagIds = normalizeTagIds(payload?.tagIds);
-  if (tagIds.length === 0) {
-    return jsonResponse({ error: "请至少选择一个标签。" }, 400);
-  }
-
   const repository = getRepository(env);
-  const missingTagIds = await findMissingTagIds(repository, tagIds);
+  const globalTagIds = normalizeTagIds(payload?.tagIds);
+  const fileTagIds = files.map((file) => file.tagIds ?? globalTagIds);
+  if (fileTagIds.some((tagIds) => tagIds.length === 0)) {
+    return jsonResponse({ error: "请为每张图片至少选择一个标签。" }, 400);
+  }
+  const allTagIds = normalizeTagIds(fileTagIds.flat());
+  const missingTagIds = await findMissingTagIds(repository, allTagIds);
   if (missingTagIds.length > 0) {
     return jsonResponse({ error: "存在无效标签，无法完成上传。" }, 400);
   }
 
-  const selectedCategory = await resolveSelectedCategory(repository, env, payload);
-  if (selectedCategory.error) {
-    return jsonResponse({ error: selectedCategory.error }, 400);
+  const globalCategoryId = Number(payload?.categoryId);
+  const selectedCategoryIds = files.map((file) => (
+    Number.isInteger(file.categoryId) && file.categoryId > 0
+      ? file.categoryId
+      : globalCategoryId
+  ));
+  const requestedCategoryIds = [...new Set(selectedCategoryIds.filter((categoryId) => (
+    Number.isInteger(categoryId) && categoryId > 0
+  )))];
+  const categories = await repository.getCategoriesByIds(requestedCategoryIds);
+  const categoriesById = new Map(categories.map((category) => [Number(category.id), category]));
+  if (requestedCategoryIds.some((categoryId) => !categoriesById.has(categoryId))) {
+    return jsonResponse({ error: "所选目录无效。" }, 400);
+  }
+  const fallbackFolder = String(env.GALLERY_UPLOAD_FOLDER ?? "").trim().replace(/^\/+|\/+$/g, "");
+  const categorySelections = selectedCategoryIds.map((categoryId) => {
+    const category = categoriesById.get(categoryId) ?? null;
+    return category
+      ? { category, uploadFolder: category.directory_slug }
+      : fallbackFolder
+        ? { category: null, uploadFolder: fallbackFolder }
+        : null;
+  });
+  if (categorySelections.some((selection) => !selection)) {
+    return jsonResponse({ error: "请选择一个目录。" }, 400);
   }
 
-  const uploadDrafts = files.map((file) => {
-    const storedFileName = createStoredFileName({ name: file.name }, uploadPolicy.uploadNameType);
+  const operationId = String(payload?.operationId ?? "").trim()
+    || files.find((file) => file.uploadId)?.uploadId
+    || crypto.randomUUID();
+  if (!isUploadId(operationId)) {
+    return jsonResponse({ error: "上传操作标识无效。" }, 400);
+  }
+  const uploadDrafts = files.map((file, index) => {
+    const uploadId = file.uploadId ?? crypto.randomUUID();
+    const selectedCategory = categorySelections[index];
+    const storedFileName = createStoredFileName(
+      { name: file.name },
+      uploadPolicy.uploadNameType,
+      uploadId,
+    );
     const storageKey = buildStorageKey(selectedCategory.uploadFolder, storedFileName);
     const imageRecord = toImageRecord(storageKey, publicBaseUrl, {
       width: file.width,
       height: file.height,
     });
     return {
-      uploadId: file.uploadId ?? crypto.randomUUID(),
+      uploadId,
+      operationId,
+      clientItemId: file.clientItemId,
       storageKey,
       fileName: imageRecord.fileName,
       fileUrl: imageRecord.fileUrl,
@@ -160,7 +187,8 @@ async function handleRequest({ env, request }) {
       width: file.width,
       height: file.height,
       categoryId: selectedCategory.category?.id ?? null,
-      tagIds,
+      tagIds: fileTagIds[index],
+      category: selectedCategory.category,
     };
   });
 
@@ -170,64 +198,78 @@ async function handleRequest({ env, request }) {
     return conflictResponse("同一批次中存在重复的文件名或上传任务标识。");
   }
 
-  const uploads = [];
-  const newlyReservedIds = [];
-  try {
-    for (const draft of uploadDrafts) {
-      const existingSession = await repository.getUploadSessionById(draft.uploadId);
-      if (!existingSession && typeof env.GALLERY_BUCKET?.head === "function") {
-        const existingObject = await env.GALLERY_BUCKET.head(draft.storageKey);
-        if (existingObject) {
-          for (const uploadId of newlyReservedIds) await repository.deletePendingUploadSession(uploadId);
-          return conflictResponse("存储中已存在同名图片，请更改文件名或恢复已有上传。", {
-            uploadId: draft.uploadId,
-            storageKey: draft.storageKey,
-          });
-        }
-      }
-
-      const reservation = await repository.reserveUploadSession({
-        id: draft.uploadId,
-        ...draft,
+  const existingSessions = await repository.getUploadSessionsByIds(uploadDrafts.map((draft) => draft.uploadId));
+  const existingById = new Map(existingSessions.map((session) => [session.id, session]));
+  if (typeof env.GALLERY_BUCKET?.head === "function") {
+    const existingObjects = await Promise.all(uploadDrafts.map((draft) => (
+      existingById.has(draft.uploadId) ? null : env.GALLERY_BUCKET.head(draft.storageKey)
+    )));
+    const conflictIndex = existingObjects.findIndex(Boolean);
+    if (conflictIndex >= 0) {
+      const draft = uploadDrafts[conflictIndex];
+      return conflictResponse("存储中已存在同名图片，请更改文件名或恢复已有上传。", {
+        uploadId: draft.uploadId,
+        storageKey: draft.storageKey,
       });
+    }
+  }
+
+  const reservations = await repository.reserveUploadSessions(uploadDrafts.map((draft) => ({
+    id: draft.uploadId,
+    ...draft,
+  })));
+  for (const [index, draft] of uploadDrafts.entries()) {
+      const reservation = reservations[index];
       if (!reservation.session || !sessionMatches(reservation.session, draft)) {
-        for (const uploadId of newlyReservedIds) await repository.deletePendingUploadSession(uploadId);
         return conflictResponse("该文件名或上传任务已被其他图片占用。", {
           uploadId: draft.uploadId,
           storageKey: draft.storageKey,
         });
       }
       if (reservation.session.status !== "pending") {
-        for (const uploadId of newlyReservedIds) await repository.deletePendingUploadSession(uploadId);
         return conflictResponse("该上传任务已经完成，不能再次覆盖图片。", {
           uploadId: draft.uploadId,
           storageKey: draft.storageKey,
           imageId: reservation.session.imageId,
         });
       }
-      if (!existingSession) newlyReservedIds.push(draft.uploadId);
+  }
 
-      const signedUpload = await signDirectUpload({
+  const newlyReservedIds = uploadDrafts
+    .filter((draft) => !existingById.has(draft.uploadId))
+    .map((draft) => draft.uploadId);
+  let signedUploads;
+  try {
+    signedUploads = await Promise.all(uploadDrafts.map(async (draft) => {
+      const signed = await signDirectUpload({
         ...directUploadConfig,
         key: draft.storageKey,
         contentType: draft.contentType,
       });
-      if (signedUpload.error) throw new Error(signedUpload.error);
+      if (signed.error) throw new Error(signed.error);
+      return signed;
+    }));
+  } catch (error) {
+    await repository.deletePendingUploadSessions(newlyReservedIds);
+    throw error;
+  }
 
-      uploads.push({
+  const uploads = uploadDrafts.map((draft, index) => ({
         uploadId: draft.uploadId,
         storageKey: draft.storageKey,
         fileName: draft.fileName,
         fileUrl: draft.fileUrl,
         width: draft.width,
         height: draft.height,
-        ...(selectedCategory.category
+        operationId: draft.operationId,
+        clientItemId: draft.clientItemId,
+        ...(draft.category
           ? {
               category: {
-                id: selectedCategory.category.id,
-                name: selectedCategory.category.name,
-                directorySlug: selectedCategory.category.directory_slug,
-                sortOrder: Number(selectedCategory.category.sort_order ?? 0),
+                id: draft.category.id,
+                name: draft.category.name,
+                directorySlug: draft.category.directory_slug,
+                sortOrder: Number(draft.category.sort_order ?? 0),
               },
             }
           : {}),
@@ -236,15 +278,20 @@ async function handleRequest({ env, request }) {
         headers: {
           "content-type": draft.contentType,
         },
-        uploadUrl: signedUpload.uploadUrl,
-      });
-    }
-  } catch (error) {
-    for (const uploadId of newlyReservedIds) await repository.deletePendingUploadSession(uploadId);
-    throw error;
-  }
+        uploadUrl: signedUploads[index].uploadUrl,
+      }));
 
+  console.info(JSON.stringify({
+    level: "info",
+    service: "gallery-upload-init",
+    phase: "reserved",
+    requestId,
+    operationId,
+    uploadCount: uploads.length,
+    durationMs: Date.now() - startedAt,
+  }));
   return jsonResponse({
+    operationId,
     uploads,
   });
 }

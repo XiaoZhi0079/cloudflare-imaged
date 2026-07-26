@@ -14,9 +14,16 @@ export function getFileExtension(fileName) {
   return index >= 0 ? normalized.slice(index) : "";
 }
 
-export function createStoredFileName(file, uploadNameType) {
+export function createStoredFileName(file, uploadNameType, uniqueId = "") {
   const originalName = sanitizeFileName(file?.name ?? "image");
   const extension = getFileExtension(originalName);
+
+  if (uploadNameType === "original-unique") {
+    const stem = extension ? originalName.slice(0, -extension.length) : originalName;
+    const suffix = String(uniqueId).replace(/[^a-zA-Z0-9]/g, "").slice(0, 8)
+      || crypto.randomUUID().replace(/-/g, "").slice(0, 8);
+    return `${stem}--${suffix}${extension}`;
+  }
 
   if (uploadNameType === "short") {
     return `${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 8)}${extension}`;

@@ -21,18 +21,30 @@ export async function onRequest({ env, request }) {
 
   const body = await parseRequestJson(request);
   const repository = getRepository(env);
+  const imageId = Number(body?.imageId);
+  if (!Number.isInteger(imageId) || imageId <= 0) {
+    return jsonResponse({ error: "imageId is required" }, 400);
+  }
   const tagIds = normalizeTagIds(body.tagIds ?? []);
-  const existingTagIds = new Set(await repository.getExistingTagIds(tagIds));
-  const missingTagIds = tagIds.filter((tagId) => !existingTagIds.has(tagId));
 
-  if (missingTagIds.length > 0) {
-    return jsonResponse({ error: "存在无效标签，无法完成设置。" }, 400);
+  let assignment;
+  try {
+    assignment = await repository.replaceImageTags(imageId, tagIds);
+  } catch (error) {
+    if (error?.code === "IMAGE_NOT_FOUND") {
+      return jsonResponse({ error: "Image not found", code: error.code }, 404);
+    }
+    if (error?.code === "TAG_NOT_FOUND") {
+      return jsonResponse({ error: "存在无效标签，无法完成设置。", code: error.code }, 400);
+    }
+    if (error?.code === "IMAGE_TAG_VERIFICATION_FAILED") {
+      return jsonResponse({ error: "图片标签写入校验失败。", code: error.code, imageId }, 500);
+    }
+    throw error;
   }
 
-  await repository.replaceImageTags(body.imageId, tagIds);
-
   return jsonResponse({
-    imageId: body.imageId,
-    tagIds,
+    imageId: assignment.imageId,
+    tagIds: assignment.tagIds,
   });
 }

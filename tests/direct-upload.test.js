@@ -116,6 +116,65 @@ test("direct upload signing converts runtime failures into a safe diagnostic", a
   });
 });
 
+test("admin upload init reserves a 20-image heterogeneous batch within a fixed D1 query budget", async () => {
+  const database = createTestDatabase();
+  const repository = createGalleryRepository(database);
+  const tag = await repository.createTag({ name: "批量标签", sortOrder: 1, isVisible: true });
+  const category = (await repository.listCategories())[0];
+  let executions = 0;
+  const observedDatabase = new Proxy(database, {
+    get(target, property) {
+      if (property !== "prepare") {
+        const value = Reflect.get(target, property, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      }
+      return (sql) => {
+        const statement = target.prepare(sql);
+        return new Proxy(statement, {
+          get(statementTarget, statementProperty) {
+            const value = Reflect.get(statementTarget, statementProperty, statementTarget);
+            if (typeof value !== "function" || !["all", "get", "run"].includes(statementProperty)) {
+              return typeof value === "function" ? value.bind(statementTarget) : value;
+            }
+            return (...params) => {
+              executions += 1;
+              return value.apply(statementTarget, params);
+            };
+          },
+        });
+      };
+    },
+  });
+  const env = createTestEnv({ database: observedDatabase });
+  const operationId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const files = Array.from({ length: 20 }, (_, index) => ({
+    uploadId: `${String(index + 1).padStart(8, "0")}-1111-4111-8111-111111111111`,
+    clientItemId: `item-${index + 1}`,
+    name: `batch-${index + 1}.webp`,
+    type: "image/webp",
+    size: 12345,
+    width: 1920,
+    height: 1080,
+    categoryId: category.id,
+    tagIds: [tag.id],
+  }));
+
+  const response = await adminUploadInitHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/images/upload/init", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-gallery-admin-key": "gallery-secret" },
+      body: JSON.stringify({ operationId, namingStrategy: "original-unique", files }),
+    }),
+  });
+
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.equal(payload.uploads.length, 20);
+  assert.ok(payload.uploads.every((upload) => upload.operationId === operationId));
+  assert.ok(executions <= 8, `expected at most 8 D1 statements, received ${executions}`);
+});
+
 test("R2 server-side copy signs a metadata-only CopyObject request", async () => {
   let captured = null;
   const result = await copyR2Object({

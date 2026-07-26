@@ -38,13 +38,13 @@ function sameIds(left, right) {
     && normalizedLeft.every((id, index) => id === normalizedRight[index]);
 }
 
-function sessionMatchesCompletion(session, file, categoryId, tagIds) {
+function sessionMatchesCompletion(session, file, expected = {}) {
   return session.storageKey === file.storageKey
     && session.fileName === file.fileName
     && session.width === file.width
     && session.height === file.height
-    && session.categoryId === categoryId
-    && sameIds(session.tagIds, tagIds);
+    && (expected.categoryId === undefined || session.categoryId === expected.categoryId)
+    && (expected.tagIds === undefined || sameIds(session.tagIds, expected.tagIds));
 }
 
 function writeLog(level, data) {
@@ -70,6 +70,7 @@ function errorDetails(error) {
 }
 
 async function handleRequest({ env, request }) {
+  const startedAt = Date.now();
   const requestId = request.headers.get("cf-ray") ?? crypto.randomUUID();
   const authFailure = requireAdminKey(request, env);
   if (authFailure) {
@@ -86,60 +87,74 @@ async function handleRequest({ env, request }) {
   if (files.length === 0) {
     return jsonResponse({ error: "请至少选择一张图片。" }, 400);
   }
+  if (files.length > 50) {
+    return jsonResponse({ error: "每次最多完成 50 张图片。" }, 400);
+  }
 
   if (files.some((file) => !isUploadId(file.uploadId))) {
     return jsonResponse({ error: "上传任务标识无效。", requestId }, 400);
   }
 
-  const tagIds = normalizeTagIds(payload?.tagIds);
-  if (tagIds.length === 0) {
+  const repository = getRepository(env);
+  const hasExpectedTags = Array.isArray(payload?.tagIds);
+  const tagIds = hasExpectedTags ? normalizeTagIds(payload.tagIds) : undefined;
+  if (hasExpectedTags && tagIds.length === 0) {
     return jsonResponse({ error: "请至少选择一个标签。" }, 400);
   }
-
-  const repository = getRepository(env);
-  const missingTagIds = await findMissingTagIds(repository, tagIds);
-  if (missingTagIds.length > 0) {
-    return jsonResponse({ error: "存在无效标签，无法完成上传。" }, 400);
+  if (tagIds) {
+    const missingTagIds = await findMissingTagIds(repository, tagIds);
+    if (missingTagIds.length > 0) {
+      return jsonResponse({ error: "存在无效标签，无法完成上传。" }, 400);
+    }
   }
 
-  let category = null;
+  let category;
   const categoryId = Number(payload?.categoryId);
   if (Number.isInteger(categoryId) && categoryId > 0) {
     category = await repository.getCategoryById(categoryId);
     if (!category) {
       return jsonResponse({ error: "所选目录无效。" }, 400);
     }
+  } else if (Object.prototype.hasOwnProperty.call(payload ?? {}, "categoryId")) {
+    category = null;
   }
 
-  if (!category && !String(env.GALLERY_UPLOAD_FOLDER ?? "").trim()) {
-    return jsonResponse({ error: "请选择一个目录。" }, 400);
+  if (files.some((file) => !file.uploadId) && (!tagIds || (category === undefined && !String(env.GALLERY_UPLOAD_FOLDER ?? "").trim()))) {
+    return jsonResponse({ error: "旧版恢复请求必须提供目录和标签。" }, 400);
   }
 
-  const uploadedImages = [];
-  for (const file of files) {
-    const object = typeof env.GALLERY_BUCKET?.head === "function"
-      ? await env.GALLERY_BUCKET.head(file.storageKey)
-      : null;
+  const objects = await Promise.all(files.map((file) => (
+    typeof env.GALLERY_BUCKET?.head === "function"
+      ? env.GALLERY_BUCKET.head(file.storageKey)
+      : null
+  )));
+  const missingObjectIndex = objects.findIndex((object) => !object);
+  if (missingObjectIndex >= 0) {
+    const file = files[missingObjectIndex];
+    writeLog("error", {
+      requestId,
+      phase: "r2-head",
+      uploadId: file.uploadId,
+      storageKey: file.storageKey,
+      durationMs: Date.now() - startedAt,
+      error: { code: "UPLOAD_OBJECT_MISSING" },
+    });
+    return jsonResponse({
+      error: "存在未完成上传的图片，请重新上传后再提交。",
+      code: "UPLOAD_OBJECT_MISSING",
+      requestId,
+    }, 400);
+  }
 
-    if (!object) {
-      writeLog("error", {
-        requestId,
-        phase: "r2-head",
-        uploadId: file.uploadId,
-        storageKey: file.storageKey,
-        error: { code: "UPLOAD_OBJECT_MISSING" },
-      });
-      return jsonResponse({
-        error: "存在未完成上传的图片，请重新上传后再提交。",
-        code: "UPLOAD_OBJECT_MISSING",
-        requestId,
-      }, 400);
+  const requestedUploadIds = files.map((file) => file.uploadId).filter(Boolean);
+  const existingSessions = await repository.getUploadSessionsByIds(requestedUploadIds);
+  const sessionsById = new Map(existingSessions.map((session) => [session.id, session]));
+  const sessions = [];
+  for (const [index, file] of files.entries()) {
+    let session = file.uploadId ? sessionsById.get(file.uploadId) : null;
+    if (!session && !file.uploadId) {
+      session = await repository.getUploadSessionByStorageKey(file.storageKey);
     }
-
-    let session = file.uploadId
-      ? await repository.getUploadSessionById(file.uploadId)
-      : await repository.getUploadSessionByStorageKey(file.storageKey);
-
     if (!session && !file.uploadId) {
       const recoveryId = crypto.randomUUID();
       const reservation = await repository.reserveUploadSession({
@@ -147,24 +162,32 @@ async function handleRequest({ env, request }) {
         storageKey: file.storageKey,
         fileName: file.fileName,
         fileUrl: buildPublicUrl(publicBaseUrl, file.storageKey),
-        contentType: object.httpMetadata?.contentType ?? "application/octet-stream",
-        fileSize: Number(object.size ?? 0),
+        contentType: objects[index].httpMetadata?.contentType ?? "application/octet-stream",
+        fileSize: Number(objects[index].size ?? 0),
         width: file.width,
         height: file.height,
         categoryId: category?.id ?? null,
         tagIds,
+        operationId: crypto.randomUUID(),
       });
       session = reservation.session;
     }
 
-    if (!session || !sessionMatchesCompletion(session, file, category?.id ?? null, tagIds)) {
+    const expected = {
+      ...(category !== undefined ? { categoryId: category?.id ?? null } : {}),
+      ...(tagIds ? { tagIds } : {}),
+    };
+    if (!session || !sessionMatchesCompletion(session, file, expected)) {
       writeLog("error", {
         requestId,
         phase: "session-validation",
         uploadId: file.uploadId ?? session?.id ?? null,
         storageKey: file.storageKey,
-        expectedTagIds: tagIds,
-        actualTagIds: session?.tagIds ?? [],
+        operationId: session?.operationId ?? null,
+        clientItemId: session?.clientItemId ?? null,
+        expectedTagCount: tagIds?.length ?? session?.tagIds.length ?? 0,
+        actualTagCount: session?.tagIds.length ?? 0,
+        durationMs: Date.now() - startedAt,
         error: { code: "UPLOAD_CONFLICT" },
       });
       return conflictResponse("上传任务与文件、目录或标签不匹配，已拒绝覆盖。", requestId, {
@@ -172,50 +195,47 @@ async function handleRequest({ env, request }) {
         storageKey: file.storageKey,
       });
     }
+    sessions.push(session);
+  }
 
-    try {
-      const result = await repository.completeUploadSession(session.id);
-      if (!result) {
-        return conflictResponse("上传任务不存在或已失效。", requestId, {
-          uploadId: session.id,
-          storageKey: file.storageKey,
-        });
-      }
+  let results;
+  try {
+    results = await repository.completeUploadSessions(sessions.map((session) => session.id));
+    for (const result of results) {
       writeLog("info", {
         requestId,
         phase: "verified",
-        uploadId: session.id,
-        storageKey: file.storageKey,
+        operationId: result.session.operationId,
+        clientItemId: result.session.clientItemId,
+        uploadId: result.session.id,
+        storageKey: result.session.storageKey,
         imageId: result.image.id,
-        expectedTagIds: result.expectedTagIds,
-        actualTagIds: result.actualTagIds,
+        expectedTagCount: result.expectedTagIds.length,
+        actualTagCount: result.actualTagIds.length,
         idempotent: result.idempotent,
+        durationMs: Date.now() - startedAt,
       });
-      uploadedImages.push(result.image);
-    } catch (error) {
-      writeLog("error", {
-        requestId,
-        phase: error?.code === "UPLOAD_TAG_VERIFICATION_FAILED" ? "tag-verification" : "database-commit",
-        uploadId: session.id,
-        storageKey: file.storageKey,
-        imageId: error?.imageId ?? null,
-        expectedTagIds: error?.expectedTagIds ?? session.tagIds,
-        actualTagIds: error?.actualTagIds ?? [],
-        error: errorDetails(error),
-      });
-      if (error?.code === "UPLOAD_STORAGE_CONFLICT") {
-        return conflictResponse("该存储位置已属于另一张图片，已拒绝覆盖。", requestId, {
-          uploadId: session.id,
-          storageKey: file.storageKey,
-        });
-      }
-      throw error;
     }
+  } catch (error) {
+    writeLog("error", {
+      requestId,
+      phase: error?.code === "IMAGE_TAG_VERIFICATION_FAILED" ? "tag-verification" : "database-commit",
+      uploadId: error?.uploadId ?? null,
+      imageId: error?.imageId ?? null,
+      expectedTagCount: error?.expectedTagIds?.length ?? null,
+      actualTagCount: error?.actualTagIds?.length ?? null,
+      durationMs: Date.now() - startedAt,
+      error: errorDetails(error),
+    });
+    if (error?.code === "UPLOAD_STORAGE_CONFLICT") {
+      return conflictResponse("该存储位置已属于另一张图片，已拒绝覆盖。", requestId);
+    }
+    throw error;
   }
 
   return jsonResponse({
-    uploadedCount: uploadedImages.length,
-    images: uploadedImages.map(toApiImage),
+    uploadedCount: results.length,
+    images: results.map((result) => toApiImage(result.image)),
   });
 }
 

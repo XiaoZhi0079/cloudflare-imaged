@@ -57,6 +57,28 @@ async function handleRequest({ env, request }) {
   const repository = getRepository(env);
 
   if (request.method === "GET") {
+    const url = new URL(request.url);
+    const paginated = ["query", "limit", "offset"].some((name) => url.searchParams.has(name));
+    if (paginated) {
+      const limit = url.searchParams.has("limit") ? Number(url.searchParams.get("limit")) : 50;
+      const offset = url.searchParams.has("offset") ? Number(url.searchParams.get("offset")) : 0;
+      if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+        return jsonResponse({ error: "limit must be an integer between 1 and 100" }, 400);
+      }
+      if (!Number.isInteger(offset) || offset < 0) {
+        return jsonResponse({ error: "offset must be a non-negative integer" }, 400);
+      }
+      const page = await repository.listImagesPage({
+        query: url.searchParams.get("query") ?? "",
+        limit,
+        offset,
+      });
+      return jsonResponse({
+        ...page,
+        images: page.images.map(toAdminImage),
+      });
+    }
+
     const images = await repository.listImages();
 
     return jsonResponse({
