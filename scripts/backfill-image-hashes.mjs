@@ -262,6 +262,7 @@ export async function backfillImageHashes(options) {
     imageCount: finalImages.length,
     pendingAtStart: allPending.length,
     attemptedCount: pending.length,
+    partialRun: options.maxImages !== null,
     updatedCount,
     remainingWithoutHash: finalImages.filter((image) => !image.contentSha256).length,
     duplicateHashGroups: duplicates.length,
@@ -276,7 +277,9 @@ if (isMain) {
   backfillImageHashes(parseArguments(process.argv.slice(2)))
     .then((summary) => {
       console.log(JSON.stringify(summary, null, 2));
-      if (summary.failures.length || (!summary.dryRun && summary.remainingWithoutHash)) process.exitCode = 1;
+      if (summary.failures.length || (!summary.dryRun && !summary.partialRun && summary.remainingWithoutHash)) {
+        process.exitCode = 1;
+      }
     })
     .catch((error) => {
       console.error(error instanceof Error ? error.message : String(error));
