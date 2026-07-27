@@ -1,5 +1,6 @@
 import path from "node:path";
 import { readFileSync } from "node:fs";
+import os from "node:os";
 
 import { GalleryMcpError } from "./errors.js";
 import type { GalleryMcpConfig } from "./types.js";
@@ -51,6 +52,15 @@ function normalizeBaseUrl(value: string): string {
   return url.href.replace(/\/$/, "");
 }
 
+function pathContains(parent: string, candidate: string): boolean {
+  const relative = path.relative(parent, candidate);
+  return relative === "" || (
+    relative !== ".."
+    && !relative.startsWith(`..${path.sep}`)
+    && !path.isAbsolute(relative)
+  );
+}
+
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): GalleryMcpConfig {
   const inlineAdminKey = String(env.GALLERY_ADMIN_KEY ?? "").trim();
   const adminKeyFile = String(env.GALLERY_ADMIN_KEY_FILE ?? "").trim();
@@ -84,11 +94,35 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): GalleryMcpConf
     .map((entry) => entry.trim())
     .filter(Boolean)
     .map((entry) => path.resolve(entry));
+  const defaultCacheBase = String(env.LOCALAPPDATA ?? env.XDG_CACHE_HOME ?? "").trim()
+    || path.join(os.homedir(), ".cache");
+  const remoteCacheRoot = path.resolve(
+    String(env.GALLERY_REMOTE_CACHE_ROOT ?? "").trim()
+      || path.join(defaultCacheBase, "gallery-mcp", "remote-images"),
+  );
+  const overlappingUploadRoot = uploadRoots.find((uploadRoot) => (
+    pathContains(uploadRoot, remoteCacheRoot) || pathContains(remoteCacheRoot, uploadRoot)
+  ));
+  if (overlappingUploadRoot) {
+    throw new GalleryMcpError("GALLERY_REMOTE_CACHE_ROOT must not overlap GALLERY_UPLOAD_ROOTS.", {
+      code: "INVALID_CONFIGURATION",
+      suggestion: "Move the remote cache outside every upload root so cached online originals cannot be uploaded.",
+      details: { remote_cache_root: remoteCacheRoot, overlapping_upload_root: overlappingUploadRoot },
+    });
+  }
 
   return {
     baseUrl: normalizeBaseUrl(String(env.GALLERY_BASE_URL ?? DEFAULT_BASE_URL).trim()),
     adminKey,
     uploadRoots: [...new Set(uploadRoots)],
+    remoteCacheRoot,
+    remoteCacheConcurrency: boundedInteger(
+      env.GALLERY_REMOTE_CACHE_CONCURRENCY,
+      4,
+      "GALLERY_REMOTE_CACHE_CONCURRENCY",
+      1,
+      8,
+    ),
     requestTimeoutMs: positiveInteger(env.GALLERY_REQUEST_TIMEOUT_MS, 30_000, "GALLERY_REQUEST_TIMEOUT_MS"),
     uploadTimeoutMs: positiveInteger(env.GALLERY_UPLOAD_TIMEOUT_MS, 120_000, "GALLERY_UPLOAD_TIMEOUT_MS"),
     maxFileBytes: positiveInteger(env.GALLERY_MAX_FILE_BYTES, 50 * 1024 * 1024, "GALLERY_MAX_FILE_BYTES"),

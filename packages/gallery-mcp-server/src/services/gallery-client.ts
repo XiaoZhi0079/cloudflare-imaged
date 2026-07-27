@@ -45,6 +45,20 @@ interface ImagesPageResponse extends ImagesResponse {
   nextOffset: number | null;
 }
 
+interface ImageIdScanResponse {
+  snapshotMaxImageId: number;
+  afterImageId: number;
+  count: number;
+  limit: number;
+  hasMore: boolean;
+  nextAfterImageId: number | null;
+  items: Array<{
+    imageId: number;
+    publicId: string | null;
+    contentSha256: string | null;
+  }>;
+}
+
 interface UploadInitResponse {
   uploads: UploadDescriptor[];
 }
@@ -52,6 +66,11 @@ interface UploadInitResponse {
 interface UploadCompleteResponse {
   uploadedCount: number;
   images: GalleryImage[];
+}
+
+interface MoveImagesResponse {
+  images: GalleryImage[];
+  failed: Array<{ imageId: number; error: string }>;
 }
 
 function sleep(milliseconds: number): Promise<void> {
@@ -188,9 +207,36 @@ export class GalleryApiClient {
     return await this.request<ImagesPageResponse>(`api/admin/images?${params.toString()}`);
   }
 
+  async scanImageIds(
+    afterImageId: number,
+    snapshotMaxImageId: number | null,
+    limit: number,
+  ): Promise<ImageIdScanResponse> {
+    const params = new URLSearchParams({ after_id: String(afterImageId), limit: String(limit) });
+    if (snapshotMaxImageId !== null) params.set("snapshot_max_id", String(snapshotMaxImageId));
+    return await this.request<ImageIdScanResponse>(`api/admin/images/scan?${params.toString()}`);
+  }
+
   async getImage(identifier: number | string): Promise<GalleryImage> {
     const payload = await this.request<{ image: GalleryImage }>(`api/admin/images/${encodeURIComponent(String(identifier))}`);
     return payload.image;
+  }
+
+  async renameImage(imageId: number, fileName: string): Promise<GalleryImage> {
+    const payload = await this.request<{ image: GalleryImage }>("api/admin/images", {
+      method: "PATCH",
+      body: { imageId, fileName },
+      retry: false,
+    });
+    return payload.image;
+  }
+
+  async moveImagesToCategory(imageIds: number[], categoryId: number): Promise<MoveImagesResponse> {
+    return await this.request<MoveImagesResponse>("api/admin/images/category-assignments/bulk", {
+      method: "POST",
+      body: { imageIds, categoryId },
+      retry: false,
+    });
   }
 
   async setImageTags(identifier: number | string, tagIds: number[]): Promise<{ imageId: number; publicId?: string; tagIds: number[] }> {

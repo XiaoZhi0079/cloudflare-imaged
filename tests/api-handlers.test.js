@@ -8,6 +8,7 @@ import { onRequest as adminTagsHandler } from "../functions/api/admin/tags.js";
 import { onRequest as adminTagGroupsHandler } from "../functions/api/admin/tag-groups.js";
 import { onRequest as adminImagesHandler } from "../functions/api/admin/images.js";
 import { onRequest as adminImageHandler } from "../functions/api/admin/images/[id].js";
+import { onRequest as adminImageScanHandler } from "../functions/api/admin/images/scan.js";
 import { onRequest as adminImagesAuditHandler } from "../functions/api/admin/images/audit.js";
 import { onRequest as adminImportHandler } from "../functions/api/admin/images/import.js";
 import { onRequest as adminUploadHandler } from "../functions/api/admin/images/upload/index.js";
@@ -426,6 +427,57 @@ test("admin exact image handler returns one image and a typed 404", async () => 
   });
   assert.equal(missing.status, 404);
   assert.deepEqual(await missing.json(), { error: "Image not found", code: "IMAGE_NOT_FOUND" });
+});
+
+test("admin image scan returns a stable numeric-ID cursor and validates continuation", async () => {
+  const env = createTestEnv();
+  const repository = createGalleryRepository(env.GALLERY_DB);
+  for (let index = 1; index <= 4; index += 1) {
+    await repository.upsertImage({
+      storageKey: `gallery/scan-${index}.webp`,
+      fileName: `scan-${index}.webp`,
+      fileUrl: `/file/gallery/scan-${index}.webp`,
+      width: 1920,
+      height: 1080,
+      syncStatus: "ok",
+    });
+  }
+  env.GALLERY_DB.prepare("DELETE FROM images WHERE id = ?").run(2);
+  const headers = { "x-gallery-admin-key": "gallery-secret" };
+
+  const first = await adminImageScanHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/images/scan?after_id=0&limit=2", { headers }),
+  });
+  assert.equal(first.status, 200);
+  const firstPayload = await first.json();
+  assert.equal(firstPayload.snapshotMaxImageId, 4);
+  assert.deepEqual(firstPayload.items.map((item) => item.imageId), [1, 3]);
+  assert.equal(firstPayload.nextAfterImageId, 3);
+
+  await repository.upsertImage({
+    storageKey: "gallery/scan-5.webp",
+    fileName: "scan-5.webp",
+    fileUrl: "/file/gallery/scan-5.webp",
+    width: 1920,
+    height: 1080,
+    syncStatus: "ok",
+  });
+  const second = await adminImageScanHandler({
+    env,
+    request: new Request(`https://gallery.example.com/api/admin/images/scan?after_id=3&snapshot_max_id=${firstPayload.snapshotMaxImageId}&limit=2`, { headers }),
+  });
+  assert.equal(second.status, 200);
+  const secondPayload = await second.json();
+  assert.deepEqual(secondPayload.items.map((item) => item.imageId), [4]);
+  assert.equal(secondPayload.hasMore, false);
+
+  const invalid = await adminImageScanHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/images/scan?after_id=5&snapshot_max_id=4", { headers }),
+  });
+  assert.equal(invalid.status, 400);
+  assert.equal((await invalid.json()).code, "INVALID_IMAGE_SCAN_CURSOR");
 });
 
 test("admin images handler lists more than 100 tagged images within D1 limits", async () => {

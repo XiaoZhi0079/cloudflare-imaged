@@ -4,6 +4,8 @@ export interface GalleryMcpConfig {
   baseUrl: string;
   adminKey: string;
   uploadRoots: string[];
+  remoteCacheRoot: string;
+  remoteCacheConcurrency: number;
   requestTimeoutMs: number;
   uploadTimeoutMs: number;
   maxFileBytes: number;
@@ -106,6 +108,15 @@ export interface InspectedUploadFileMetadata extends UploadDraft {
 export interface UploadManifestItem {
   clientItemId: string;
   localPath: string;
+  directoryId: number;
+  tagSelections: TagSelection[];
+}
+
+export interface RecognitionManifestItem {
+  clientItemId: string;
+  publicId: string;
+  expectedContentSha256: string;
+  fileName: string;
   directoryId: number;
   tagSelections: TagSelection[];
 }

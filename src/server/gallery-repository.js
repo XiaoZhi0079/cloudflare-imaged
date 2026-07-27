@@ -1817,6 +1817,62 @@ export function createGalleryRepository(database) {
       return attachTagNames(images, await getImageTagRows(database, images.map((image) => image.id)));
     },
 
+    async scanImageIds({ afterImageId = 0, snapshotMaxImageId = null, limit = 50 } = {}) {
+      const normalizedAfterImageId = Number(afterImageId);
+      const normalizedLimit = Number(limit);
+      if (!Number.isInteger(normalizedAfterImageId) || normalizedAfterImageId < 0) {
+        throw new RangeError("afterImageId must be a non-negative integer");
+      }
+      if (!Number.isInteger(normalizedLimit) || normalizedLimit < 1 || normalizedLimit > 100) {
+        throw new RangeError("limit must be an integer between 1 and 100");
+      }
+
+      let normalizedSnapshotMaxImageId;
+      if (snapshotMaxImageId === null || snapshotMaxImageId === undefined) {
+        const snapshot = await first(database, `SELECT COALESCE(MAX(id), 0) AS snapshotMaxImageId FROM images`);
+        normalizedSnapshotMaxImageId = Number(snapshot?.snapshotMaxImageId ?? 0);
+      } else {
+        normalizedSnapshotMaxImageId = Number(snapshotMaxImageId);
+      }
+      if (!Number.isInteger(normalizedSnapshotMaxImageId) || normalizedSnapshotMaxImageId < 0) {
+        throw new RangeError("snapshotMaxImageId must be a non-negative integer");
+      }
+      if (normalizedAfterImageId > normalizedSnapshotMaxImageId) {
+        throw new RangeError("afterImageId must not exceed snapshotMaxImageId");
+      }
+
+      const rows = await all(
+        database,
+        `
+          SELECT
+            id AS imageId,
+            public_id AS publicId,
+            content_sha256 AS contentSha256
+          FROM images
+          WHERE id > ? AND id <= ?
+          ORDER BY id ASC
+          LIMIT ?
+        `,
+        [normalizedAfterImageId, normalizedSnapshotMaxImageId, normalizedLimit + 1],
+      );
+      const hasMore = rows.length > normalizedLimit;
+      const items = rows.slice(0, normalizedLimit).map((row) => ({
+        imageId: Number(row.imageId),
+        publicId: row.publicId ?? null,
+        contentSha256: row.contentSha256 ?? null,
+      }));
+      const lastItem = items.at(-1);
+      return {
+        snapshotMaxImageId: normalizedSnapshotMaxImageId,
+        afterImageId: normalizedAfterImageId,
+        count: items.length,
+        limit: normalizedLimit,
+        hasMore,
+        nextAfterImageId: hasMore ? lastItem?.imageId ?? null : null,
+        items,
+      };
+    },
+
     async listImagesPage({ query = "", limit = 50, offset = 0 } = {}) {
       const normalizedQuery = String(query ?? "").trim();
       const normalizedLimit = Number(limit);

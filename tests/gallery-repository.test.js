@@ -165,6 +165,34 @@ test("listImagesPage reads only one page from a 1698-image library", async () =>
   assert.equal(executions[2].params.length, 50);
 });
 
+test("scanImageIds keeps a stable numeric-ID snapshot across gaps and new uploads", async () => {
+  const database = createTestDb();
+  const insert = database.prepare("INSERT INTO images (storage_key, file_name, file_url, width, height) VALUES (?, ?, ?, ?, ?)");
+  for (let imageId = 1; imageId <= 5; imageId += 1) {
+    const name = `scan-${imageId}.webp`;
+    insert.run(`gallery/${name}`, name, `/file/gallery/${name}`, 1920, 1080);
+  }
+  database.prepare("DELETE FROM images WHERE id IN (?, ?)").run(2, 4);
+  const repository = createGalleryRepository(database);
+
+  const firstPage = await repository.scanImageIds({ afterImageId: 0, limit: 1 });
+  assert.equal(firstPage.snapshotMaxImageId, 5);
+  assert.deepEqual(firstPage.items.map((item) => item.imageId), [1]);
+  assert.equal(firstPage.hasMore, true);
+  assert.equal(firstPage.nextAfterImageId, 1);
+
+  insert.run("gallery/scan-6.webp", "scan-6.webp", "/file/gallery/scan-6.webp", 1920, 1080);
+  const secondPage = await repository.scanImageIds({
+    afterImageId: firstPage.nextAfterImageId,
+    snapshotMaxImageId: firstPage.snapshotMaxImageId,
+    limit: 100,
+  });
+  assert.deepEqual(secondPage.items.map((item) => item.imageId), [3, 5]);
+  assert.equal(secondPage.hasMore, false);
+  assert.equal(secondPage.nextAfterImageId, null);
+  assert.equal(secondPage.items.some((item) => item.imageId === 6), false);
+});
+
 test("replaceImageTags rewrites tag assignments and listImagesByTagSlug returns mapped images", async () => {
   const database = createTestDb();
   const repository = createGalleryRepository(database);

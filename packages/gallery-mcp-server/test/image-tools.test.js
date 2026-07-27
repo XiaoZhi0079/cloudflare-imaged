@@ -114,3 +114,40 @@ test("single-image tools accept the permanent public ID", async () => {
   });
   assert.deepEqual(calls, [["get", publicId], ["tags", publicId, [2]]]);
 });
+
+test("numeric-ID scan tool preserves the server snapshot cursor", async () => {
+  const calls = [];
+  const handlers = registeredHandlers({
+    api: {
+      scanImageIds: async (afterImageId, snapshotMaxImageId, limit) => {
+        calls.push({ afterImageId, snapshotMaxImageId, limit });
+        return {
+          snapshotMaxImageId: snapshotMaxImageId ?? 2000,
+          afterImageId,
+          count: 2,
+          limit,
+          hasMore: true,
+          nextAfterImageId: 103,
+          items: [
+            { imageId: 101, publicId: "11111111-1111-4111-8111-111111111111", contentSha256: "a".repeat(64) },
+            { imageId: 103, publicId: "33333333-3333-4333-8333-333333333333", contentSha256: "b".repeat(64) },
+          ],
+        };
+      },
+    },
+    taxonomy: {},
+    config: config(),
+  });
+
+  const response = await handlers.get("gallery_scan_image_ids")({
+    after_image_id: 100,
+    snapshot_max_image_id: 2000,
+    limit: 50,
+    response_format: "json",
+  });
+
+  assert.deepEqual(calls, [{ afterImageId: 100, snapshotMaxImageId: 2000, limit: 50 }]);
+  assert.equal(response.structuredContent.snapshot_max_image_id, 2000);
+  assert.equal(response.structuredContent.next_after_image_id, 103);
+  assert.deepEqual(response.structuredContent.items.map((item) => item.image_id), [101, 103]);
+});

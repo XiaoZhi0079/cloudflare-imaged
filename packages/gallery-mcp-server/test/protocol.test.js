@@ -28,14 +28,21 @@ test("stdio MCP handshake exposes grouped-tag and manifest tools", async () => {
     assert.deepEqual(
       response.tools.map((tool) => tool.name).sort(),
       [
+        "gallery_apply_recognition_manifest",
+        "gallery_cache_remote_image",
+        "gallery_cache_remote_images",
         "gallery_ensure_tag",
         "gallery_ensure_tag_group",
         "gallery_get_image",
         "gallery_get_local_image_tags",
+        "gallery_get_remote_image_cache_status",
+        "gallery_get_remote_image_cache_status_batch",
         "gallery_get_taxonomy",
         "gallery_health_check",
         "gallery_list_images",
+        "gallery_mark_remote_image_analyzed",
         "gallery_resume_upload",
+        "gallery_scan_image_ids",
         "gallery_set_local_image_tags",
         "gallery_set_local_image_tags_batch",
         "gallery_set_remote_image_tags",
@@ -76,6 +83,43 @@ test("stdio MCP handshake exposes grouped-tag and manifest tools", async () => {
 
     const manifestSchema = response.tools.find((tool) => tool.name === "gallery_upload_manifest")?.inputSchema;
     assert.ok(manifestSchema?.properties?.result_detail);
+
+    const recognitionSchema = response.tools.find((tool) => tool.name === "gallery_apply_recognition_manifest")?.inputSchema;
+    assert.equal(recognitionSchema?.properties?.items?.maxItems, 50);
+    assert.equal(recognitionSchema?.properties?.dry_run?.default, true);
+    assert.ok(recognitionSchema?.properties?.confirm_apply);
+    assert.ok(recognitionSchema?.properties?.result_detail);
+
+    const scanSchema = response.tools.find((tool) => tool.name === "gallery_scan_image_ids")?.inputSchema;
+    assert.equal(scanSchema?.properties?.after_image_id?.default, 0);
+    assert.equal(scanSchema?.properties?.limit?.default, 50);
+    assert.equal(scanSchema?.properties?.limit?.maximum, 100);
+    assert.ok(scanSchema?.properties?.snapshot_max_image_id);
+    assert.equal(scanSchema?.properties?.offset, undefined);
+
+    const cacheSchema = response.tools.find((tool) => tool.name === "gallery_cache_remote_image")?.inputSchema;
+    assert.ok(cacheSchema?.properties?.public_id);
+    assert.ok(cacheSchema?.properties?.image_id);
+    assert.ok(cacheSchema?.properties?.analysis_version);
+    assert.ok(cacheSchema?.properties?.force_refresh);
+    assert.ok(cacheSchema?.properties?.user_confirmed_visual_analysis);
+    assert.ok(cacheSchema?.required?.includes("user_confirmed_visual_analysis"));
+
+    const cacheBatchSchema = response.tools.find((tool) => tool.name === "gallery_cache_remote_images")?.inputSchema;
+    assert.equal(cacheBatchSchema?.properties?.images?.maxItems, 50);
+    assert.ok(cacheBatchSchema?.properties?.result_detail);
+    assert.ok(cacheBatchSchema?.required?.includes("user_confirmed_visual_analysis"));
+
+    const statusBatchSchema = response.tools.find((tool) => tool.name === "gallery_get_remote_image_cache_status_batch")?.inputSchema;
+    assert.equal(statusBatchSchema?.properties?.images?.maxItems, 100);
+    assert.ok(statusBatchSchema?.properties?.result_detail);
+    assert.equal(statusBatchSchema?.properties?.user_confirmed_visual_analysis, undefined);
+
+    const markSchema = response.tools.find((tool) => tool.name === "gallery_mark_remote_image_analyzed")?.inputSchema;
+    assert.ok(markSchema?.properties?.content_sha256);
+    assert.ok(markSchema?.properties?.result_reference);
+    assert.ok(markSchema?.required?.includes("user_confirmed_visual_analysis"));
+    assert.equal(markSchema?.properties?.local_path, undefined);
   } finally {
     await client.close();
   }

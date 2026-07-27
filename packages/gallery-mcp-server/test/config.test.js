@@ -15,9 +15,41 @@ test("configuration defaults to the production Gallery and keeps upload roots bo
   assert.equal(config.baseUrl, "https://gallery.140079.xyz");
   assert.equal(config.adminKey, "test-key");
   assert.deepEqual(config.uploadRoots, [path.resolve("D:\\Images"), path.resolve("D:\\Generated")]);
+  assert.ok(path.isAbsolute(config.remoteCacheRoot));
+  assert.match(config.remoteCacheRoot, /gallery-mcp[\\/]remote-images$/);
+  assert.equal(config.remoteCacheConcurrency, 4);
   assert.equal(config.maxFileBytes, 50 * 1024 * 1024);
   assert.equal(config.uploadConcurrency, 4);
   assert.equal(config.uploadChunkSize, 20);
+});
+
+test("configuration accepts an explicit persistent remote cache root", () => {
+  const config = loadConfig({
+    GALLERY_ADMIN_KEY: "test-key",
+    GALLERY_REMOTE_CACHE_ROOT: "D:\\GalleryCache",
+    GALLERY_REMOTE_CACHE_CONCURRENCY: "6",
+  });
+  assert.equal(config.remoteCacheRoot, path.resolve("D:\\GalleryCache"));
+  assert.equal(config.remoteCacheConcurrency, 6);
+});
+
+test("configuration rejects overlap between remote cache and upload roots", () => {
+  assert.throws(
+    () => loadConfig({
+      GALLERY_ADMIN_KEY: "test-key",
+      GALLERY_UPLOAD_ROOTS: "D:\\GalleryFiles",
+      GALLERY_REMOTE_CACHE_ROOT: "D:\\GalleryFiles\\remote-cache",
+    }),
+    (error) => error.code === "INVALID_CONFIGURATION" && /must not overlap/.test(error.message),
+  );
+  assert.throws(
+    () => loadConfig({
+      GALLERY_ADMIN_KEY: "test-key",
+      GALLERY_UPLOAD_ROOTS: "D:\\GalleryCache\\uploads",
+      GALLERY_REMOTE_CACHE_ROOT: "D:\\GalleryCache",
+    }),
+    (error) => error.code === "INVALID_CONFIGURATION" && /must not overlap/.test(error.message),
+  );
 });
 
 test("configuration rejects missing credentials and unsafe remote HTTP URLs", () => {

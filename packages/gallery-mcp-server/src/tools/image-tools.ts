@@ -6,10 +6,11 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import { GalleryMcpError, toToolError } from "../errors.js";
 import { runTool } from "../response.js";
-import type { GalleryMcpConfig, ResponseFormat, UploadManifestItem } from "../types.js";
+import type { GalleryMcpConfig, RecognitionManifestItem, ResponseFormat, UploadManifestItem } from "../types.js";
 import { GalleryApiClient } from "../services/gallery-client.js";
 import { processUploadManifest } from "../services/manifest-service.js";
 import { inspectUploadFile } from "../services/path-security.js";
+import { processRecognitionManifest } from "../services/recognition-manifest-service.js";
 import { TaxonomyService } from "../services/taxonomy-service.js";
 import { uploadOneImage } from "../services/upload-service.js";
 import { internalTagSelections, ResponseFormatSchema, TagSelectionsSchema } from "./tag-schemas.js";
@@ -34,6 +35,35 @@ const ManifestItems = z.array(ManifestItemSchema).min(1).max(50).superRefine((it
       });
     }
     seen.add(item.client_item_id);
+  }
+});
+
+const RecognitionManifestItemSchema = z.object({
+  client_item_id: z.string().trim().min(1).max(100)
+    .describe("Caller-defined stable ID used to correlate this item with the result."),
+  public_id: z.string().uuid().describe("Permanent public Gallery image UUID."),
+  expected_content_sha256: z.string().trim().regex(/^[0-9a-f]{64}$/i)
+    .describe("Full SHA-256 of the exact bytes that were analyzed. The update is rejected if Gallery now contains different bytes."),
+  file_name: z.string().trim().min(1).max(255)
+    .describe("Desired basename including the unchanged file extension; do not include a path or whitespace."),
+  directory_id: z.number().int().positive()
+    .describe("Desired Gallery directory ID."),
+  tag_selections: TagSelectionsSchema
+    .describe("Complete desired remote tag set grouped by parent tag group."),
+}).strict();
+const RecognitionManifestItems = z.array(RecognitionManifestItemSchema).min(1).max(50).superRefine((items, context) => {
+  const clientItemIds = new Set<string>();
+  const publicIds = new Set<string>();
+  for (const [index, item] of items.entries()) {
+    if (clientItemIds.has(item.client_item_id)) {
+      context.addIssue({ code: "custom", message: "client_item_id must be unique.", path: [index, "client_item_id"] });
+    }
+    clientItemIds.add(item.client_item_id);
+    const publicId = item.public_id.toLocaleLowerCase("en-US");
+    if (publicIds.has(publicId)) {
+      context.addIssue({ code: "custom", message: "public_id must be unique.", path: [index, "public_id"] });
+    }
+    publicIds.add(publicId);
   }
 });
 
@@ -80,6 +110,8 @@ export function registerImageTools(server: McpServer, dependencies: ImageToolDep
         directory_count: current.categories.length,
         local_roots_configured: config.uploadRoots.length > 0,
         upload_roots_configured: config.uploadRoots.length > 0,
+        remote_cache_configured: Boolean(config.remoteCacheRoot),
+        remote_cache_concurrency: config.remoteCacheConcurrency,
       };
     }),
   );
@@ -88,7 +120,7 @@ export function registerImageTools(server: McpServer, dependencies: ImageToolDep
     "gallery_list_images",
     {
       title: "List Gallery Images",
-      description: "List one server-side page of admin-visible Gallery image metadata, optionally filtering by filename, directory, or tag.",
+      description: "List one OFFSET-based admin page, optionally filtering by filename, directory, or tag. Use this for interactive search and UI-like browsing. For exhaustive automation, use gallery_scan_image_ids so concurrent uploads cannot shift later batches.",
       inputSchema: z.object({
         query: z.string().trim().max(200).default("").describe("Optional filename or tag search."),
         limit: z.number().int().min(1).max(100).default(20).describe("Maximum results."),
@@ -109,6 +141,43 @@ export function registerImageTools(server: McpServer, dependencies: ImageToolDep
         images: page.images,
       };
     }),
+  );
+
+  server.registerTool(
+    "gallery_scan_image_ids",
+    {
+      title: "Scan Gallery Images by Stable Numeric ID Cursor",
+      description: "Read one stable numeric-ID batch for exhaustive automation without OFFSET pagination or image downloads. Omit snapshot_max_image_id on the first call; Gallery fixes the current maximum ID and returns it. Pass that exact snapshot_max_image_id plus next_after_image_id to every continuation. Deleted ID gaps are skipped, and images uploaded after the snapshot are excluded until the next scan.",
+      inputSchema: z.object({
+        after_image_id: z.number().int().nonnegative().default(0)
+          .describe("Exclusive numeric image-ID cursor. Use 0 for the first call, then the prior next_after_image_id."),
+        snapshot_max_image_id: z.number().int().nonnegative().optional()
+          .describe("Fixed upper bound returned by the first call. Omit only on the first call and preserve it unchanged thereafter."),
+        limit: z.number().int().min(1).max(100).default(50)
+          .describe("Maximum IDs returned in this batch."),
+        response_format: ResponseFormatSchema.describe("Return JSON or a Markdown code block."),
+      }).strict(),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    async ({ after_image_id, snapshot_max_image_id, limit, response_format }) => runTool(
+      response_format as ResponseFormat,
+      async () => {
+        const page = await api.scanImageIds(after_image_id, snapshot_max_image_id ?? null, limit);
+        return {
+          snapshot_max_image_id: page.snapshotMaxImageId,
+          after_image_id: page.afterImageId,
+          count: page.count,
+          limit: page.limit,
+          has_more: page.hasMore,
+          next_after_image_id: page.nextAfterImageId,
+          items: page.items.map((item) => ({
+            image_id: item.imageId,
+            public_id: item.publicId,
+            content_sha256: item.contentSha256,
+          })),
+        };
+      },
+    ),
   );
 
   server.registerTool(
@@ -186,6 +255,50 @@ export function registerImageTools(server: McpServer, dependencies: ImageToolDep
     }),
   );
 
+  server.registerTool(
+    "gallery_apply_recognition_manifest",
+    {
+      title: "Apply Recognition Results to Existing Gallery Images",
+      description: "Preflight and optionally apply recognition results to 1-50 EXISTING online images. Each item uses permanent public_id plus expected_content_sha256 to prevent stale writes, then updates only changed filename, directory, and complete tags while preserving numeric ID, public ID, albums, featured membership, and image bytes. dry_run defaults to true; mutation requires the explicit confirmation phrase. Successful writes are read back and verified. This does not upload, delete, inspect, or visually analyze images.",
+      inputSchema: z.object({
+        items: RecognitionManifestItems.describe("Existing images and their complete desired recognition metadata."),
+        dry_run: z.boolean().default(true)
+          .describe("Validate and show planned changes without changing Gallery. Defaults to true."),
+        confirm_apply: z.literal("APPLY_RECOGNITION_MANIFEST").optional()
+          .describe("Required only when dry_run=false. Use exactly APPLY_RECOGNITION_MANIFEST after reviewing a dry run."),
+        continue_on_error: z.boolean().default(true)
+          .describe("Continue independent items after a failure. False uses strict sequential mutation after every item passes preflight."),
+        result_detail: z.enum(["summary", "failures", "all"]).default("failures")
+          .describe("summary returns counts, failures adds failed items, and all includes every item."),
+        response_format: ResponseFormatSchema.describe("Return JSON or a Markdown code block."),
+      }).strict(),
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
+    },
+    async ({ items, dry_run, confirm_apply, continue_on_error, result_detail, response_format }) => runTool(
+      response_format as ResponseFormat,
+      async () => {
+        const manifestItems: RecognitionManifestItem[] = items.map((item) => ({
+          clientItemId: item.client_item_id,
+          publicId: item.public_id,
+          expectedContentSha256: item.expected_content_sha256.toLocaleLowerCase("en-US"),
+          fileName: item.file_name,
+          directoryId: item.directory_id,
+          tagSelections: internalTagSelections(item.tag_selections),
+        }));
+        return await processRecognitionManifest(
+          { api, taxonomy, config },
+          manifestItems,
+          {
+            dryRun: dry_run,
+            continueOnError: continue_on_error,
+            resultDetail: result_detail,
+            mutationConfirmed: confirm_apply === "APPLY_RECOGNITION_MANIFEST",
+          },
+        );
+      },
+    ),
+  );
+
   const uploadInput = z.object({
     local_path: z.string().trim().min(1).max(2048).describe("Absolute or relative local image path under GALLERY_UPLOAD_ROOTS."),
     directory_id: z.number().int().positive().describe("Upload directory ID from gallery_get_taxonomy directories."),
@@ -229,8 +342,8 @@ export function registerImageTools(server: McpServer, dependencies: ImageToolDep
   server.registerTool(
     "gallery_upload_images",
     {
-      title: "Upload Multiple Gallery Images",
-      description: "CREATE NEW ONLINE GALLERY RECORDS by uploading up to 12 local images. Do not use this for local-only labeling; use gallery_set_local_image_tags_batch instead.",
+      title: "Upload Multiple Gallery Images with Shared Metadata",
+      description: "Compatibility convenience tool that CREATES up to 12 online records with one shared directory and tag set. Prefer gallery_upload_manifest for new Agent workflows, per-image metadata, dry-run validation, bounded concurrency, and concise output. Do not use this for local-only labeling.",
       inputSchema: z.object({
         local_paths: z.array(z.string().trim().min(1).max(2048)).min(1).max(12).describe("Local image paths under GALLERY_UPLOAD_ROOTS."),
         directory_id: z.number().int().positive().describe("Upload directory ID shared by every file."),

@@ -126,3 +126,65 @@ test("Gallery client uses server pagination, exact image reads, and heterogeneou
     ],
   });
 });
+
+test("Gallery client renames one image and moves a bounded image set", async () => {
+  const requests = [];
+  const renamed = { id: 42, publicId: "11111111-1111-4111-8111-111111111111", fileName: "renamed.png", fileUrl: "/file/renamed.png", width: 1, height: 1, tags: [] };
+  const client = new GalleryApiClient(config(), {
+    retryDelayMs: 0,
+    fetchImpl: async (input, init) => {
+      const url = new URL(String(input));
+      const body = init?.body ? JSON.parse(init.body) : null;
+      requests.push({ url, init, body });
+      if (url.pathname.endsWith("/category-assignments/bulk")) {
+        return Response.json({ images: [{ ...renamed, category: { id: 3, name: "目录", directorySlug: "folder", sortOrder: 0 } }], failed: [] });
+      }
+      return Response.json({ image: renamed });
+    },
+  });
+
+  assert.equal((await client.renameImage(42, "renamed.png")).fileName, "renamed.png");
+  const moved = await client.moveImagesToCategory([42], 3);
+
+  assert.equal(moved.images[0].category.id, 3);
+  assert.deepEqual(requests.map(({ url, init, body }) => ({
+    path: url.pathname,
+    method: init.method,
+    body,
+  })), [
+    { path: "/api/admin/images", method: "PATCH", body: { imageId: 42, fileName: "renamed.png" } },
+    { path: "/api/admin/images/category-assignments/bulk", method: "POST", body: { imageIds: [42], categoryId: 3 } },
+  ]);
+});
+
+test("Gallery client scans a fixed numeric-ID snapshot without OFFSET pagination", async () => {
+  const requests = [];
+  const client = new GalleryApiClient(config(), {
+    retryDelayMs: 0,
+    fetchImpl: async (input) => {
+      const url = new URL(String(input));
+      requests.push(url);
+      return Response.json({
+        snapshotMaxImageId: 2000,
+        afterImageId: 100,
+        count: 2,
+        limit: 50,
+        hasMore: true,
+        nextAfterImageId: 103,
+        items: [
+          { imageId: 101, publicId: "11111111-1111-4111-8111-111111111111", contentSha256: "a".repeat(64) },
+          { imageId: 103, publicId: "33333333-3333-4333-8333-333333333333", contentSha256: "b".repeat(64) },
+        ],
+      });
+    },
+  });
+
+  const first = await client.scanImageIds(0, null, 50);
+  const continued = await client.scanImageIds(100, 2000, 50);
+
+  assert.equal(first.snapshotMaxImageId, 2000);
+  assert.equal(continued.nextAfterImageId, 103);
+  assert.equal(requests[0].search, "?after_id=0&limit=50");
+  assert.equal(requests[1].search, "?after_id=100&limit=50&snapshot_max_id=2000");
+  assert.ok(requests.every((url) => !url.searchParams.has("offset")));
+});
