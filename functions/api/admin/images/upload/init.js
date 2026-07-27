@@ -34,6 +34,7 @@ function normalizeFileDrafts(value) {
     .map((item) => ({
       uploadId: String(item?.uploadId ?? "").trim() || null,
       clientItemId: String(item?.clientItemId ?? "").trim() || null,
+      contentSha256: String(item?.contentSha256 ?? "").trim().toLowerCase(),
       name: String(item?.name ?? "").trim(),
       type: String(item?.type ?? "").trim(),
       size: Number(item?.size ?? 0),
@@ -49,6 +50,10 @@ function isUploadId(value) {
   return value === null || /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
+function isContentSha256(value) {
+  return /^[0-9a-f]{64}$/.test(value);
+}
+
 function normalizedIds(value) {
   return [...value].map(Number).sort((left, right) => left - right);
 }
@@ -61,7 +66,9 @@ function sameIds(left, right) {
 }
 
 function sessionMatches(session, expected) {
-  return session.storageKey === expected.storageKey
+  return session.publicId === expected.publicId
+    && session.contentSha256 === expected.contentSha256
+    && session.storageKey === expected.storageKey
     && session.fileName === expected.fileName
     && session.fileUrl === expected.fileUrl
     && session.contentType === expected.contentType
@@ -116,6 +123,9 @@ async function handleRequest({ env, request }) {
   if (files.some((file) => !isUploadId(file.uploadId))) {
     return jsonResponse({ error: "上传任务标识无效。" }, 400);
   }
+  if (files.some((file) => !isContentSha256(file.contentSha256))) {
+    return jsonResponse({ error: "每张图片都必须提供有效的 SHA-256 内容哈希。" }, 400);
+  }
 
   const repository = getRepository(env);
   const globalTagIds = normalizeTagIds(payload?.tagIds);
@@ -156,14 +166,21 @@ async function handleRequest({ env, request }) {
     return jsonResponse({ error: "请选择一个目录。" }, 400);
   }
 
+  const identifiedFiles = files.map((file) => ({
+    ...file,
+    uploadId: file.uploadId ?? crypto.randomUUID(),
+  }));
+  const existingSessions = await repository.getUploadSessionsByIds(identifiedFiles.map((file) => file.uploadId));
+  const existingById = new Map(existingSessions.map((session) => [session.id, session]));
   const operationId = String(payload?.operationId ?? "").trim()
-    || files.find((file) => file.uploadId)?.uploadId
+    || identifiedFiles[0]?.uploadId
     || crypto.randomUUID();
   if (!isUploadId(operationId)) {
     return jsonResponse({ error: "上传操作标识无效。" }, 400);
   }
-  const uploadDrafts = files.map((file, index) => {
-    const uploadId = file.uploadId ?? crypto.randomUUID();
+  const uploadDrafts = identifiedFiles.map((file, index) => {
+    const uploadId = file.uploadId;
+    const publicId = existingById.get(uploadId)?.publicId ?? crypto.randomUUID();
     const selectedCategory = categorySelections[index];
     const storedFileName = createStoredFileName(
       { name: file.name },
@@ -177,6 +194,8 @@ async function handleRequest({ env, request }) {
     });
     return {
       uploadId,
+      publicId,
+      contentSha256: file.contentSha256,
       operationId,
       clientItemId: file.clientItemId,
       storageKey,
@@ -198,8 +217,6 @@ async function handleRequest({ env, request }) {
     return conflictResponse("同一批次中存在重复的文件名或上传任务标识。");
   }
 
-  const existingSessions = await repository.getUploadSessionsByIds(uploadDrafts.map((draft) => draft.uploadId));
-  const existingById = new Map(existingSessions.map((session) => [session.id, session]));
   if (typeof env.GALLERY_BUCKET?.head === "function") {
     const existingObjects = await Promise.all(uploadDrafts.map((draft) => (
       existingById.has(draft.uploadId) ? null : env.GALLERY_BUCKET.head(draft.storageKey)
@@ -209,6 +226,7 @@ async function handleRequest({ env, request }) {
       const draft = uploadDrafts[conflictIndex];
       return conflictResponse("存储中已存在同名图片，请更改文件名或恢复已有上传。", {
         uploadId: draft.uploadId,
+        publicId: draft.publicId,
         storageKey: draft.storageKey,
       });
     }
@@ -256,6 +274,7 @@ async function handleRequest({ env, request }) {
 
   const uploads = uploadDrafts.map((draft, index) => ({
         uploadId: draft.uploadId,
+        publicId: draft.publicId,
         storageKey: draft.storageKey,
         fileName: draft.fileName,
         fileUrl: draft.fileUrl,

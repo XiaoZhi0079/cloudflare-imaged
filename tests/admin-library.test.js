@@ -362,7 +362,7 @@ test("image uploads continue in a bounded background task panel", () => {
   const workbenchCss = readFileSync(new URL("../public/assets/admin/workbench.css", import.meta.url), "utf8");
 
   assert.match(html, /id="admin-upload-status"[^>]*aria-label="后台上传任务"/);
-  assert.match(source, /prepareFile:\s*measureImageFile/);
+  assert.match(source, /prepareFile:\s*inspectImageFile/);
   assert.match(source, /startUploadInBackground/);
   assert.match(source, /hideUploadDialog\(\);[\s\S]*runBackgroundUpload\(\)/);
   assert.match(source, /window\.addEventListener\("beforeunload"/);

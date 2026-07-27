@@ -8,6 +8,8 @@ const DEFAULT_SITE_SETTINGS = {
 
 const SELECT_IMAGE_COLUMNS = `
   images.id,
+  images.public_id AS publicId,
+  images.content_sha256 AS contentSha256,
   images.storage_key AS storageKey,
   images.file_name AS fileName,
   images.file_url AS fileUrl,
@@ -23,6 +25,8 @@ const SELECT_IMAGE_COLUMNS = `
 
 const SELECT_UPLOAD_SESSION_COLUMNS = `
   id,
+  public_id AS publicId,
+  content_sha256 AS contentSha256,
   storage_key AS storageKey,
   file_name AS fileName,
   file_url AS fileUrl,
@@ -117,6 +121,8 @@ async function first(database, sql, params = []) {
 function mapImageRow(row) {
   const image = {
     id: row.id,
+    publicId: row.publicId ?? null,
+    contentSha256: row.contentSha256 ?? null,
     storageKey: row.storageKey,
     fileName: row.fileName,
     fileUrl: row.fileUrl,
@@ -170,6 +176,26 @@ function normalizeIntegerIds(values) {
     .sort((left, right) => left - right);
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const SHA256_PATTERN = /^[0-9a-f]{64}$/i;
+
+function normalizePublicId(value, fallback = null) {
+  const normalized = String(value ?? fallback ?? "").trim().toLowerCase();
+  if (!UUID_PATTERN.test(normalized)) {
+    throw repositoryError("INVALID_PUBLIC_ID", "Image public IDs must be UUID v4 values.");
+  }
+  return normalized;
+}
+
+function normalizeContentSha256(value, { required = false } = {}) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (!normalized && !required) return null;
+  if (!SHA256_PATTERN.test(normalized)) {
+    throw repositoryError("INVALID_CONTENT_SHA256", "Image content hashes must be 64-character SHA-256 values.");
+  }
+  return normalized;
+}
+
 function mapUploadSession(row) {
   if (!row) return null;
 
@@ -182,6 +208,8 @@ function mapUploadSession(row) {
 
   return {
     id: row.id,
+    publicId: row.publicId ?? null,
+    contentSha256: row.contentSha256 ?? null,
     storageKey: row.storageKey,
     fileName: row.fileName,
     fileUrl: row.fileUrl,
@@ -1202,6 +1230,8 @@ export function createGalleryRepository(database) {
 
     async reserveUploadSession({
       id,
+      publicId = null,
+      contentSha256 = null,
       storageKey,
       fileName,
       fileUrl,
@@ -1216,6 +1246,8 @@ export function createGalleryRepository(database) {
     }) {
       return (await this.reserveUploadSessions([{
         id,
+        publicId,
+        contentSha256,
         storageKey,
         fileName,
         fileUrl,
@@ -1233,6 +1265,8 @@ export function createGalleryRepository(database) {
     async reserveUploadSessions(uploadDrafts) {
       const drafts = (Array.isArray(uploadDrafts) ? uploadDrafts : []).map((draft) => ({
         id: String(draft?.id ?? "").trim(),
+        publicId: normalizePublicId(draft?.publicId, draft?.id),
+        contentSha256: normalizeContentSha256(draft?.contentSha256),
         storageKey: String(draft?.storageKey ?? "").trim(),
         fileName: String(draft?.fileName ?? "").trim(),
         fileUrl: String(draft?.fileUrl ?? "").trim(),
@@ -1277,6 +1311,8 @@ export function createGalleryRepository(database) {
             WITH drafts AS (
               SELECT
                 json_extract(value, '$.id') AS id,
+                json_extract(value, '$.publicId') AS public_id,
+                json_extract(value, '$.contentSha256') AS content_sha256,
                 json_extract(value, '$.storageKey') AS storage_key,
                 json_extract(value, '$.fileName') AS file_name,
                 json_extract(value, '$.fileUrl') AS file_url,
@@ -1291,11 +1327,11 @@ export function createGalleryRepository(database) {
               FROM json_each(?)
             )
             INSERT OR IGNORE INTO upload_sessions (
-              id, storage_key, file_name, file_url, content_type, file_size,
+              id, public_id, content_sha256, storage_key, file_name, file_url, content_type, file_size,
               width, height, category_id, tag_ids, operation_id, client_item_id
             )
             SELECT
-              draft.id, draft.storage_key, draft.file_name, draft.file_url,
+              draft.id, draft.public_id, draft.content_sha256, draft.storage_key, draft.file_name, draft.file_url,
               draft.content_type, draft.file_size, draft.width, draft.height,
               draft.category_id, draft.tag_ids, draft.operation_id, draft.client_item_id
             FROM drafts AS draft
@@ -1306,6 +1342,8 @@ export function createGalleryRepository(database) {
                 ON existing.id = candidate.id OR existing.storage_key = candidate.storage_key
               WHERE existing.status <> 'pending'
                  OR existing.id <> candidate.id
+                 OR existing.public_id <> candidate.public_id
+                 OR NOT (existing.content_sha256 IS candidate.content_sha256)
                  OR existing.storage_key <> candidate.storage_key
                  OR existing.file_name <> candidate.file_name
                  OR existing.file_url <> candidate.file_url
@@ -1439,11 +1477,11 @@ export function createGalleryRepository(database) {
             {
               sql: `
                 INSERT INTO images (
-                  storage_key, file_name, file_url, width, height,
+                  public_id, content_sha256, storage_key, file_name, file_url, width, height,
                   sync_status, note, category_id, upload_id
                 )
                 SELECT
-                  storage_key, file_name, file_url, width, height,
+                  public_id, content_sha256, storage_key, file_name, file_url, width, height,
                   'ok', NULL, category_id, id
                 FROM upload_sessions
                 WHERE status = 'pending'
@@ -1538,12 +1576,28 @@ export function createGalleryRepository(database) {
       });
     },
 
-    async upsertImage({ storageKey, fileName, fileUrl, width, height, syncStatus, note = null, categoryId = null }) {
+    async upsertImage({
+      publicId = globalThis.crypto.randomUUID(),
+      contentSha256 = null,
+      storageKey,
+      fileName,
+      fileUrl,
+      width,
+      height,
+      syncStatus,
+      note = null,
+      categoryId = null,
+    }) {
+      const normalizedPublicId = normalizePublicId(publicId);
+      const normalizedContentSha256 = normalizeContentSha256(contentSha256);
       await run(
         database,
         `
-          INSERT INTO images (storage_key, file_name, file_url, width, height, sync_status, note, category_id)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          INSERT INTO images (
+            public_id, content_sha256, storage_key, file_name, file_url,
+            width, height, sync_status, note, category_id
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(storage_key) DO UPDATE SET
             file_name = excluded.file_name,
             file_url = excluded.file_url,
@@ -1552,9 +1606,21 @@ export function createGalleryRepository(database) {
             sync_status = excluded.sync_status,
             note = excluded.note,
             category_id = excluded.category_id,
+            content_sha256 = COALESCE(excluded.content_sha256, images.content_sha256),
             updated_at = CURRENT_TIMESTAMP
         `,
-        [storageKey, fileName, fileUrl, width ?? null, height ?? null, syncStatus ?? "ok", note, categoryId ?? null],
+        [
+          normalizedPublicId,
+          normalizedContentSha256,
+          storageKey,
+          fileName,
+          fileUrl,
+          width ?? null,
+          height ?? null,
+          syncStatus ?? "ok",
+          note,
+          categoryId ?? null,
+        ],
       );
 
       return await first(
@@ -1585,6 +1651,23 @@ export function createGalleryRepository(database) {
         return null;
       }
 
+      return attachTagNames([mapImageRow(image)], await getImageTagRows(database, [image.id]))[0];
+    },
+
+    async getImageByPublicId(publicId) {
+      const normalizedPublicId = normalizePublicId(publicId);
+      const image = await first(
+        database,
+        `
+          SELECT ${SELECT_IMAGE_COLUMNS}
+          FROM images
+          LEFT JOIN categories ON categories.id = images.category_id
+          WHERE images.public_id = ?
+        `,
+        [normalizedPublicId],
+      );
+
+      if (!image) return null;
       return attachTagNames([mapImageRow(image)], await getImageTagRows(database, [image.id]))[0];
     },
 
@@ -1621,6 +1704,102 @@ export function createGalleryRepository(database) {
         [JSON.stringify(normalizedImageIds)],
       );
       return normalizeIntegerIds(rows.map((row) => row.id));
+    },
+
+    async setImageContentHashes(assignments) {
+      const normalized = (Array.isArray(assignments) ? assignments : []).map((assignment) => ({
+        imageId: Number(assignment?.imageId),
+        expectedStorageKey: String(assignment?.expectedStorageKey ?? "").trim(),
+        expectedFileUrl: String(assignment?.expectedFileUrl ?? "").trim(),
+        contentSha256: normalizeContentSha256(assignment?.contentSha256, { required: true }),
+      }));
+      if (!normalized.length || normalized.length > 100) {
+        throw new RangeError("Content hash updates require between 1 and 100 images.");
+      }
+      if (normalized.some((assignment) => !Number.isInteger(assignment.imageId)
+        || assignment.imageId <= 0
+        || !assignment.expectedStorageKey
+        || !assignment.expectedFileUrl)) {
+        throw repositoryError("INVALID_CONTENT_HASH_ASSIGNMENT", "Every content hash update requires an image ID and expected file identity.");
+      }
+      if (new Set(normalized.map((assignment) => assignment.imageId)).size !== normalized.length) {
+        throw repositoryError("DUPLICATE_CONTENT_HASH_ASSIGNMENT", "Each image may appear only once in a content hash batch.");
+      }
+
+      const assignmentsJson = JSON.stringify(normalized);
+      const existingRows = await all(
+        database,
+        `
+          SELECT id, storage_key AS storageKey, file_url AS fileUrl
+          FROM images
+          WHERE id IN (
+            SELECT CAST(json_extract(value, '$.imageId') AS INTEGER)
+            FROM json_each(?)
+          )
+        `,
+        [assignmentsJson],
+      );
+      const existingById = new Map(existingRows.map((row) => [Number(row.id), row]));
+      const missingImageIds = normalized
+        .filter((assignment) => !existingById.has(assignment.imageId))
+        .map((assignment) => assignment.imageId);
+      if (missingImageIds.length) {
+        throw repositoryError("IMAGE_NOT_FOUND", "One or more images do not exist.", { missingImageIds });
+      }
+      const changed = normalized.find((assignment) => {
+        const current = existingById.get(assignment.imageId);
+        return current.storageKey !== assignment.expectedStorageKey
+          || current.fileUrl !== assignment.expectedFileUrl;
+      });
+      if (changed) {
+        throw repositoryError("IMAGE_IDENTITY_CHANGED", "An image moved while its content hash was being calculated.", {
+          imageId: changed.imageId,
+        });
+      }
+
+      await run(
+        database,
+        `
+          WITH assignments AS (
+            SELECT
+              CAST(json_extract(value, '$.imageId') AS INTEGER) AS image_id,
+              json_extract(value, '$.contentSha256') AS content_sha256
+            FROM json_each(?)
+          )
+          UPDATE images
+          SET
+            content_sha256 = (
+              SELECT assignments.content_sha256
+              FROM assignments
+              WHERE assignments.image_id = images.id
+            ),
+            updated_at = CURRENT_TIMESTAMP
+          WHERE id IN (SELECT image_id FROM assignments)
+        `,
+        [assignmentsJson],
+      );
+
+      const verifiedRows = await all(
+        database,
+        `
+          SELECT id AS imageId, content_sha256 AS contentSha256
+          FROM images
+          WHERE id IN (
+            SELECT CAST(json_extract(value, '$.imageId') AS INTEGER)
+            FROM json_each(?)
+          )
+          ORDER BY id
+        `,
+        [assignmentsJson],
+      );
+      const actualById = new Map(verifiedRows.map((row) => [Number(row.imageId), row.contentSha256]));
+      const mismatch = normalized.find((assignment) => actualById.get(assignment.imageId) !== assignment.contentSha256);
+      if (mismatch) {
+        throw repositoryError("IMAGE_HASH_VERIFICATION_FAILED", "The saved image content hash did not match the expected value.", {
+          imageId: mismatch.imageId,
+        });
+      }
+      return normalized;
     },
 
     async listImages() {

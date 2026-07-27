@@ -69,6 +69,24 @@ export async function measureImageFile(file, {
   });
 }
 
+export async function calculateFileSha256(file, cryptoImpl = globalThis.crypto) {
+  if (typeof file?.arrayBuffer !== "function" || typeof cryptoImpl?.subtle?.digest !== "function") {
+    throw new Error("当前浏览器无法计算图片内容哈希。");
+  }
+  const digest = await cryptoImpl.subtle.digest("SHA-256", await file.arrayBuffer());
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+export async function inspectImageFile(file, dependencies = {}) {
+  const [dimensions, contentSha256] = await Promise.all([
+    measureImageFile(file, dependencies),
+    calculateFileSha256(file, dependencies.cryptoImpl ?? globalThis.crypto),
+  ]);
+  return { ...dimensions, contentSha256 };
+}
+
 function errorText(error) {
   return error?.message || String(error || "上传失败");
 }
@@ -115,6 +133,7 @@ export function createUploadRunner({
         Object.assign(task.draft, {
           width: Number.isSafeInteger(width) && width > 0 ? width : null,
           height: Number.isSafeInteger(height) && height > 0 ? height : null,
+          ...(dimensions?.contentSha256 ? { contentSha256: dimensions.contentSha256 } : {}),
         });
         task.prepared = true;
       } catch (error) {

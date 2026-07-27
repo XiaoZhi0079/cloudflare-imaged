@@ -245,6 +245,7 @@ export async function processUploadManifest(
               size: entry.metadata.size,
               width: entry.metadata.width,
               height: entry.metadata.height,
+              contentSha256: entry.metadata.contentSha256,
             })),
             null,
             null,

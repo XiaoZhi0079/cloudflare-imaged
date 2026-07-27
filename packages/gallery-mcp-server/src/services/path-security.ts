@@ -1,3 +1,5 @@
+import { createReadStream } from "node:fs";
+import { createHash } from "node:crypto";
 import { realpath, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
@@ -14,6 +16,12 @@ const MIME_BY_EXTENSION: Record<string, string> = {
   ".png": "image/png",
   ".webp": "image/webp",
 };
+
+async function hashFileSha256(filePath: string): Promise<string> {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(filePath)) hash.update(chunk);
+  return hash.digest("hex");
+}
 
 function isInsideRoot(candidate: string, root: string): boolean {
   const relative = path.relative(root, candidate);
@@ -106,6 +114,7 @@ export async function inspectUploadFileMetadata(
     size: fileStat.size,
     width,
     height,
+    contentSha256: await hashFileSha256(absolutePath),
   };
 }
 

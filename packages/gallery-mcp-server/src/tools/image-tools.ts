@@ -6,21 +6,14 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import { GalleryMcpError, toToolError } from "../errors.js";
 import { runTool } from "../response.js";
-import type { GalleryMcpConfig, ResponseFormat, TagSelection, UploadManifestItem } from "../types.js";
+import type { GalleryMcpConfig, ResponseFormat, UploadManifestItem } from "../types.js";
 import { GalleryApiClient } from "../services/gallery-client.js";
 import { processUploadManifest } from "../services/manifest-service.js";
 import { inspectUploadFile } from "../services/path-security.js";
 import { TaxonomyService } from "../services/taxonomy-service.js";
 import { uploadOneImage } from "../services/upload-service.js";
+import { internalTagSelections, ResponseFormatSchema, TagSelectionsSchema } from "./tag-schemas.js";
 
-const ResponseFormat = z.enum(["json", "markdown"]).default("json");
-const TagIds = z.array(z.number().int().positive()).min(1).max(100);
-const TagSelectionSchema = z.object({
-  group_id: z.number().int().positive().describe("Parent tag group ID from gallery_get_taxonomy."),
-  tag_ids: TagIds.describe("Child tag IDs that belong to this parent group."),
-}).strict();
-const TagSelections = z.array(TagSelectionSchema).min(1).max(50)
-  .describe("Grouped child tag selections. Each parent group may appear only once.");
 const ManifestItemSchema = z.object({
   client_item_id: z.string().trim().min(1).max(100)
     .describe("Caller-defined stable ID used to correlate this item with the result."),
@@ -28,7 +21,7 @@ const ManifestItemSchema = z.object({
     .describe("Local image path under GALLERY_UPLOAD_ROOTS."),
   directory_id: z.number().int().positive()
     .describe("Upload directory ID for this image."),
-  tag_selections: TagSelections,
+  tag_selections: TagSelectionsSchema,
 }).strict();
 const ManifestItems = z.array(ManifestItemSchema).min(1).max(50).superRefine((items, context) => {
   const seen = new Set<string>();
@@ -44,19 +37,24 @@ const ManifestItems = z.array(ManifestItemSchema).min(1).max(50).superRefine((it
   }
 });
 
-type ExternalTagSelection = z.infer<typeof TagSelectionSchema>;
-
-function internalTagSelections(selections: ExternalTagSelection[]): TagSelection[] {
-  return selections.map((selection) => ({
-    groupId: selection.group_id,
-    tagIds: selection.tag_ids,
-  }));
-}
-
 interface ImageToolDependencies {
   api: GalleryApiClient;
   taxonomy: TaxonomyService;
   config: GalleryMcpConfig;
+}
+
+const ImageIdentifierFields = {
+  image_id: z.number().int().positive().optional().describe("Internal numeric Gallery image ID."),
+  public_id: z.string().uuid().optional().describe("Permanent public Gallery image UUID."),
+};
+
+function requireOneImageIdentifier(
+  value: { image_id?: number | undefined; public_id?: string | undefined },
+  context: z.core.$RefinementCtx,
+): void {
+  if ((value.image_id === undefined) === (value.public_id === undefined)) {
+    context.addIssue({ code: "custom", message: "Provide exactly one image_id or public_id." });
+  }
 }
 
 export function registerImageTools(server: McpServer, dependencies: ImageToolDependencies): void {
@@ -66,9 +64,9 @@ export function registerImageTools(server: McpServer, dependencies: ImageToolDep
     "gallery_health_check",
     {
       title: "Check Gallery MCP Connection",
-      description: "Verify the configured Gallery API key, D1-backed taxonomy, and upload configuration without uploading a file.",
+      description: "Verify the configured Gallery API key, D1-backed taxonomy, and local-root configuration without uploading a file.",
       inputSchema: z.object({
-        response_format: ResponseFormat.describe("Return JSON or a Markdown code block."),
+        response_format: ResponseFormatSchema.describe("Return JSON or a Markdown code block."),
       }).strict(),
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -80,6 +78,7 @@ export function registerImageTools(server: McpServer, dependencies: ImageToolDep
         tag_group_count: current.tagGroups.length,
         tag_count: current.tags.length,
         directory_count: current.categories.length,
+        local_roots_configured: config.uploadRoots.length > 0,
         upload_roots_configured: config.uploadRoots.length > 0,
       };
     }),
@@ -94,7 +93,7 @@ export function registerImageTools(server: McpServer, dependencies: ImageToolDep
         query: z.string().trim().max(200).default("").describe("Optional filename or tag search."),
         limit: z.number().int().min(1).max(100).default(20).describe("Maximum results."),
         offset: z.number().int().min(0).default(0).describe("Number of matching results to skip."),
-        response_format: ResponseFormat.describe("Return JSON or a Markdown code block."),
+        response_format: ResponseFormatSchema.describe("Return JSON or a Markdown code block."),
       }).strict(),
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
@@ -116,45 +115,45 @@ export function registerImageTools(server: McpServer, dependencies: ImageToolDep
     "gallery_get_image",
     {
       title: "Get Gallery Image",
-      description: "Get one image's metadata by numeric Gallery image ID. This does not download or inspect the image content.",
+      description: "Get one image's metadata by permanent public_id or legacy numeric image_id. This does not download or inspect the image content.",
       inputSchema: z.object({
-        image_id: z.number().int().positive().describe("Gallery image ID."),
-        response_format: ResponseFormat.describe("Return JSON or a Markdown code block."),
-      }).strict(),
+        ...ImageIdentifierFields,
+        response_format: ResponseFormatSchema.describe("Return JSON or a Markdown code block."),
+      }).strict().superRefine(requireOneImageIdentifier),
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    async ({ image_id, response_format }) => runTool(response_format as ResponseFormat, async () => {
-      return { image: await api.getImage(image_id) };
+    async ({ image_id, public_id, response_format }) => runTool(response_format as ResponseFormat, async () => {
+      return { image: await api.getImage(public_id ?? image_id!) };
     }),
   );
 
   server.registerTool(
-    "gallery_set_image_tags",
+    "gallery_set_remote_image_tags",
     {
-      title: "Set Gallery Image Tags",
-      description: "Replace all child tags on one existing image. Every tag is declared under its parent tag group and the relationship is validated before mutation.",
+      title: "Set Remote Gallery Image Tags",
+      description: "Replace all child tags on one ONLINE Gallery image by permanent public_id or legacy numeric image_id. This tool never reads or writes local image sidecars.",
       inputSchema: z.object({
-        image_id: z.number().int().positive().describe("Gallery image ID."),
-        tag_selections: TagSelections.describe("Complete replacement selection grouped by parent tag group."),
-        response_format: ResponseFormat.describe("Return JSON or a Markdown code block."),
-      }).strict(),
+        ...ImageIdentifierFields,
+        tag_selections: TagSelectionsSchema.describe("Complete remote replacement selection grouped by parent tag group."),
+        response_format: ResponseFormatSchema.describe("Return JSON or a Markdown code block."),
+      }).strict().superRefine(requireOneImageIdentifier),
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
     },
-    async ({ image_id, tag_selections, response_format }) => runTool(response_format as ResponseFormat, async () => {
+    async ({ image_id, public_id, tag_selections, response_format }) => runTool(response_format as ResponseFormat, async () => {
       const tagIds = await taxonomy.validateTagSelections(internalTagSelections(tag_selections));
-      return await api.setImageTags(image_id, tagIds);
+      return await api.setImageTags(public_id ?? image_id!, tagIds);
     }),
   );
 
   server.registerTool(
-    "gallery_set_image_tags_batch",
+    "gallery_set_remote_image_tags_batch",
     {
-      title: "Set Tags on Multiple Gallery Images",
-      description: "Atomically replace different complete tag sets on up to 100 images in one Gallery request. Every child tag remains grouped under its parent for validation.",
+      title: "Set Tags on Multiple Remote Gallery Images",
+      description: "Atomically replace complete tag sets on up to 100 existing ONLINE Gallery images. This tool never reads or writes local image sidecars. Use gallery_set_local_image_tags_batch for local-only files.",
       inputSchema: z.object({
         assignments: z.array(z.object({
           image_id: z.number().int().positive().describe("Gallery image ID."),
-          tag_selections: TagSelections.describe("Complete replacement tag selection for this image."),
+          tag_selections: TagSelectionsSchema.describe("Complete remote replacement tag selection for this image."),
         }).strict()).min(1).max(100).superRefine((assignments, context) => {
           const seen = new Set<number>();
           for (const [index, assignment] of assignments.entries()) {
@@ -164,7 +163,7 @@ export function registerImageTools(server: McpServer, dependencies: ImageToolDep
             seen.add(assignment.image_id);
           }
         }),
-        response_format: ResponseFormat.describe("Return JSON or a Markdown code block."),
+        response_format: ResponseFormatSchema.describe("Return JSON or a Markdown code block."),
       }).strict(),
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
     },
@@ -190,17 +189,17 @@ export function registerImageTools(server: McpServer, dependencies: ImageToolDep
   const uploadInput = z.object({
     local_path: z.string().trim().min(1).max(2048).describe("Absolute or relative local image path under GALLERY_UPLOAD_ROOTS."),
     directory_id: z.number().int().positive().describe("Upload directory ID from gallery_get_taxonomy directories."),
-    tag_selections: TagSelections,
+    tag_selections: TagSelectionsSchema,
     retry_upload_id: z.string().uuid().optional().describe("Reuse only the upload_id returned after an interrupted R2 PUT."),
     operation_id: z.string().uuid().optional().describe("Optional caller operation ID for correlated logs."),
-    response_format: ResponseFormat.describe("Return JSON or a Markdown code block."),
+    response_format: ResponseFormatSchema.describe("Return JSON or a Markdown code block."),
   }).strict();
 
   server.registerTool(
     "gallery_upload_image",
     {
       title: "Upload One Gallery Image",
-      description: "Upload one local image end-to-end: validate the path and dimensions, request a short-lived R2 URL, upload directly to R2, and complete the Gallery D1 record. The Agent never receives the signed URL.",
+      description: "CREATE A NEW ONLINE GALLERY RECORD by uploading one local image to R2 and completing D1 metadata. Do not use this for local-only labeling; use gallery_set_local_image_tags instead.",
       inputSchema: uploadInput,
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     },
@@ -231,12 +230,12 @@ export function registerImageTools(server: McpServer, dependencies: ImageToolDep
     "gallery_upload_images",
     {
       title: "Upload Multiple Gallery Images",
-      description: "Upload up to 12 local images sequentially with the same directory and tag selection. One failure does not stop the remaining files; inspect each item result and retry only failures.",
+      description: "CREATE NEW ONLINE GALLERY RECORDS by uploading up to 12 local images. Do not use this for local-only labeling; use gallery_set_local_image_tags_batch instead.",
       inputSchema: z.object({
         local_paths: z.array(z.string().trim().min(1).max(2048)).min(1).max(12).describe("Local image paths under GALLERY_UPLOAD_ROOTS."),
         directory_id: z.number().int().positive().describe("Upload directory ID shared by every file."),
-        tag_selections: TagSelections.describe("Grouped child tag selection shared by every file."),
-        response_format: ResponseFormat.describe("Return JSON or a Markdown code block."),
+        tag_selections: TagSelectionsSchema.describe("Grouped child tag selection shared by every file."),
+        response_format: ResponseFormatSchema.describe("Return JSON or a Markdown code block."),
       }).strict(),
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     },
@@ -274,14 +273,14 @@ export function registerImageTools(server: McpServer, dependencies: ImageToolDep
     "gallery_upload_manifest",
     {
       title: "Upload Gallery Manifest",
-      description: "Validate and optionally upload up to 50 local images where each item has its own directory and grouped child-tag selection. The complete manifest is preflighted before the first upload; dry_run validates paths, dimensions, directories, and parent-child tag relationships without mutating Gallery.",
+      description: "Validate and optionally CREATE NEW ONLINE GALLERY RECORDS for up to 50 local images. dry_run does not upload; a normal run uploads to R2 and writes D1. Never use a normal run for local-only labeling.",
       inputSchema: z.object({
         items: ManifestItems.describe("Images to validate and upload."),
         continue_on_error: z.boolean().default(true).describe("When true, continue other items after one item fails. When false, stop uploads after the first failure."),
         dry_run: z.boolean().default(false).describe("Validate every item and report dimensions without uploading."),
         result_detail: z.enum(["summary", "failures", "all"]).default("failures")
           .describe("Bound response size: summary returns counts, failures adds failed items, and all includes every item."),
-        response_format: ResponseFormat.describe("Return JSON or a Markdown code block."),
+        response_format: ResponseFormatSchema.describe("Return JSON or a Markdown code block."),
       }).strict(),
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
     },
@@ -314,8 +313,8 @@ export function registerImageTools(server: McpServer, dependencies: ImageToolDep
         width: z.number().int().positive().max(100000),
         height: z.number().int().positive().max(100000),
         directory_id: z.number().int().positive().describe("Upload directory ID from the original request."),
-        tag_selections: TagSelections.describe("Grouped child tag selections from the original request."),
-        response_format: ResponseFormat.describe("Return JSON or a Markdown code block."),
+        tag_selections: TagSelectionsSchema.describe("Grouped child tag selections from the original request."),
+        response_format: ResponseFormatSchema.describe("Return JSON or a Markdown code block."),
       }).strict(),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },

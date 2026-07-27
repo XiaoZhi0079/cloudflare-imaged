@@ -40,6 +40,8 @@ CREATE TABLE IF NOT EXISTS images (
   note TEXT,
   category_id INTEGER,
   upload_id TEXT,
+  public_id TEXT,
+  content_sha256 TEXT,
   FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL
 );
 
@@ -106,6 +108,8 @@ CREATE TABLE IF NOT EXISTS upload_sessions (
   expires_at TEXT NOT NULL DEFAULT (datetime('now', '+1 hour')),
   operation_id TEXT,
   client_item_id TEXT,
+  public_id TEXT,
+  content_sha256 TEXT,
   FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL,
   FOREIGN KEY (image_id) REFERENCES images(id) ON DELETE CASCADE
 );
@@ -118,6 +122,8 @@ CREATE INDEX IF NOT EXISTS idx_images_file_id ON images(storage_key);
 CREATE INDEX IF NOT EXISTS idx_images_category_id ON images(category_id);
 CREATE INDEX IF NOT EXISTS idx_images_created_id ON images(created_at DESC, id DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_images_upload_id ON images(upload_id) WHERE upload_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_images_public_id ON images(public_id) WHERE public_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_images_content_sha256 ON images(content_sha256) WHERE content_sha256 IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_image_tags_image_id ON image_tags(image_id);
 CREATE INDEX IF NOT EXISTS idx_image_tags_tag_id ON image_tags(tag_id);
 CREATE INDEX IF NOT EXISTS idx_featured_images_order ON featured_images(sort_order, image_id);
@@ -127,3 +133,4 @@ CREATE INDEX IF NOT EXISTS idx_album_images_order ON album_images(album_id, sort
 CREATE INDEX IF NOT EXISTS idx_album_images_image_id ON album_images(image_id, album_id);
 CREATE INDEX IF NOT EXISTS idx_upload_sessions_status_expiry ON upload_sessions(status, expires_at);
 CREATE INDEX IF NOT EXISTS idx_upload_sessions_operation ON upload_sessions(operation_id, client_item_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_upload_sessions_public_id ON upload_sessions(public_id) WHERE public_id IS NOT NULL;

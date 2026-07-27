@@ -43,6 +43,9 @@ export interface Category {
 
 export interface GalleryImage {
   id: number;
+  publicId: string;
+  contentSha256?: string | null;
+  storageKey?: string;
   fileName: string;
   fileUrl: string;
   width: number | null;
@@ -74,10 +77,12 @@ export interface UploadDraft {
   size: number;
   width: number;
   height: number;
+  contentSha256: string;
 }
 
 export interface UploadDescriptor {
   uploadId: string;
+  publicId: string;
   operationId: string;
   clientItemId?: string | null;
   storageKey: string;

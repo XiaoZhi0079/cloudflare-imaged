@@ -30,6 +30,7 @@ export async function uploadOneImage(
     size: file.size,
     width: file.width,
     height: file.height,
+    contentSha256: file.contentSha256,
     ...(context.clientItemId ? { clientItemId: context.clientItemId } : {}),
   };
   const uploads = await api.initUpload([draft], selection.directoryId, selection.tagIds, {

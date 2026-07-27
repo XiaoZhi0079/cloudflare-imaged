@@ -1,8 +1,8 @@
 {
   "name": "gallery-mcp-server",
-  "version": "0.4.0",
+  "version": "0.6.0",
   "private": true,
-  "description": "Local MCP server for autonomous Gallery administration and uploads",
+  "description": "MCP server for local image sidecar labels and explicit remote Gallery administration",
   "type": "module",
   "main": "dist/index.js",
   "bin": {

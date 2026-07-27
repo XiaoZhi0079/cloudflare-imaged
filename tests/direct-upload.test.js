@@ -10,6 +10,8 @@ import { onRequest as adminUploadCompleteHandler } from "../functions/api/admin/
 import { createTestDatabase, enforceBoundParameterLimit } from "./helpers/test-database.js";
 import { copyR2Object, R2RequestError } from "../src/server/r2-direct-upload.js";
 
+const TEST_SHA256 = "a".repeat(64);
+
 function createMockBucket() {
   const objects = new Map();
 
@@ -83,6 +85,7 @@ test("admin upload init handler returns direct-upload descriptors for each selec
             size: 12345,
             width: 900,
             height: 1350,
+            contentSha256: TEST_SHA256,
           },
         ],
       }),
@@ -155,6 +158,7 @@ test("admin upload init reserves a 20-image heterogeneous batch within a fixed D
     size: 12345,
     width: 1920,
     height: 1080,
+    contentSha256: TEST_SHA256,
     categoryId: category.id,
     tagIds: [tag.id],
   }));
@@ -277,11 +281,14 @@ test("admin upload complete handler stores image records after direct upload suc
   });
 
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), {
+  const responsePayload = await response.json();
+  assert.match(responsePayload.images[0].publicId, /^[0-9a-f-]{36}$/);
+  assert.deepEqual(responsePayload, {
     uploadedCount: 1,
     images: [
       {
         id: 1,
+        publicId: responsePayload.images[0].publicId,
         fileName: "campus-01.webp",
         fileUrl: "https://gallery.example.com/file/gallery/campus-01.webp",
         width: 900,
@@ -416,7 +423,7 @@ test("direct upload completion is idempotent for the same upload ID", async () =
       headers: { "content-type": "application/json", "x-gallery-admin-key": "gallery-secret" },
       body: JSON.stringify({
         tagIds: [tag.id],
-        files: [{ uploadId, name: "idempotent.webp", type: "image/webp", size: 3, width: 1920, height: 1080 }],
+        files: [{ uploadId, name: "idempotent.webp", type: "image/webp", size: 3, width: 1920, height: 1080, contentSha256: TEST_SHA256 }],
       }),
     }),
   });
@@ -466,7 +473,7 @@ test("upload init rejects a different session targeting a reserved storage key",
       headers: { "content-type": "application/json", "x-gallery-admin-key": "gallery-secret" },
       body: JSON.stringify({
         tagIds: [tag.id],
-        files: [{ uploadId, name: "reserved.webp", type: "image/webp", size: 3, width: 1920, height: 1080 }],
+        files: [{ uploadId, name: "reserved.webp", type: "image/webp", size: 3, width: 1920, height: 1080, contentSha256: TEST_SHA256 }],
       }),
     }),
   });
@@ -491,7 +498,7 @@ test("upload completion rejects changed tags without mutating D1", async () => {
       headers: { "content-type": "application/json", "x-gallery-admin-key": "gallery-secret" },
       body: JSON.stringify({
         tagIds: [firstTag.id],
-        files: [{ uploadId, name: "immutable.webp", type: "image/webp", size: 3, width: 1920, height: 1080 }],
+        files: [{ uploadId, name: "immutable.webp", type: "image/webp", size: 3, width: 1920, height: 1080, contentSha256: TEST_SHA256 }],
       }),
     }),
   });

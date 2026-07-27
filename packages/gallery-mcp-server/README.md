@@ -1,6 +1,6 @@
 # Gallery MCP Server
 
-`gallery-mcp-server` exposes the existing Gallery administration APIs as local MCP tools. An external Agent analyzes images and chooses tags; this server validates the requested actions, manages Gallery credentials, and performs direct R2 uploads without exposing signed URLs or image bytes to the model context.
+`gallery-mcp-server` exposes strictly separated local-file labeling and online Gallery administration tools. An external Agent analyzes images and chooses tags; this server validates grouped taxonomy selections. Local labeling writes sidecar JSON without uploading, while explicitly named remote/upload tools mutate Gallery.
 
 ## Requirements
 
@@ -26,7 +26,7 @@ $env:GALLERY_ADMIN_KEY_FILE = "C:\Users\YourName\.mcp-secrets\gallery_admin_key.
 $env:GALLERY_UPLOAD_ROOTS = "D:\GoodTry"
 ```
 
-Set exactly one of `GALLERY_ADMIN_KEY_FILE` or `GALLERY_ADMIN_KEY`. The file option is recommended because it keeps the secret out of MCP client configuration. `GALLERY_UPLOAD_ROOTS` is required only for upload tools. Every local path is resolved through the filesystem and must remain inside one of these roots, including through symlinks.
+Set exactly one of `GALLERY_ADMIN_KEY_FILE` or `GALLERY_ADMIN_KEY`. The file option is recommended because it keeps the secret out of MCP client configuration. `GALLERY_UPLOAD_ROOTS` is required for local sidecar tools and upload tools. Every local path is resolved through the filesystem and must remain inside one of these roots, including through symlinks.
 
 Optional limits:
 
@@ -66,9 +66,12 @@ Configure secrets through the Agent application's protected environment settings
 | `gallery_ensure_tag` | Reuses or creates a child tag in an existing group. |
 | `gallery_health_check` | Checks credentials and taxonomy access without uploading. |
 | `gallery_list_images` | Lists filtered, paginated image metadata. |
-| `gallery_get_image` | Gets one image's metadata without downloading its content. |
-| `gallery_set_image_tags` | Replaces the tags on an existing image. |
-| `gallery_set_image_tags_batch` | Atomically replaces different tag sets on up to 100 images. |
+| `gallery_get_image` | Gets one image by permanent `public_id` or legacy numeric `image_id` without downloading content. |
+| `gallery_get_local_image_tags` | Reads a local image's adjacent `.gallery-tags.json` sidecar; no online mutation. |
+| `gallery_set_local_image_tags` | Writes local-only tags to an adjacent sidecar; never uploads. |
+| `gallery_set_local_image_tags_batch` | Writes local-only sidecars for up to 100 images; never uploads. |
+| `gallery_set_remote_image_tags` | Replaces tags on one online image by permanent `public_id` or legacy numeric `image_id`. |
+| `gallery_set_remote_image_tags_batch` | Atomically replaces tags on up to 100 existing online images. |
 | `gallery_upload_image` | Runs upload init, direct R2 PUT, and D1 completion for one file. |
 | `gallery_upload_images` | Uploads up to 12 files sequentially and isolates item failures. |
 | `gallery_upload_manifest` | Preflights up to 50 images, then uploads in bounded concurrent chunks with per-image directories and tags. |
@@ -76,7 +79,60 @@ Configure secrets through the Agent application's protected environment settings
 
 The server intentionally excludes deletion, file movement, tag deletion, and tag merging in this first version.
 
-Upload tools reserve a stable upload session before R2 receives bytes. Repeating the completion step with the same upload ID is idempotent, while a different upload targeting an occupied object key is rejected. `gallery_set_image_tags` remains destructive because it replaces the complete tag set.
+Upload tools calculate SHA-256 from the exact local file bytes before requesting an R2 URL. Gallery reserves a permanent `public_id`, the content hash, and a stable upload session before R2 receives bytes. Repeating completion with the same upload ID is idempotent, while a different upload targeting an occupied object key is rejected. Remote tag tools remain destructive because they replace complete online tag sets.
+
+## Local-only image tags
+
+Local and remote operations are intentionally impossible to confuse by parameter shape:
+
+- Local tools require `local_path` and never accept `image_id` or `directory_id`.
+- Single-image remote tools require exactly one `public_id` or legacy `image_id` and never accept `local_path`.
+- Upload tools require both a local path and an online `directory_id`; their descriptions explicitly state that they create online records.
+
+`gallery_set_local_image_tags` preserves the original image bytes. It atomically writes a deterministic sidecar named `<image-file>.gallery-tags.json` next to the image. The sidecar records `scope: "local-only"`, dimensions, grouped tag IDs and names, and an update timestamp. Repeating the same selection is idempotent and does not rewrite the sidecar.
+
+Single local image:
+
+```json
+{
+  "local_path": "D:/GoodTry/images/example.png",
+  "tag_selections": [
+    { "group_id": 1, "tag_ids": [20] },
+    { "group_id": 6, "tag_ids": [61] }
+  ],
+  "response_format": "json"
+}
+```
+
+Read local tags:
+
+```json
+{
+  "local_path": "D:/GoodTry/images/example.png",
+  "response_format": "json"
+}
+```
+
+Batch local images:
+
+```json
+{
+  "assignments": [
+    {
+      "local_path": "D:/GoodTry/images/001.png",
+      "tag_selections": [{ "group_id": 1, "tag_ids": [20] }]
+    },
+    {
+      "local_path": "D:/GoodTry/images/002.png",
+      "tag_selections": [{ "group_id": 1, "tag_ids": [20] }]
+    }
+  ],
+  "continue_on_error": true,
+  "response_format": "json"
+}
+```
+
+Local tools still read the current online taxonomy to validate parent-child relationships, but they have no Gallery write client and cannot create, upload, or change an online image record.
 
 ## Directory and tag model
 
@@ -100,7 +156,15 @@ Mutation tools deliberately do not accept a flat top-level `tag_ids` array. They
 
 The MCP server rejects unknown groups, unknown tags, duplicate groups, duplicate tags, and tags declared under the wrong parent. Only after validation does it flatten the child tag IDs for the existing Gallery REST API.
 
-## Recommended Agent workflow
+## Recommended local-only workflow
+
+1. Call `gallery_get_taxonomy`.
+2. Analyze the local image using the Agent's own vision capability.
+3. Call `gallery_set_local_image_tags` or its batch variant.
+4. Call `gallery_get_local_image_tags` when verification is needed.
+5. Do not call any `gallery_upload_*` tool unless the user explicitly requests an online upload.
+
+## Recommended online upload workflow
 
 1. Call `gallery_get_taxonomy`.
 2. Analyze the local image using the Agent's own vision capability.
@@ -108,7 +172,7 @@ The MCP server rejects unknown groups, unknown tags, duplicate groups, duplicate
 4. Call `gallery_ensure_tag` for every missing child tag.
 5. Refresh taxonomy IDs when any label was created.
 6. Call `gallery_upload_image` with the local path, one directory ID, and grouped tag selections.
-7. Use `gallery_get_image` to verify the resulting metadata when necessary.
+7. Preserve the returned `publicId`; use it with `gallery_get_image` to verify metadata when necessary.
 
 Do not ask the model to reproduce R2 upload URLs or manually call the two Gallery upload endpoints. The high-level upload tool owns that sequence.
 

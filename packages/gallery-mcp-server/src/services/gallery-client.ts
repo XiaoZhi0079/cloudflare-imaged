@@ -188,15 +188,15 @@ export class GalleryApiClient {
     return await this.request<ImagesPageResponse>(`api/admin/images?${params.toString()}`);
   }
 
-  async getImage(imageId: number): Promise<GalleryImage> {
-    const payload = await this.request<{ image: GalleryImage }>(`api/admin/images/${imageId}`);
+  async getImage(identifier: number | string): Promise<GalleryImage> {
+    const payload = await this.request<{ image: GalleryImage }>(`api/admin/images/${encodeURIComponent(String(identifier))}`);
     return payload.image;
   }
 
-  async setImageTags(imageId: number, tagIds: number[]): Promise<{ imageId: number; tagIds: number[] }> {
-    return await this.request<{ imageId: number; tagIds: number[] }>("api/admin/images/tag-assignments", {
+  async setImageTags(identifier: number | string, tagIds: number[]): Promise<{ imageId: number; publicId?: string; tagIds: number[] }> {
+    return await this.request<{ imageId: number; publicId?: string; tagIds: number[] }>("api/admin/images/tag-assignments", {
       method: "POST",
-      body: { imageId, tagIds },
+      body: typeof identifier === "number" ? { imageId: identifier, tagIds } : { publicId: identifier, tagIds },
       retry: false,
     });
   }

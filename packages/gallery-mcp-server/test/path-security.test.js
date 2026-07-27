@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -21,6 +22,7 @@ test("upload inspection accepts real images inside configured roots", async () =
     assert.equal(image.width, 2);
     assert.equal(image.height, 3);
     assert.ok(image.bytes.length > 0);
+    assert.equal(image.contentSha256, createHash("sha256").update(image.bytes).digest("hex"));
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -31,12 +31,15 @@ test("stdio MCP handshake exposes grouped-tag and manifest tools", async () => {
         "gallery_ensure_tag",
         "gallery_ensure_tag_group",
         "gallery_get_image",
+        "gallery_get_local_image_tags",
         "gallery_get_taxonomy",
         "gallery_health_check",
         "gallery_list_images",
         "gallery_resume_upload",
-        "gallery_set_image_tags",
-        "gallery_set_image_tags_batch",
+        "gallery_set_local_image_tags",
+        "gallery_set_local_image_tags_batch",
+        "gallery_set_remote_image_tags",
+        "gallery_set_remote_image_tags_batch",
         "gallery_upload_image",
         "gallery_upload_images",
         "gallery_upload_manifest",
@@ -56,9 +59,20 @@ test("stdio MCP handshake exposes grouped-tag and manifest tools", async () => {
     assert.ok(resumeSchema?.properties?.upload_id);
     assert.ok(resumeSchema?.required?.includes("upload_id"));
 
-    const setTagsSchema = response.tools.find((tool) => tool.name === "gallery_set_image_tags")?.inputSchema;
-    assert.ok(setTagsSchema?.properties?.tag_selections);
-    assert.equal(setTagsSchema?.properties?.tag_ids, undefined);
+    const localTagsSchema = response.tools.find((tool) => tool.name === "gallery_set_local_image_tags")?.inputSchema;
+    assert.ok(localTagsSchema?.properties?.local_path);
+    assert.ok(localTagsSchema?.properties?.tag_selections);
+    assert.equal(localTagsSchema?.properties?.image_id, undefined);
+    assert.equal(localTagsSchema?.properties?.directory_id, undefined);
+
+    const remoteTagsSchema = response.tools.find((tool) => tool.name === "gallery_set_remote_image_tags")?.inputSchema;
+    assert.ok(remoteTagsSchema?.properties?.image_id);
+    assert.ok(remoteTagsSchema?.properties?.tag_selections);
+    assert.equal(remoteTagsSchema?.properties?.local_path, undefined);
+    assert.equal(remoteTagsSchema?.properties?.tag_ids, undefined);
+
+    assert.equal(response.tools.some((tool) => tool.name === "gallery_set_image_tags"), false);
+    assert.equal(response.tools.some((tool) => tool.name === "gallery_set_image_tags_batch"), false);
 
     const manifestSchema = response.tools.find((tool) => tool.name === "gallery_upload_manifest")?.inputSchema;
     assert.ok(manifestSchema?.properties?.result_detail);

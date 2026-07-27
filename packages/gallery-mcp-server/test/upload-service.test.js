@@ -7,6 +7,7 @@ test("upload service keeps signing, R2 PUT, and D1 completion in order", async (
   const calls = [];
   const descriptor = {
     uploadId: "6af0b175-3c6b-4a20-a1ab-52b77fbab671",
+    publicId: "a9e03cb1-6fab-4e08-a623-579287246f30",
     storageKey: "elegant-beauty/example.png",
     fileName: "example.png",
     fileUrl: "https://gallery.example.com/file/elegant-beauty/example.png",
@@ -35,6 +36,7 @@ test("upload service keeps signing, R2 PUT, and D1 completion in order", async (
     size: 3,
     width: 2,
     height: 3,
+    contentSha256: "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81",
     bytes: Buffer.from([1, 2, 3]),
   };
 
@@ -45,6 +47,7 @@ test("upload service keeps signing, R2 PUT, and D1 completion in order", async (
   });
 
   assert.deepEqual(calls.map((call) => call[0]), ["init", "put", "complete"]);
+  assert.equal(calls[0][1][0].contentSha256, file.contentSha256);
   assert.equal(result.image.id, 42);
   assert.equal(result.storageKey, "elegant-beauty/example.png");
   assert.equal("uploadUrl" in result, false);
@@ -53,6 +56,7 @@ test("upload service keeps signing, R2 PUT, and D1 completion in order", async (
 test("upload service returns safe completion parameters after R2 succeeds", async () => {
   const descriptor = {
     uploadId: "6af0b175-3c6b-4a20-a1ab-52b77fbab671",
+    publicId: "a9e03cb1-6fab-4e08-a623-579287246f30",
     storageKey: "elegant-beauty/recover.png",
     fileName: "recover.png",
     fileUrl: "https://gallery.example.com/file/elegant-beauty/recover.png",
@@ -73,6 +77,7 @@ test("upload service returns safe completion parameters after R2 succeeds", asyn
     size: 3,
     width: 2,
     height: 3,
+    contentSha256: "039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81",
     bytes: Buffer.from([1, 2, 3]),
   };
 

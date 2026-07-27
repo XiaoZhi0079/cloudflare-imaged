@@ -124,6 +124,7 @@ export function toApiCategory(category) {
 export function toApiImage(image) {
   return {
     id: image.id,
+    publicId: image.publicId,
     fileName: image.fileName,
     fileUrl: image.fileUrl,
     width: image.width,
@@ -137,6 +138,7 @@ export function toApiImage(image) {
 export function toPublicImage(image) {
   return {
     id: image.id,
+    publicId: image.publicId,
     fileName: image.fileName,
     fileUrl: image.fileUrl,
     width: image.width,
@@ -188,6 +190,8 @@ export function toPublicAlbumSummary(album) {
 export function toAdminImage(image) {
   return {
     ...toApiImage(image),
+    storageKey: image.storageKey,
+    contentSha256: image.contentSha256 ?? null,
     syncStatus: image.syncStatus ?? "ok",
     note: image.note ?? null,
   };

@@ -4,7 +4,7 @@ import { createDialogHost } from "./dialogs.js";
 import { createLibraryState } from "./library-state.js?v=20260715-featured-filter-separation";
 import { createNotifier } from "./notifications.js";
 import { buildImagePreviewUrl, renderImageCard } from "./renderers/image-card.js?v=20260722-detail-drafts";
-import { createUploadRunner, describeUploadFailure, measureImageFile } from "./upload.js?v=20260726-upload-idempotency";
+import { createUploadRunner, describeUploadFailure, inspectImageFile } from "./upload.js?v=20260727-image-identity";
 import { buildImageVariantUrl } from "../image-variants.js?v=20260722-detail-drafts";
 
 const elements = {
@@ -1071,7 +1071,7 @@ function openUploadDialog() {
   const controls = { files, category, tagInputs, error, summary, tasks, start };
   const runner = createUploadRunner({
     batchSize: 12,
-    prepareFile: measureImageFile,
+    prepareFile: inspectImageFile,
     requestUploadUrls: async (batch, metadata) => {
       const payload = await client.request("/api/admin/images/upload/init", {
         method: "POST",

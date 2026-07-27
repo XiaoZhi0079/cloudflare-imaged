@@ -6,6 +6,8 @@ import { onRequest as adminUploadInitHandler } from "../functions/api/admin/imag
 import { onRequest as adminUploadCompleteHandler } from "../functions/api/admin/images/upload/complete.js";
 import { createTestDatabase } from "./helpers/test-database.js";
 
+const TEST_SHA256 = "a".repeat(64);
+
 function createMockBucket() {
   const objects = new Map();
 
@@ -69,7 +71,7 @@ test("admin upload init handler requires a category and uses its directory slug 
       },
       body: JSON.stringify({
         tagIds: [campus.id],
-        files: [{ name: "campus-01.webp", type: "image/webp", size: 12345 }],
+        files: [{ name: "campus-01.webp", type: "image/webp", size: 12345, contentSha256: TEST_SHA256 }],
       }),
     }),
   });
@@ -90,7 +92,7 @@ test("admin upload init handler requires a category and uses its directory slug 
       body: JSON.stringify({
         categoryId: scenery.id,
         tagIds: [campus.id],
-        files: [{ name: "campus-01.webp", type: "image/webp", size: 12345 }],
+        files: [{ name: "campus-01.webp", type: "image/webp", size: 12345, contentSha256: TEST_SHA256 }],
       }),
     }),
   });
@@ -135,11 +137,14 @@ test("admin upload complete handler stores image category metadata", async () =>
   });
 
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), {
+  const payload = await response.json();
+  assert.match(payload.images[0].publicId, /^[0-9a-f-]{36}$/);
+  assert.deepEqual(payload, {
     uploadedCount: 1,
     images: [
       {
         id: 1,
+        publicId: payload.images[0].publicId,
         fileName: "campus-01.webp",
         fileUrl: "https://gallery.example.com/file/sexy-beauty/campus-01.webp",
         width: 900,

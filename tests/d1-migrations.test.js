@@ -8,6 +8,7 @@ const albumsUrl = new URL("../migrations/0002_albums.sql", import.meta.url);
 const tagGroupsUrl = new URL("../migrations/0003_tag_groups.sql", import.meta.url);
 const uploadSessionsUrl = new URL("../migrations/0004_upload_sessions.sql", import.meta.url);
 const uploadOperationsUrl = new URL("../migrations/0005_upload_operations_and_paging.sql", import.meta.url);
+const imageIdentityUrl = new URL("../migrations/0006_image_identity_and_hash.sql", import.meta.url);
 const schemaUrl = new URL("../schema.sql", import.meta.url);
 
 const BUSINESS_TABLES = [
@@ -33,13 +34,16 @@ const BUSINESS_INDEXES = [
   "idx_image_tags_image_id",
   "idx_image_tags_tag_id",
   "idx_images_category_id",
+  "idx_images_content_sha256",
   "idx_images_created_id",
   "idx_images_file_id",
+  "idx_images_public_id",
   "idx_images_upload_id",
   "idx_tag_groups_order",
   "idx_tags_group_order",
   "idx_tags_visible_order",
   "idx_upload_sessions_operation",
+  "idx_upload_sessions_public_id",
   "idx_upload_sessions_status_expiry",
 ];
 
@@ -60,11 +64,24 @@ function normalizedObjects(database) {
       ORDER BY type, name
     `)
     .all()
-    .map((row) => ({
-      type: row.type,
-      name: row.name,
-      sql: row.sql.replace(/\s+/g, " ").replace(/\s+([,)])/g, "$1").trim().toLowerCase(),
-    }));
+    .map((row) => {
+      if (row.type !== "table") {
+        return {
+          type: row.type,
+          name: row.name,
+          sql: row.sql.replace(/\s+/g, " ").replace(/\s+([,)])/g, "$1").trim().toLowerCase(),
+        };
+      }
+      return {
+        type: row.type,
+        name: row.name,
+        columns: database.prepare(`PRAGMA table_info('${row.name.replaceAll("'", "''")}')`).all()
+          .map(({ name, type, notnull, dflt_value, pk }) => ({ name, type, notnull, dflt_value, pk })),
+        foreignKeys: database.prepare(`PRAGMA foreign_key_list('${row.name.replaceAll("'", "''")}')`).all()
+          .map(({ table, from, to, on_update, on_delete, match }) => ({ table, from, to, on_update, on_delete, match }))
+          .sort((left, right) => `${left.from}:${left.table}`.localeCompare(`${right.from}:${right.table}`)),
+      };
+    });
 }
 
 test("migrations prepare a fresh database and are idempotent", () => {
@@ -74,6 +91,7 @@ test("migrations prepare a fresh database and are idempotent", () => {
   const tagGroups = readFileSync(tagGroupsUrl, "utf8");
   const uploadSessions = readFileSync(uploadSessionsUrl, "utf8");
   const uploadOperations = readFileSync(uploadOperationsUrl, "utf8");
+  const imageIdentity = readFileSync(imageIdentityUrl, "utf8");
   const database = new DatabaseSync(":memory:");
 
   database.exec(baseline);
@@ -81,6 +99,7 @@ test("migrations prepare a fresh database and are idempotent", () => {
   database.exec(tagGroups);
   database.exec(uploadSessions);
   database.exec(uploadOperations);
+  database.exec(imageIdentity);
   database.exec(baseline);
   database.exec(albums);
 
@@ -113,6 +132,7 @@ test("schema snapshot and baseline migration define identical objects", () => {
   migrationDatabase.exec(readFileSync(tagGroupsUrl, "utf8"));
   migrationDatabase.exec(readFileSync(uploadSessionsUrl, "utf8"));
   migrationDatabase.exec(readFileSync(uploadOperationsUrl, "utf8"));
+  migrationDatabase.exec(readFileSync(imageIdentityUrl, "utf8"));
   snapshotDatabase.exec(readFileSync(schemaUrl, "utf8"));
 
   assert.deepEqual(normalizedObjects(migrationDatabase), normalizedObjects(snapshotDatabase));

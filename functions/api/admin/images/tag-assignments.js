@@ -22,14 +22,21 @@ export async function onRequest({ env, request }) {
   const body = await parseRequestJson(request);
   const repository = getRepository(env);
   const imageId = Number(body?.imageId);
-  if (!Number.isInteger(imageId) || imageId <= 0) {
-    return jsonResponse({ error: "imageId is required" }, 400);
+  const publicId = String(body?.publicId ?? "").trim();
+  const hasImageId = Number.isInteger(imageId) && imageId > 0;
+  const hasPublicId = Boolean(publicId);
+  if (hasImageId === hasPublicId) {
+    return jsonResponse({ error: "Provide exactly one imageId or publicId" }, 400);
   }
   const tagIds = normalizeTagIds(body.tagIds ?? []);
 
   let assignment;
   try {
-    assignment = await repository.replaceImageTags(imageId, tagIds);
+    const image = hasPublicId ? await repository.getImageByPublicId(publicId) : null;
+    if (hasPublicId && !image) {
+      return jsonResponse({ error: "Image not found", code: "IMAGE_NOT_FOUND" }, 404);
+    }
+    assignment = await repository.replaceImageTags(image?.id ?? imageId, tagIds);
   } catch (error) {
     if (error?.code === "IMAGE_NOT_FOUND") {
       return jsonResponse({ error: "Image not found", code: error.code }, 404);
@@ -45,6 +52,7 @@ export async function onRequest({ env, request }) {
 
   return jsonResponse({
     imageId: assignment.imageId,
+    publicId: hasPublicId ? publicId.toLowerCase() : undefined,
     tagIds: assignment.tagIds,
   });
 }

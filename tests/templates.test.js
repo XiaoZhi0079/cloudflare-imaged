@@ -452,7 +452,7 @@ test("changed admin assets use targeted cache-busting versions", () => {
     Array(libraryCardTagsReferences.length).fill(libraryCardTagsVersion),
   );
 
-  const uploadIdempotencyVersion = "20260726-upload-idempotency";
+  const uploadIdempotencyVersion = "20260727-image-identity";
   const uploadIdempotencyReferences = [
     [libraryEntry, /from "\.\/upload\.js\?v=([^"]+)"/, "upload.js"],
     [libraryHtml, /src="\/assets\/admin\/library-page\.js\?v=([^"]+)"/, "library-page.js"],
