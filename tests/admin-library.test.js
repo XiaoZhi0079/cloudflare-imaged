@@ -375,3 +375,18 @@ test("image uploads continue in a bounded background task panel", () => {
   assert.match(workbenchCss, /\.admin-upload-status-tasks\s*\{[^}]*max-height:min\(360px,46dvh\)[^}]*overflow:auto/s);
   assert.match(workbenchCss, /@media \(max-width:720px\)[\s\S]*\.admin-upload-status\s*\{[^}]*width:calc\(100vw - 16px\)/s);
 });
+
+test("image detail exposes copyable identity and direct browse and download URLs", () => {
+  const source = readFileSync(new URL("../public/assets/admin/library-page.js", import.meta.url), "utf8");
+  const workbenchCss = readFileSync(new URL("../public/assets/admin/workbench.css", import.meta.url), "utf8");
+
+  for (const label of ["数字 ID", "永久 ID", "SHA-256", "R2 路径", "浏览地址", "下载地址"]) {
+    assert.match(source, new RegExp(label));
+  }
+  assert.match(source, /navigator\.clipboard\.writeText\(value\)/);
+  assert.match(source, /buildDirectImageUrl\(image\.fileUrl\)/);
+  assert.match(source, /buildDownloadImageUrl\(image\.fileUrl\)/);
+  assert.match(source, /target\s*=\s*"_blank"/);
+  assert.match(workbenchCss, /\.detail-technical-row\s*\{[^}]*grid-template-columns:82px minmax\(0,1fr\) auto/s);
+  assert.match(workbenchCss, /@media \(max-width:720px\)[\s\S]*\.detail-technical-row\s*\{[^}]*grid-template-columns:minmax\(0,1fr\) auto/s);
+});

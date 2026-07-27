@@ -452,7 +452,7 @@ test("changed admin assets use targeted cache-busting versions", () => {
     Array(libraryCardTagsReferences.length).fill(libraryCardTagsVersion),
   );
 
-  const uploadIdempotencyVersion = "20260727-image-identity";
+  const uploadIdempotencyVersion = "20260727-technical-info";
   const uploadIdempotencyReferences = [
     [libraryEntry, /from "\.\/upload\.js\?v=([^"]+)"/, "upload.js"],
     [libraryHtml, /src="\/assets\/admin\/library-page\.js\?v=([^"]+)"/, "library-page.js"],
@@ -467,7 +467,7 @@ test("changed admin assets use targeted cache-busting versions", () => {
     Array(uploadIdempotencyReferences.length).fill(uploadIdempotencyVersion),
   );
 
-  const workbenchDialogVersion = "20260722-dialog-layer";
+  const workbenchDialogVersion = "20260727-technical-info";
   const workbenchDialogMatch = libraryHtml.match(/href="\/assets\/admin\/workbench\.css\?v=([^"]+)"/);
   assert.ok(workbenchDialogMatch, "workbench.css must include a cache-busting release version");
   assert.equal(workbenchDialogMatch[1], workbenchDialogVersion);

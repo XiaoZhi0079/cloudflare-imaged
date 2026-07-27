@@ -50,6 +50,7 @@ test("file handler serves images from the gallery bucket", async () => {
   assert.equal(response.headers.get("content-type"), "image/webp");
   assert.equal(response.headers.get("cache-control"), "public, max-age=3600, must-revalidate");
   assert.equal(response.headers.get("etag"), '"gallery-etag"');
+  assert.equal(response.headers.get("content-disposition"), null);
   assert.deepEqual(new Uint8Array(await response.arrayBuffer()), new Uint8Array([1, 2, 3]));
 });
 
@@ -71,6 +72,27 @@ test("file handler returns 304 when the R2 etag already matches", async () => {
   assert.equal(response.headers.get("etag"), '"version-2"');
   assert.equal(response.headers.get("cache-control"), "public, max-age=3600, must-revalidate");
   assert.equal(await response.text(), "");
+});
+
+test("file handler forces downloads with safe ASCII and UTF-8 filenames", async () => {
+  const bucket = createMockBucket();
+  await bucket.put("gallery/夏日 portrait.png", new Uint8Array([4, 5, 6]), {
+    httpMetadata: { contentType: "image/png" },
+  });
+
+  const response = await onRequest({
+    env: { GALLERY_BUCKET: bucket },
+    params: { path: ["gallery", "夏日 portrait.png"] },
+    request: new Request("https://gallery.example.com/file/gallery/%E5%A4%8F%E6%97%A5%20portrait.png?download=1"),
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("content-type"), "image/png");
+  assert.equal(
+    response.headers.get("content-disposition"),
+    "attachment; filename=\"__ portrait.png\"; filename*=UTF-8''%E5%A4%8F%E6%97%A5%20portrait.png",
+  );
+  assert.deepEqual(new Uint8Array(await response.arrayBuffer()), new Uint8Array([4, 5, 6]));
 });
 
 test("file handler prevents browsers from caching missing objects", async () => {

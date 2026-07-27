@@ -4,7 +4,8 @@ import { createDialogHost } from "./dialogs.js";
 import { createLibraryState } from "./library-state.js?v=20260715-featured-filter-separation";
 import { createNotifier } from "./notifications.js";
 import { buildImagePreviewUrl, renderImageCard } from "./renderers/image-card.js?v=20260722-detail-drafts";
-import { createUploadRunner, describeUploadFailure, inspectImageFile } from "./upload.js?v=20260727-image-identity";
+import { buildDirectImageUrl, buildDownloadImageUrl } from "./image-links.js?v=20260727-technical-info";
+import { createUploadRunner, describeUploadFailure, inspectImageFile } from "./upload.js?v=20260727-technical-info";
 import { buildImageVariantUrl } from "../image-variants.js?v=20260722-detail-drafts";
 
 const elements = {
@@ -448,6 +449,86 @@ function imageDimensionsDetail(image) {
   return details;
 }
 
+async function copyTechnicalValue(value, label) {
+  try {
+    await navigator.clipboard.writeText(value);
+    notifier.success(`已复制${label}`);
+  } catch {
+    notifier.error(`无法复制${label}`);
+  }
+}
+
+function technicalInfoRow(label, value, actions = []) {
+  const row = createElement("div", { className: "detail-technical-row" });
+  row.append(
+    createElement("span", { className: "detail-technical-label" }, label),
+    createElement("code", { className: "detail-technical-value", title: value }, value || "暂无"),
+  );
+  const actionGroup = createElement("div", { className: "detail-technical-actions" });
+  for (const action of actions) actionGroup.append(action);
+  row.append(actionGroup);
+  return row;
+}
+
+function technicalCopyButton(label, value) {
+  const button = createElement("button", {
+    type: "button",
+    className: "detail-technical-button",
+    "aria-label": `复制${label}`,
+    title: `复制${label}`,
+  }, "复制");
+  button.disabled = !value;
+  button.addEventListener("click", () => { void copyTechnicalValue(value, label); });
+  return button;
+}
+
+function technicalLink(label, href, text) {
+  const attributes = {
+    className: "detail-technical-button",
+    href: href || "#",
+    "aria-label": label === "浏览地址" ? "在新窗口浏览原图" : "下载原图",
+    title: label === "浏览地址" ? "在新窗口浏览原图" : "下载原图",
+    ...(href ? {} : { "aria-disabled": "true" }),
+  };
+  if (label === "浏览地址") {
+    attributes.target = "_blank";
+    attributes.rel = "noopener noreferrer";
+  }
+  return createElement("a", attributes, text);
+}
+
+function imageTechnicalInfo(image) {
+  const directUrl = buildDirectImageUrl(image.fileUrl);
+  const downloadUrl = buildDownloadImageUrl(image.fileUrl);
+  const section = createElement("section", {
+    className: "detail-technical",
+    "aria-labelledby": "detail-technical-title",
+  });
+  section.append(createElement("h3", { id: "detail-technical-title" }, "技术信息"));
+  const rows = createElement("div", { className: "detail-technical-list" });
+  const values = [
+    ["数字 ID", String(image.id ?? "")],
+    ["永久 ID", String(image.publicId ?? "")],
+    ["SHA-256", String(image.contentSha256 ?? "")],
+    ["R2 路径", String(image.storageKey ?? "")],
+  ];
+  for (const [label, value] of values) {
+    rows.append(technicalInfoRow(label, value, [technicalCopyButton(label, value)]));
+  }
+  rows.append(
+    technicalInfoRow("浏览地址", directUrl, [
+      technicalCopyButton("浏览地址", directUrl),
+      technicalLink("浏览地址", directUrl, "打开"),
+    ]),
+    technicalInfoRow("下载地址", downloadUrl, [
+      technicalCopyButton("下载地址", downloadUrl),
+      technicalLink("下载地址", downloadUrl, "下载"),
+    ]),
+  );
+  section.append(rows);
+  return section;
+}
+
 function openDetail(image, opener, { sequenceIds = null, focusField = true } = {}) {
   detailImageId = Number(image.id);
   if (opener) detailOpener = opener;
@@ -494,12 +575,13 @@ function openDetail(image, opener, { sequenceIds = null, focusField = true } = {
   appendGroupedTagChoices(tags, {
     selectedNames: new Set(state.getTags().filter((tag) => selectedTagIds.has(Number(tag.id))).map((tag) => tag.name)),
   });
+  const technicalInfo = imageTechnicalInfo(image);
   const error = createElement("p", { className: "admin-field-error", "aria-live": "polite" });
   const remove = createElement("button", { type: "button", className: "admin-button-danger" }, "删除图片");
   const save = createElement("button", { type: "submit", className: "admin-button-primary" }, "保存修改");
   const actions = createElement("div", { className: "detail-form-actions" });
   actions.append(remove, save);
-  form.append(nameLabel, categoryLabel, tags, error, actions);
+  form.append(nameLabel, categoryLabel, tags, technicalInfo, error, actions);
   const controls = {
     imageId: Number(image.id),
     fileName,

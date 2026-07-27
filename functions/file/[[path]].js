@@ -8,6 +8,18 @@ function notFoundResponse() {
   });
 }
 
+function downloadFileName(fileId) {
+  const original = fileId.split("/").at(-1) || "image";
+  const fallback = original
+    .replace(/[^\x20-\x7e]/g, "_")
+    .replace(/["\\]/g, "_")
+    .slice(0, 180) || "image";
+  const encoded = encodeURIComponent(original).replace(/['()*]/g, (character) => (
+    `%${character.charCodeAt(0).toString(16).toUpperCase()}`
+  ));
+  return `attachment; filename="${fallback}"; filename*=UTF-8''${encoded}`;
+}
+
 export async function onRequest({ env, params, request }) {
   const pathParts = Array.isArray(params?.path)
     ? params.path
@@ -33,6 +45,10 @@ export async function onRequest({ env, params, request }) {
   }
 
   headers.set("cache-control", FILE_CACHE_CONTROL);
+  const forceDownload = request ? new URL(request.url).searchParams.get("download") === "1" : false;
+  if (forceDownload) {
+    headers.set("content-disposition", downloadFileName(fileId));
+  }
   if (object.httpEtag) {
     headers.set("etag", object.httpEtag);
     const etags = (request?.headers.get("if-none-match") ?? "")
