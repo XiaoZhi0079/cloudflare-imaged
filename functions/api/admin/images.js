@@ -58,8 +58,11 @@ async function handleRequest({ env, request }) {
 
   if (request.method === "GET") {
     const url = new URL(request.url);
-    const paginated = ["query", "limit", "offset"].some((name) => url.searchParams.has(name));
+    const paginated = ["query", "file_name", "limit", "offset"].some((name) => url.searchParams.has(name));
     if (paginated) {
+      if (url.searchParams.has("query") && url.searchParams.has("file_name")) {
+        return jsonResponse({ error: "query and file_name cannot be combined" }, 400);
+      }
       const limit = url.searchParams.has("limit") ? Number(url.searchParams.get("limit")) : 50;
       const offset = url.searchParams.has("offset") ? Number(url.searchParams.get("offset")) : 0;
       if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
@@ -70,6 +73,7 @@ async function handleRequest({ env, request }) {
       }
       const page = await repository.listImagesPage({
         query: url.searchParams.get("query") ?? "",
+        fileNameQuery: url.searchParams.has("file_name") ? url.searchParams.get("file_name") ?? "" : null,
         limit,
         offset,
       });

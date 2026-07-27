@@ -165,6 +165,35 @@ test("listImagesPage reads only one page from a 1698-image library", async () =>
   assert.equal(executions[2].params.length, 50);
 });
 
+test("listImagesPage can restrict search to file names without tag false positives", async () => {
+  const database = createTestDb();
+  const repository = createGalleryRepository(database);
+  const matchingTag = await repository.createTag({ name: "dress-search", sortOrder: 1, isVisible: true });
+  const fileNameMatch = await repository.upsertImage({
+    storageKey: "gallery/dress-search-0001.png",
+    fileName: "dress-search-0001.png",
+    fileUrl: "/file/gallery/dress-search-0001.png",
+    width: 1920,
+    height: 1080,
+  });
+  const tagOnlyMatch = await repository.upsertImage({
+    storageKey: "gallery/unrelated-0002.png",
+    fileName: "unrelated-0002.png",
+    fileUrl: "/file/gallery/unrelated-0002.png",
+    width: 1920,
+    height: 1080,
+  });
+  await repository.replaceImageTags(tagOnlyMatch.id, [matchingTag.id]);
+
+  const generic = await repository.listImagesPage({ query: "dress-search", limit: 20 });
+  const fileNamesOnly = await repository.listImagesPage({ fileNameQuery: "dress-search", limit: 20 });
+
+  assert.deepEqual(new Set(generic.images.map((image) => image.id)), new Set([fileNameMatch.id, tagOnlyMatch.id]));
+  assert.deepEqual(fileNamesOnly.images.map((image) => image.id), [fileNameMatch.id]);
+  assert.equal(fileNamesOnly.totalCount, 1);
+  assert.equal(fileNamesOnly.hasMore, false);
+});
+
 test("scanImageIds keeps a stable numeric-ID snapshot across gaps and new uploads", async () => {
   const database = createTestDb();
   const insert = database.prepare("INSERT INTO images (storage_key, file_name, file_url, width, height) VALUES (?, ?, ?, ?, ?)");

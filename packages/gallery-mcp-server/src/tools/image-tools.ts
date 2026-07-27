@@ -6,7 +6,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import { GalleryMcpError, toToolError } from "../errors.js";
 import { runTool } from "../response.js";
-import type { GalleryMcpConfig, RecognitionManifestItem, ResponseFormat, UploadManifestItem } from "../types.js";
+import type { GalleryImage, GalleryMcpConfig, RecognitionManifestItem, ResponseFormat, UploadManifestItem } from "../types.js";
 import { GalleryApiClient } from "../services/gallery-client.js";
 import { processUploadManifest } from "../services/manifest-service.js";
 import { inspectUploadFile } from "../services/path-security.js";
@@ -85,6 +85,27 @@ function requireOneImageIdentifier(
   if ((value.image_id === undefined) === (value.public_id === undefined)) {
     context.addIssue({ code: "custom", message: "Provide exactly one image_id or public_id." });
   }
+}
+
+function imageNameSearchResult(image: GalleryImage): Record<string, unknown> {
+  return {
+    image_id: image.id,
+    public_id: image.publicId,
+    content_sha256: image.contentSha256 ?? null,
+    storage_key: image.storageKey ?? null,
+    file_name: image.fileName,
+    file_url: image.fileUrl,
+    width: image.width,
+    height: image.height,
+    tags: image.tags,
+    directory: image.category
+      ? {
+          directory_id: image.category.id,
+          name: image.category.name,
+          directory_slug: image.category.directorySlug,
+        }
+      : null,
+  };
 }
 
 export function registerImageTools(server: McpServer, dependencies: ImageToolDependencies): void {
@@ -178,6 +199,37 @@ export function registerImageTools(server: McpServer, dependencies: ImageToolDep
         };
       },
     ),
+  );
+
+  server.registerTool(
+    "gallery_search_images_by_name",
+    {
+      title: "Search Gallery Images by File Name",
+      description: "Search one server-side page using a case-insensitive file-name substring. This searches file_name only, never tags or directories, and does not download or inspect image bytes. Results include numeric and permanent IDs, content hash, URL, dimensions, directory, and current tags for subsequent cache, recognition, rename, or retag workflows.",
+      inputSchema: z.object({
+        name_query: z.string().trim().min(1).max(200)
+          .describe("Non-empty file-name substring, including an optional extension or index fragment."),
+        limit: z.number().int().min(1).max(100).default(20)
+          .describe("Maximum matching images returned in this page."),
+        offset: z.number().int().min(0).default(0)
+          .describe("Number of matching file names to skip. Use next_offset for continuation."),
+        response_format: ResponseFormatSchema.describe("Return JSON or a Markdown code block."),
+      }).strict(),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    },
+    async ({ name_query, limit, offset, response_format }) => runTool(response_format as ResponseFormat, async () => {
+      const page = await api.searchImagesByName(name_query, limit, offset);
+      return {
+        name_query,
+        total_count: page.totalCount,
+        count: page.count,
+        offset: page.offset,
+        limit: page.limit,
+        has_more: page.hasMore,
+        next_offset: page.nextOffset,
+        images: page.images.map(imageNameSearchResult),
+      };
+    }),
   );
 
   server.registerTool(

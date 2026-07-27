@@ -26,7 +26,7 @@ async function main(): Promise<void> {
   const api = new GalleryApiClient(config);
   const taxonomy = new TaxonomyService(api);
   const remoteImageCache = new RemoteImageCacheService(api, config);
-  const server = new McpServer({ name: "gallery-mcp-server", version: "0.10.0" });
+  const server = new McpServer({ name: "gallery-mcp-server", version: "0.11.0" });
 
   registerTaxonomyTools(server, taxonomy);
   registerLocalImageTagTools(server, { taxonomy, config });

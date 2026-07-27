@@ -72,6 +72,7 @@ Configure secrets through the Agent application's protected environment settings
 | `gallery_ensure_tag` | Reuses or creates a child tag in an existing group. |
 | `gallery_health_check` | Checks credentials and taxonomy access without uploading. |
 | `gallery_list_images` | Lists one OFFSET-based page for interactive filename, directory, or tag search. |
+| `gallery_search_images_by_name` | Searches one server-side page by file-name substring only, without downloading image bytes. |
 | `gallery_scan_image_ids` | Scans an exhaustive, fixed numeric-ID snapshot without OFFSET pagination or image downloads. |
 | `gallery_get_image` | Gets one image by permanent `public_id` or legacy numeric `image_id` without downloading content. |
 | `gallery_cache_remote_image` | Caches one online original by permanent identity and full SHA-256 without changing Gallery. |
@@ -93,6 +94,21 @@ Configure secrets through the Agent application's protected environment settings
 The server intentionally excludes image deletion, tag deletion, and tag merging. Existing-image relocation is available only through the guarded recognition manifest workflow.
 
 Upload tools calculate SHA-256 from the exact local file bytes before requesting an R2 URL. Gallery reserves a permanent `public_id`, the content hash, and a stable upload session before R2 receives bytes. Repeating completion with the same upload ID is idempotent, while a different upload targeting an occupied object key is rejected. Remote tag tools remain destructive because they replace complete online tag sets.
+
+## File-name search and reanalysis
+
+Use `gallery_search_images_by_name` when an Agent starts from part of an existing file name. It calls the Gallery admin pagination API with the dedicated `file_name` filter, so tags and directory names cannot create false matches and the MCP never reads the full library.
+
+```json
+{
+  "name_query": "asian-dress-studio",
+  "limit": 20,
+  "offset": 0,
+  "response_format": "json"
+}
+```
+
+Continue with `next_offset` only when `has_more` is true. Each result includes `image_id`, `public_id`, `content_sha256`, `file_url`, dimensions, directory, and current tags. A typical reanalysis workflow is: search by name, cache the selected remote image after explicit visual-inspection permission, analyze the cached local file, then dry-run and apply `gallery_apply_recognition_manifest` with the permanent ID and expected content hash.
 
 ## Stable numeric-ID scans
 

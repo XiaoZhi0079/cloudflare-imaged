@@ -151,3 +151,51 @@ test("numeric-ID scan tool preserves the server snapshot cursor", async () => {
   assert.equal(response.structuredContent.next_after_image_id, 103);
   assert.deepEqual(response.structuredContent.items.map((item) => item.image_id), [101, 103]);
 });
+
+test("file-name search tool performs one server-side page request", async () => {
+  const calls = [];
+  const image = {
+    id: 42,
+    publicId: "11111111-1111-4111-8111-111111111111",
+    contentSha256: "a".repeat(64),
+    fileName: "asian-dress-0042.png",
+    fileUrl: "/file/gallery/asian-dress-0042.png",
+    width: 1920,
+    height: 1080,
+    tags: ["连衣裙"],
+  };
+  const handlers = registeredHandlers({
+    api: {
+      searchImagesByName: async (query, limit, offset) => {
+        calls.push({ query, limit, offset });
+        return { images: [image], totalCount: 1, count: 1, offset, limit, hasMore: false, nextOffset: null };
+      },
+    },
+    taxonomy: {},
+    config: config(),
+  });
+
+  const response = await handlers.get("gallery_search_images_by_name")({
+    name_query: "asian-dress",
+    limit: 20,
+    offset: 0,
+    response_format: "json",
+  });
+
+  assert.equal(response.isError, undefined);
+  assert.deepEqual(calls, [{ query: "asian-dress", limit: 20, offset: 0 }]);
+  assert.equal(response.structuredContent.name_query, "asian-dress");
+  assert.equal(response.structuredContent.total_count, 1);
+  assert.deepEqual(response.structuredContent.images, [{
+    image_id: 42,
+    public_id: image.publicId,
+    content_sha256: image.contentSha256,
+    storage_key: null,
+    file_name: image.fileName,
+    file_url: image.fileUrl,
+    width: 1920,
+    height: 1080,
+    tags: ["连衣裙"],
+    directory: null,
+  }]);
+});

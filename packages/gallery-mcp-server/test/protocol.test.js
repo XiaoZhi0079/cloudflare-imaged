@@ -43,6 +43,7 @@ test("stdio MCP handshake exposes grouped-tag and manifest tools", async () => {
         "gallery_mark_remote_image_analyzed",
         "gallery_resume_upload",
         "gallery_scan_image_ids",
+        "gallery_search_images_by_name",
         "gallery_set_local_image_tags",
         "gallery_set_local_image_tags_batch",
         "gallery_set_remote_image_tags",
@@ -96,6 +97,13 @@ test("stdio MCP handshake exposes grouped-tag and manifest tools", async () => {
     assert.equal(scanSchema?.properties?.limit?.maximum, 100);
     assert.ok(scanSchema?.properties?.snapshot_max_image_id);
     assert.equal(scanSchema?.properties?.offset, undefined);
+
+    const nameSearchSchema = response.tools.find((tool) => tool.name === "gallery_search_images_by_name")?.inputSchema;
+    assert.ok(nameSearchSchema?.properties?.name_query);
+    assert.equal(nameSearchSchema?.properties?.limit?.default, 20);
+    assert.equal(nameSearchSchema?.properties?.limit?.maximum, 100);
+    assert.equal(nameSearchSchema?.properties?.offset?.default, 0);
+    assert.ok(nameSearchSchema?.required?.includes("name_query"));
 
     const cacheSchema = response.tools.find((tool) => tool.name === "gallery_cache_remote_image")?.inputSchema;
     assert.ok(cacheSchema?.properties?.public_id);

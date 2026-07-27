@@ -1873,8 +1873,9 @@ export function createGalleryRepository(database) {
       };
     },
 
-    async listImagesPage({ query = "", limit = 50, offset = 0 } = {}) {
-      const normalizedQuery = String(query ?? "").trim();
+    async listImagesPage({ query = "", fileNameQuery = null, limit = 50, offset = 0 } = {}) {
+      const fileNameOnly = fileNameQuery !== null && fileNameQuery !== undefined;
+      const normalizedQuery = String(fileNameOnly ? fileNameQuery : query ?? "").trim();
       const normalizedLimit = Number(limit);
       const normalizedOffset = Number(offset);
       if (!Number.isInteger(normalizedLimit) || normalizedLimit < 1 || normalizedLimit > 100) {
@@ -1886,7 +1887,9 @@ export function createGalleryRepository(database) {
 
       const pattern = escapedLikePattern(normalizedQuery);
       const whereSql = normalizedQuery
-        ? `
+        ? fileNameOnly
+          ? `WHERE images.file_name LIKE ? ESCAPE '\\'`
+          : `
           WHERE images.file_name LIKE ? ESCAPE '\\'
              OR categories.name LIKE ? ESCAPE '\\'
              OR EXISTS (
@@ -1898,7 +1901,9 @@ export function createGalleryRepository(database) {
              )
         `
         : "";
-      const filterParams = normalizedQuery ? [pattern, pattern, pattern] : [];
+      const filterParams = normalizedQuery
+        ? fileNameOnly ? [pattern] : [pattern, pattern, pattern]
+        : [];
       const countRow = await first(
         database,
         `

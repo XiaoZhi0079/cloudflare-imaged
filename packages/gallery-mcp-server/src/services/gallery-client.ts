@@ -207,6 +207,11 @@ export class GalleryApiClient {
     return await this.request<ImagesPageResponse>(`api/admin/images?${params.toString()}`);
   }
 
+  async searchImagesByName(nameQuery: string, limit: number, offset: number): Promise<ImagesPageResponse> {
+    const params = new URLSearchParams({ file_name: nameQuery, limit: String(limit), offset: String(offset) });
+    return await this.request<ImagesPageResponse>(`api/admin/images?${params.toString()}`);
+  }
+
   async scanImageIds(
     afterImageId: number,
     snapshotMaxImageId: number | null,

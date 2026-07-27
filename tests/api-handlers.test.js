@@ -399,6 +399,46 @@ test("admin images handler returns an empty list on a migrated database", async 
   });
 });
 
+test("admin images handler searches strictly by file name with bounded pagination", async () => {
+  const env = createTestEnv();
+  const repository = createGalleryRepository(env.GALLERY_DB);
+  const matchingTag = await repository.createTag({ name: "asian-dress", sortOrder: 1, isVisible: true });
+  const fileNameMatch = await repository.upsertImage({
+    storageKey: "gallery/asian-dress-studio-0042.png",
+    fileName: "asian-dress-studio-0042.png",
+    fileUrl: "/file/gallery/asian-dress-studio-0042.png",
+    width: 1920,
+    height: 1080,
+  });
+  const tagOnlyMatch = await repository.upsertImage({
+    storageKey: "gallery/unrelated.png",
+    fileName: "unrelated.png",
+    fileUrl: "/file/gallery/unrelated.png",
+    width: 1920,
+    height: 1080,
+  });
+  await repository.replaceImageTags(tagOnlyMatch.id, [matchingTag.id]);
+  const headers = { "x-gallery-admin-key": "gallery-secret" };
+
+  const response = await adminImagesHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/images?file_name=asian-dress&limit=20&offset=0", { headers }),
+  });
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.deepEqual(payload.images.map((image) => image.id), [fileNameMatch.id]);
+  assert.equal(payload.totalCount, 1);
+  assert.equal(payload.count, 1);
+  assert.equal(payload.hasMore, false);
+
+  const ambiguous = await adminImagesHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/images?query=asian&file_name=dress", { headers }),
+  });
+  assert.equal(ambiguous.status, 400);
+  assert.deepEqual(await ambiguous.json(), { error: "query and file_name cannot be combined" });
+});
+
 test("admin exact image handler returns one image and a typed 404", async () => {
   const env = createTestEnv();
   const repository = createGalleryRepository(env.GALLERY_DB);

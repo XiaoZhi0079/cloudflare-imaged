@@ -127,6 +127,36 @@ test("Gallery client uses server pagination, exact image reads, and heterogeneou
   });
 });
 
+test("Gallery client searches file names through the dedicated server filter", async () => {
+  const requests = [];
+  const client = new GalleryApiClient(config(), {
+    retryDelayMs: 0,
+    fetchImpl: async (input) => {
+      const url = new URL(String(input));
+      requests.push(url);
+      return Response.json({
+        images: [{ id: 42, publicId: "11111111-1111-4111-8111-111111111111", fileName: "asian-dress-0042.png", fileUrl: "/file/asian-dress-0042.png", width: 1920, height: 1080, tags: [] }],
+        totalCount: 1,
+        count: 1,
+        offset: 20,
+        limit: 10,
+        hasMore: false,
+        nextOffset: null,
+      });
+    },
+  });
+
+  const page = await client.searchImagesByName("asian dress/0042", 10, 20);
+
+  assert.equal(page.images[0].id, 42);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].pathname, "/api/admin/images");
+  assert.equal(requests[0].searchParams.get("file_name"), "asian dress/0042");
+  assert.equal(requests[0].searchParams.get("limit"), "10");
+  assert.equal(requests[0].searchParams.get("offset"), "20");
+  assert.equal(requests[0].searchParams.has("query"), false);
+});
+
 test("Gallery client renames one image and moves a bounded image set", async () => {
   const requests = [];
   const renamed = { id: 42, publicId: "11111111-1111-4111-8111-111111111111", fileName: "renamed.png", fileUrl: "/file/renamed.png", width: 1, height: 1, tags: [] };
