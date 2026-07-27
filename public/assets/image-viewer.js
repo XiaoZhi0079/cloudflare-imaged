@@ -1,4 +1,4 @@
-import { applyResponsiveImageAttributes } from "./image-variants.js?v=20260720-multilevel-tags";
+import { applyResponsiveImageAttributes, buildImageVariantUrl } from "./image-variants.js?v=20260728-image-delivery";
 
 const SWIPE_THRESHOLD = 48;
 
@@ -90,14 +90,38 @@ export function createImageViewer({
     return !modal.classList.contains("hidden");
   }
 
+  function setLoadingPreview(url) {
+    const previewUrl = String(url ?? "").trim();
+    stage.classList.toggle("has-preview", Boolean(previewUrl));
+    stage.classList.add("is-loading");
+    stage.classList.remove("is-error");
+    stage.setAttribute("aria-busy", "true");
+    stage.style.backgroundImage = previewUrl ? `url(${JSON.stringify(previewUrl)})` : "";
+  }
+
+  function clearLoadingPreview({ failed = false } = {}) {
+    stage.classList.remove("is-loading");
+    stage.classList.toggle("is-error", failed);
+    stage.setAttribute("aria-busy", "false");
+    if (!failed) {
+      stage.classList.remove("has-preview");
+      stage.style.removeProperty("background-image");
+    }
+  }
+
+  function preloadOne(item) {
+    const url = item?.fileUrl;
+    if (!url || preloadedUrls.has(url)) return;
+    preloadedUrls.add(url);
+    const preloadImage = createPreloadImage();
+    preloadImage.fetchPriority = "low";
+    applyResponsiveImageAttributes(preloadImage, item, "viewer");
+  }
+
   function preloadAdjacent(currentItems, index) {
     for (const url of getAdjacentImageUrls(currentItems, index)) {
-      if (preloadedUrls.has(url)) continue;
-      preloadedUrls.add(url);
       const adjacent = currentItems.find((item) => item?.fileUrl === url);
-      if (!adjacent) continue;
-      const preloadImage = createPreloadImage();
-      applyResponsiveImageAttributes(preloadImage, adjacent, "viewer");
+      preloadOne(adjacent);
     }
   }
 
@@ -117,7 +141,7 @@ export function createImageViewer({
     }
   }
 
-  function showAtIndex(index, { historyMode = "replace" } = {}) {
+  function showAtIndex(index, { historyMode = "replace", previewUrl = "" } = {}) {
     const currentItems = items();
     const normalizedIndex = wrapViewerIndex(index, currentItems.length);
     if (normalizedIndex < 0) return false;
@@ -127,6 +151,8 @@ export function createImageViewer({
     const imageName = String(current?.fileName ?? "").trim() || "未命名图片";
     const tagText = (current?.tags ?? []).filter(Boolean).join(" · ");
     currentIndex = normalizedIndex;
+    setLoadingPreview(previewUrl || buildImageVariantUrl(current.fileUrl, 640));
+    image.fetchPriority = "high";
     applyResponsiveImageAttributes(image, current, "viewer");
     image.alt = imageName;
     title.textContent = imageName;
@@ -152,6 +178,7 @@ export function createImageViewer({
     image.removeAttribute("sizes");
     image.removeAttribute("width");
     image.removeAttribute("height");
+    clearLoadingPreview();
     currentIndex = -1;
     touchStart = null;
     if (wasOpen && restoreFocus && opener?.focus) {
@@ -160,11 +187,11 @@ export function createImageViewer({
     opener = null;
   }
 
-  function openById(imageId, { opener: nextOpener = null, historyMode = "push" } = {}) {
+  function openById(imageId, { opener: nextOpener = null, historyMode = "push", previewUrl = "" } = {}) {
     const index = items().findIndex((item) => String(item?.id) === String(imageId));
     if (index < 0) return false;
     opener = nextOpener;
-    return showAtIndex(index, { historyMode });
+    return showAtIndex(index, { historyMode, previewUrl });
   }
 
   function move(offset) {
@@ -253,8 +280,18 @@ export function createImageViewer({
   function bindCards(root) {
     root?.querySelectorAll?.("[data-image-id]").forEach((card) => {
       const trigger = card.querySelector?.("[data-action='open-image']");
-      trigger?.addEventListener("click", () => {
-        openById(card.dataset.imageId, { opener: trigger });
+      if (!trigger || trigger.dataset.viewerBound === "true") return;
+      trigger.dataset.viewerBound = "true";
+      const warm = () => preloadOne(items().find((item) => String(item?.id) === String(card.dataset.imageId)));
+      trigger.addEventListener("pointerenter", warm, { once: true });
+      trigger.addEventListener("focus", warm, { once: true });
+      trigger.addEventListener("pointerdown", warm, { once: true });
+      trigger.addEventListener("click", () => {
+        const preview = card.querySelector?.("img");
+        openById(card.dataset.imageId, {
+          opener: trigger,
+          previewUrl: preview?.currentSrc || preview?.src || "",
+        });
       });
     });
   }
@@ -263,12 +300,16 @@ export function createImageViewer({
   const onNextClick = () => move(1);
   const onCloseClick = () => close();
   const onPopState = () => syncFromUrl();
+  const onImageLoad = () => clearLoadingPreview();
+  const onImageError = () => clearLoadingPreview({ failed: true });
   previousButton.addEventListener("click", onPreviousClick);
   nextButton.addEventListener("click", onNextClick);
   closeButton.addEventListener("click", onCloseClick);
   modal.addEventListener("click", onBackdropClick);
   stage.addEventListener("touchstart", onTouchStart);
   stage.addEventListener("touchend", onTouchEnd);
+  image.addEventListener("load", onImageLoad);
+  image.addEventListener("error", onImageError);
   windowObject.addEventListener("keydown", onKeydown);
   windowObject.addEventListener("popstate", onPopState);
 
@@ -279,6 +320,8 @@ export function createImageViewer({
     modal.removeEventListener("click", onBackdropClick);
     stage.removeEventListener("touchstart", onTouchStart);
     stage.removeEventListener("touchend", onTouchEnd);
+    image.removeEventListener("load", onImageLoad);
+    image.removeEventListener("error", onImageError);
     windowObject.removeEventListener("keydown", onKeydown);
     windowObject.removeEventListener("popstate", onPopState);
     hideViewer({ restoreFocus: false });

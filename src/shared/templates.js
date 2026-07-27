@@ -1,4 +1,4 @@
-import { getResponsiveImageAttributes } from "./image-variants.js?v=20260720-multilevel-tags";
+import { getResponsiveImageAttributes } from "./image-variants.js?v=20260728-image-delivery";
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -9,7 +9,7 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
-function renderResponsiveImageAttributes(image, presetName, { includeDimensions = presetName !== "gallery" } = {}) {
+function renderResponsiveImageAttributes(image, presetName, { includeDimensions = true } = {}) {
   const attributes = getResponsiveImageAttributes(image, presetName);
   const parts = [`src="${escapeHtml(attributes.src)}"`];
   if (attributes.srcset) {

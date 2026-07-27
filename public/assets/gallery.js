@@ -1,12 +1,14 @@
-import { renderAlbumCards, renderGalleryCards, renderTagGroups } from "./templates.js?v=20260720-multilevel-tags";
-import { DEFAULT_PUBLIC_SITE, fetchPublicJson } from "./public-data.js?v=20260720-multilevel-tags";
-import { createImageViewer } from "./image-viewer.js?v=20260720-multilevel-tags";
-import { applyResponsiveImageAttributes } from "./image-variants.js?v=20260720-multilevel-tags";
+import { renderAlbumCards, renderGalleryCards, renderTagGroups } from "./templates.js?v=20260728-image-delivery";
+import { DEFAULT_PUBLIC_SITE, fetchPublicJson } from "./public-data.js?v=20260728-image-delivery";
+import { createImageViewer } from "./image-viewer.js?v=20260728-image-delivery";
+import { applyResponsiveImageAttributes } from "./image-variants.js?v=20260728-image-delivery";
+import { createProgressiveGallery } from "./progressive-gallery.js?v=20260728-image-delivery";
 import { createHeroCarousel } from "./hero-carousel.js";
 
 const siteHero = document.querySelector("#site-hero");
 const tagStrip = document.querySelector("#tag-strip");
 const galleryGrid = document.querySelector("#gallery-grid");
+const galleryLoadMore = document.querySelector("#gallery-load-more");
 const albumList = document.querySelector("#album-list");
 const heroStage = document.querySelector("#hero-stage");
 const heroImage = document.querySelector("#hero-image");
@@ -40,6 +42,12 @@ const viewer = createImageViewer({
   },
   getImages: () => images,
 });
+const progressiveGallery = createProgressiveGallery({
+  root: galleryGrid,
+  loadMoreButton: galleryLoadMore,
+  renderCards: renderGalleryCards,
+  bindCards: (root) => viewer.bindCards(root),
+});
 
 function replaceTagUrl(slugs, { clearImage = false } = {}) {
   const url = new URL(location.href);
@@ -69,12 +77,9 @@ function renderTags() {
 }
 
 function renderImages() {
-  const hasImages = images.length > 0;
-  galleryGrid.classList.toggle("is-empty", !hasImages);
-  galleryGrid.innerHTML = hasImages
-    ? renderGalleryCards(images)
-    : `<div class="panel empty-state">这个标签下暂时还没有内容，换一个看看。</div>`;
-  viewer.bindCards(galleryGrid);
+  progressiveGallery.setItems(images, {
+    emptyMarkup: `<div class="panel empty-state">这个标签下暂时还没有内容，换一个看看。</div>`,
+  });
 }
 
 function showFeatured(index) {

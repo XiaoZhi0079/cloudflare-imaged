@@ -16,9 +16,15 @@ class FakeClassList {
     this.values = new Set(values);
   }
 
-  add(value) { this.values.add(value); }
-  remove(value) { this.values.delete(value); }
+  add(...values) { values.forEach((value) => this.values.add(value)); }
+  remove(...values) { values.forEach((value) => this.values.delete(value)); }
   contains(value) { return this.values.has(value); }
+  toggle(value, force) {
+    const enabled = force === undefined ? !this.values.has(value) : Boolean(force);
+    if (enabled) this.values.add(value);
+    else this.values.delete(value);
+    return enabled;
+  }
 }
 
 class FakeTarget {
@@ -30,6 +36,13 @@ class FakeTarget {
     this.src = "";
     this.alt = "";
     this.focusCalls = 0;
+    this.dataset = {};
+    this.style = {
+      backgroundImage: "",
+      removeProperty: (name) => {
+        if (name === "background-image") this.style.backgroundImage = "";
+      },
+    };
   }
 
   addEventListener(type, listener) {
@@ -185,9 +198,14 @@ test("viewer opens by id, renders metadata, pushes one URL and preloads neighbor
   assert.match(harness.elements.image.srcset, /\/img\/two\?w=640 640w/);
   assert.equal(harness.elements.image.sizes, "(max-width: 1391px) 92vw, 1280px");
   assert.equal(harness.elements.image.alt, "two.webp");
+  assert.equal(harness.elements.image.fetchPriority, "high");
   assert.equal(harness.elements.title.textContent, "two.webp");
   assert.equal(harness.elements.tags.textContent, "影");
   assert.equal(harness.elements.counter.textContent, "2 / 3");
+  assert.equal(harness.elements.stage.classList.contains("is-loading"), true);
+  assert.equal(harness.elements.stage.classList.contains("has-preview"), true);
+  assert.match(harness.elements.stage.style.backgroundImage, /\/img\/two\?w=640/);
+  assert.equal(harness.elements.stage["aria-busy"], "true");
   assert.equal(harness.documentObject.documentElement.classList.contains("viewer-open"), true);
   assert.equal(harness.elements.close.focusCalls, 1);
   assert.deepEqual(harness.historyCalls[0], [
@@ -196,8 +214,28 @@ test("viewer opens by id, renders metadata, pushes one URL and preloads neighbor
     "/?tag=portrait&image=2",
   ]);
   assert.deepEqual(harness.preloaded, ["/file/one", "/file/three"]);
+  assert.equal(harness.preloadAttributes.length, 2);
   assert.match(harness.preloadAttributes[0].srcset, /\/img\/one\?w=640 640w/);
   assert.equal(harness.preloadAttributes[0].sizes, "(max-width: 1391px) 92vw, 1280px");
+
+  harness.elements.image.dispatch("load");
+  assert.equal(harness.elements.stage.classList.contains("is-loading"), false);
+  assert.equal(harness.elements.stage.classList.contains("has-preview"), false);
+  assert.equal(harness.elements.stage.style.backgroundImage, "");
+  assert.equal(harness.elements.stage["aria-busy"], "false");
+});
+
+test("viewer keeps its preview visible when the high-resolution image fails", () => {
+  const harness = createViewerHarness();
+  harness.viewer.openById(1);
+
+  harness.elements.image.dispatch("error");
+
+  assert.equal(harness.elements.stage.classList.contains("is-loading"), false);
+  assert.equal(harness.elements.stage.classList.contains("is-error"), true);
+  assert.equal(harness.elements.stage.classList.contains("has-preview"), true);
+  assert.match(harness.elements.stage.style.backgroundImage, /\/img\/one\?w=640/);
+  assert.equal(harness.elements.stage["aria-busy"], "false");
 });
 
 test("viewer next and previous wrap and replace the current viewer URL", () => {

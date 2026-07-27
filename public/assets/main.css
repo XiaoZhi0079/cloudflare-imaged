@@ -282,6 +282,16 @@ button[disabled] {
   column-count: 1;
 }
 
+.gallery-load-more {
+  display: block;
+  min-width: 132px;
+  margin: 26px auto 0;
+}
+
+.gallery-load-more[hidden] {
+  display: none;
+}
+
 .gallery-grid > .panel {
   column-span: all;
   width: 100%;
@@ -473,6 +483,12 @@ button[disabled] {
   touch-action: pan-y;
 }
 
+.modal-stage.has-preview {
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+}
+
 .modal-stage img {
   width: auto;
   height: auto;
@@ -482,6 +498,13 @@ button[disabled] {
   object-fit: contain;
   object-position: center;
   border-radius: 22px;
+  opacity: 1;
+  transition: opacity 140ms ease;
+}
+
+.modal-stage.is-loading img,
+.modal-stage.is-error img {
+  opacity: 0;
 }
 
 .modal-nav {

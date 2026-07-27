@@ -1,11 +1,13 @@
-import { fetchPublicJson } from "./public-data.js?v=20260720-multilevel-tags";
-import { renderGalleryCards } from "./templates.js?v=20260720-multilevel-tags";
-import { createImageViewer } from "./image-viewer.js?v=20260720-multilevel-tags";
+import { fetchPublicJson } from "./public-data.js?v=20260728-image-delivery";
+import { renderGalleryCards } from "./templates.js?v=20260728-image-delivery";
+import { createImageViewer } from "./image-viewer.js?v=20260728-image-delivery";
+import { createProgressiveGallery } from "./progressive-gallery.js?v=20260728-image-delivery";
 
 const title = document.querySelector("#album-title");
 const description = document.querySelector("#album-description");
 const count = document.querySelector("#album-count");
 const gallery = document.querySelector("#album-gallery");
+const galleryLoadMore = document.querySelector("#gallery-load-more");
 let images = [];
 
 const viewer = createImageViewer({
@@ -22,6 +24,12 @@ const viewer = createImageViewer({
   },
   getImages: () => images,
 });
+const progressiveGallery = createProgressiveGallery({
+  root: gallery,
+  loadMoreButton: galleryLoadMore,
+  renderCards: renderGalleryCards,
+  bindCards: (root) => viewer.bindCards(root),
+});
 
 async function bootstrap() {
   const slug = new URLSearchParams(location.search).get("slug");
@@ -33,10 +41,9 @@ async function bootstrap() {
   title.textContent = album.name;
   description.textContent = album.description || "";
   count.textContent = `${album.imageCount} 张`;
-  gallery.innerHTML = images.length
-    ? renderGalleryCards(images)
-    : `<div class="panel empty-state">这个图集还没有图片。</div>`;
-  viewer.bindCards(gallery);
+  progressiveGallery.setItems(images, {
+    emptyMarkup: `<div class="panel empty-state">这个图集还没有图片。</div>`,
+  });
   viewer.syncFromUrl();
 }
 

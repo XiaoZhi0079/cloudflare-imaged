@@ -3,10 +3,10 @@ import { createAdminKeyStore, fetchAdminTaxonomy } from "./auth.js";
 import { createDialogHost } from "./dialogs.js";
 import { createLibraryState } from "./library-state.js?v=20260715-featured-filter-separation";
 import { createNotifier } from "./notifications.js";
-import { buildImagePreviewUrl, renderImageCard } from "./renderers/image-card.js?v=20260722-detail-drafts";
+import { buildImagePreviewUrl, renderImageCard } from "./renderers/image-card.js?v=20260728-image-delivery";
 import { buildDirectImageUrl, buildDownloadImageUrl } from "./image-links.js?v=20260727-technical-info";
 import { createUploadRunner, describeUploadFailure, inspectImageFile } from "./upload.js?v=20260727-technical-left";
-import { buildImageVariantUrl } from "../image-variants.js?v=20260722-detail-drafts";
+import { buildImageVariantUrl } from "../image-variants.js?v=20260728-image-delivery";
 
 const elements = {
   authView: document.querySelector("#admin-auth-view"),
@@ -402,6 +402,26 @@ function detailPreviewUrl(image) {
   return buildImageVariantUrl(image.fileUrl, 1280) ?? buildImagePreviewUrl(image.fileUrl, image.id);
 }
 
+function cardPreviewUrl(opener, image) {
+  const card = opener?.closest?.("[data-image-id]");
+  const preview = card?.querySelector?.("[data-preview-image]");
+  if (String(card?.dataset?.imageId ?? "") === String(image.id) && preview) {
+    return preview.currentSrc || preview.src || "";
+  }
+  return buildImagePreviewUrl(image.fileUrl, image.id);
+}
+
+function retryFailedCardPreview(image) {
+  const card = elements.imageList.querySelector(`[data-image-id="${Number(image.id)}"]`);
+  const preview = card?.querySelector?.("[data-preview-image]");
+  const fallback = card?.querySelector?.("[data-preview-fallback]");
+  if (!preview || (!preview.hidden && fallback?.hidden !== false)) return;
+  preview.dataset.previewRetry = "";
+  preview.hidden = false;
+  if (fallback) fallback.hidden = true;
+  preview.src = buildImagePreviewUrl(image.fileUrl, `${image.id}-${Date.now().toString(36)}`);
+}
+
 function preloadDetailNeighbors(imageId) {
   const navigation = detailNavigationState(imageId);
   for (const neighborId of [navigation.previousId, navigation.nextId]) {
@@ -549,6 +569,12 @@ function openDetail(image, opener, { sequenceIds = null, focusField = true } = {
     ? createElement("img", { className: "detail-preview", src: detailPreviewUrl(image), alt: image.fileName, decoding: "async", fetchpriority: "high" })
     : createElement("div", { className: "detail-preview image-preview-fallback" }, "预览不可用");
   const previewStage = createElement("div", { className: "detail-preview-stage" });
+  const previewPlaceholder = image.fileUrl ? cardPreviewUrl(opener, image) : "";
+  if (previewPlaceholder) {
+    previewStage.classList.add("has-preview", "is-loading");
+    previewStage.style.backgroundImage = `url(${JSON.stringify(previewPlaceholder)})`;
+    previewStage.setAttribute("aria-busy", "true");
+  }
   const previous = createElement("button", { type: "button", className: "detail-preview-nav detail-preview-prev", "aria-label": "上一张", title: "上一张" }, "‹");
   const next = createElement("button", { type: "button", className: "detail-preview-nav detail-preview-next", "aria-label": "下一张", title: "下一张" }, "›");
   previous.disabled = navigation.previousId === null;
@@ -556,6 +582,19 @@ function openDetail(image, opener, { sequenceIds = null, focusField = true } = {
   previous.addEventListener("click", () => { void navigateDetail(-1); });
   next.addEventListener("click", () => { void navigateDetail(1); });
   previewStage.append(previous, preview, next);
+  if (preview instanceof HTMLImageElement) {
+    preview.addEventListener("load", () => {
+      previewStage.classList.remove("has-preview", "is-loading", "is-error");
+      previewStage.style.removeProperty("background-image");
+      previewStage.setAttribute("aria-busy", "false");
+      retryFailedCardPreview(image);
+    }, { once: true });
+    preview.addEventListener("error", () => {
+      previewStage.classList.remove("is-loading");
+      previewStage.classList.add("is-error");
+      previewStage.setAttribute("aria-busy", "false");
+    }, { once: true });
+  }
   const dimensions = imageDimensionsDetail(image);
   const form = createElement("form", { className: "detail-form" });
   const nameLabel = createElement("label", { className: "admin-field" });

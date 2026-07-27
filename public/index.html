@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>图集</title>
-    <link rel="stylesheet" href="/assets/main.css?v=20260720-multilevel-tags" />
+    <link rel="stylesheet" href="/assets/main.css?v=20260728-image-delivery" />
   </head>
   <body>
     <header class="public-nav"><div><a class="public-brand" href="/">Cloud Gallery</a><nav><a href="#albums">图集</a><a href="#browse">标签</a></nav></div></header>
@@ -29,6 +29,7 @@
       <section id="browse" class="browse-section"><div class="section-heading"><p class="eyebrow">Browse</p></div><nav class="tag-strip" id="tag-strip" aria-label="标签导航"></nav></section>
       <main>
         <section class="gallery-grid" id="gallery-grid" aria-live="polite"></section>
+        <button class="gallery-load-more" id="gallery-load-more" type="button" hidden>加载更多</button>
       </main>
     </div>
     <div class="modal hidden" id="image-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-describedby="modal-tags">
@@ -40,6 +41,6 @@
         <div class="modal-meta"><strong id="modal-title"></strong><span id="modal-tags"></span><small class="modal-counter" id="modal-counter"></small></div>
       </div>
     </div>
-    <script type="module" src="/assets/gallery.js?v=20260720-multilevel-tags"></script>
+    <script type="module" src="/assets/gallery.js?v=20260728-image-delivery"></script>
   </body>
 </html>

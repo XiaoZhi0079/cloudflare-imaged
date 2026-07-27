@@ -19,7 +19,7 @@ test("public renderers keep gallery behavior", () => {
   assert.match(cards, /\/file\/object-42/);
   assert.match(cards, /srcset="\/img\/object-42\?w=320 320w,[^"]*\/img\/object-42\?w=960 960w"/);
   assert.match(cards, /sizes="[^"]+306px"/);
-  assert.doesNotMatch(cards, /width="1920" height="1080"/);
+  assert.match(cards, /width="1920" height="1080"/);
   assert.match(cards, /decoding="async"/);
   assert.doesNotMatch(cards, /未分配标签/);
 });
@@ -41,6 +41,7 @@ test("public gallery copy stays light-branded", () => {
   assert.match(html, /id="site-hero"/);
   assert.match(html, /class="public-nav"/);
   assert.match(html, /id="album-list"/);
+  assert.match(html, /id="gallery-load-more"[^>]*hidden/);
   assert.match(html, /收藏你的视觉灵感/);
   assert.match(html, /id="hero-stage"/);
   assert.match(html, /id="hero-copy"/);
@@ -254,7 +255,7 @@ test("runtime public templates stay aligned with shared templates", () => {
   const runtimeVariants = readFileSync(new URL("../public/assets/image-variants.js", import.meta.url), "utf8");
   const sharedVariants = readFileSync(new URL("../src/shared/image-variants.js", import.meta.url), "utf8");
   assert.equal(runtimeVariants, sharedVariants);
-  assert.match(runtime, /image-variants\.js\?v=20260720-multilevel-tags/);
+  assert.match(runtime, /image-variants\.js\?v=20260728-image-delivery/);
 });
 
 test("legacy admin pages and scripts are removed", () => {
@@ -281,9 +282,11 @@ test("album detail page has safe public browsing contracts", () => {
   const source = readFileSync(new URL("../public/assets/album-page.js", import.meta.url), "utf8");
   assert.match(html, /id="album-title"/);
   assert.match(html, /id="album-gallery"/);
+  assert.match(html, /id="gallery-load-more"[^>]*hidden/);
   assert.match(source, /\/api\/public\/albums\?slug=/);
   assert.match(source, /图集暂时打不开/);
   assert.match(source, /renderGalleryCards/);
+  assert.match(source, /createProgressiveGallery/);
 });
 
 test("single-image hero controls have an explicit hidden override", () => {
@@ -360,8 +363,8 @@ test("featured hero uses a fixed responsive 16:9 stage", () => {
   ]) {
     assert.doesNotMatch(css, viewportHeightRule);
   }
-  assert.match(index, /main\.css\?v=20260720-multilevel-tags/);
-  assert.match(index, /gallery\.js\?v=20260720-multilevel-tags/);
+  assert.match(index, /main\.css\?v=20260728-image-delivery/);
+  assert.match(index, /gallery\.js\?v=20260728-image-delivery/);
 });
 
 test("public entry assets share one cache-busting release version", () => {
@@ -375,13 +378,14 @@ test("public entry assets share one cache-busting release version", () => {
   assert.ok(scriptVersion, "gallery.js must include a non-empty release version");
   assert.equal(cssVersion[1], scriptVersion[1]);
   for (const source of [gallery, albumPage]) {
-    assert.match(source, /templates\.js\?v=20260720-multilevel-tags/);
-    assert.match(source, /public-data\.js\?v=20260720-multilevel-tags/);
-    assert.match(source, /image-viewer\.js\?v=20260720-multilevel-tags/);
+    assert.match(source, /templates\.js\?v=20260728-image-delivery/);
+    assert.match(source, /public-data\.js\?v=20260728-image-delivery/);
+    assert.match(source, /image-viewer\.js\?v=20260728-image-delivery/);
+    assert.match(source, /progressive-gallery\.js\?v=20260728-image-delivery/);
   }
-  assert.match(gallery, /image-variants\.js\?v=20260720-multilevel-tags/);
+  assert.match(gallery, /image-variants\.js\?v=20260728-image-delivery/);
   const viewer = readFileSync(new URL("../public/assets/image-viewer.js", import.meta.url), "utf8");
-  assert.match(viewer, /image-variants\.js\?v=20260720-multilevel-tags/);
+  assert.match(viewer, /image-variants\.js\?v=20260728-image-delivery/);
 });
 
 test("hero and immersive viewer apply responsive Cloudflare variants", () => {
@@ -390,7 +394,9 @@ test("hero and immersive viewer apply responsive Cloudflare variants", () => {
   assert.match(gallery, /applyResponsiveImageAttributes\(heroImage, image, "hero"\)/);
   assert.doesNotMatch(gallery, /heroImage\.src\s*=\s*image\.fileUrl/);
   assert.match(viewer, /applyResponsiveImageAttributes\(image, current, "viewer"\)/);
-  assert.match(viewer, /applyResponsiveImageAttributes\(preloadImage, adjacent, "viewer"\)/);
+  assert.match(viewer, /preloadImage\.fetchPriority = "low"/);
+  assert.match(viewer, /applyResponsiveImageAttributes\(preloadImage, item, "viewer"\)/);
+  assert.match(viewer, /image\.fetchPriority = "high"/);
   assert.match(viewer, /removeAttribute\("srcset"\)/);
   assert.match(viewer, /removeAttribute\("sizes"\)/);
 });
@@ -437,7 +443,7 @@ test("changed admin assets use targeted cache-busting versions", () => {
     Array(centeredModalReferences.length).fill(centeredModalVersion),
   );
 
-  const libraryCardTagsVersion = "20260722-detail-drafts";
+  const libraryCardTagsVersion = "20260728-image-delivery";
   const libraryCardTagsReferences = [
     [libraryEntry, /from "\.\/renderers\/image-card\.js\?v=([^"]+)"/, "image-card.js"],
     [libraryEntry, /from "\.\.\/image-variants\.js\?v=([^"]+)"/, "image-variants.js"],
@@ -455,7 +461,6 @@ test("changed admin assets use targeted cache-busting versions", () => {
   const uploadIdempotencyVersion = "20260727-technical-left";
   const uploadIdempotencyReferences = [
     [libraryEntry, /from "\.\/upload\.js\?v=([^"]+)"/, "upload.js"],
-    [libraryHtml, /src="\/assets\/admin\/library-page\.js\?v=([^"]+)"/, "library-page.js"],
   ];
   const uploadIdempotencyVersions = uploadIdempotencyReferences.map(([source, pattern, asset]) => {
     const match = source.match(pattern);
@@ -467,7 +472,12 @@ test("changed admin assets use targeted cache-busting versions", () => {
     Array(uploadIdempotencyReferences.length).fill(uploadIdempotencyVersion),
   );
 
-  const workbenchDialogVersion = "20260727-technical-left";
+  const imageDeliveryVersion = "20260728-image-delivery";
+  const libraryEntryMatch = libraryHtml.match(/src="\/assets\/admin\/library-page\.js\?v=([^"]+)"/);
+  assert.ok(libraryEntryMatch, "library-page.js must include a cache-busting release version");
+  assert.equal(libraryEntryMatch[1], imageDeliveryVersion);
+
+  const workbenchDialogVersion = imageDeliveryVersion;
   const workbenchDialogMatch = libraryHtml.match(/href="\/assets\/admin\/workbench\.css\?v=([^"]+)"/);
   assert.ok(workbenchDialogMatch, "workbench.css must include a cache-busting release version");
   assert.equal(workbenchDialogMatch[1], workbenchDialogVersion);

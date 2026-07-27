@@ -134,11 +134,11 @@ test("image card escapes values and exposes selection and detail actions", () =>
 test("image previews use the database record id to bypass a stale missing-file cache", () => {
   assert.equal(
     buildImagePreviewUrl("/file/gallery/reuploaded.png", 142),
-    "/file/gallery/reuploaded.png?gallery-preview=142",
+    "/img/gallery/reuploaded.png?w=480&gallery-preview=142",
   );
   assert.equal(
     buildImagePreviewUrl("/file/gallery/reuploaded.png?size=card#preview", 143),
-    "/file/gallery/reuploaded.png?size=card&gallery-preview=143#preview",
+    "/img/gallery/reuploaded.png?w=480&gallery-preview=143",
   );
 
   const html = renderImageCard({
@@ -147,7 +147,9 @@ test("image previews use the database record id to bypass a stale missing-file c
     fileUrl: "/file/gallery/reuploaded.png",
     tags: [],
   });
-  assert.match(html, /src="\/file\/gallery\/reuploaded\.png\?gallery-preview=142"/);
+  assert.match(html, /src="\/img\/gallery\/reuploaded\.png\?w=480&amp;gallery-preview=142"/);
+  assert.doesNotMatch(html, /src="\/file\/gallery\/reuploaded\.png/);
+  assert.match(html, /fetchpriority="low"/);
 });
 
 test("image card keeps selection controls out of normal browsing mode", () => {
