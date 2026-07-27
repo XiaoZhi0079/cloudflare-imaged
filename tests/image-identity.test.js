@@ -8,6 +8,7 @@ import { createGalleryRepository } from "../src/server/gallery-repository.js";
 import { calculateFileSha256 } from "../public/assets/admin/upload.js";
 import { onRequest as imageByIdHandler } from "../functions/api/admin/images/[id].js";
 import { onRequest as contentHashesHandler } from "../functions/api/admin/images/content-hashes.js";
+import { onRequest as computeContentHashHandler } from "../functions/api/admin/images/content-hashes/compute.js";
 import { onRequest as tagAssignmentsHandler } from "../functions/api/admin/images/tag-assignments.js";
 import { hashResponseBody } from "../scripts/backfill-image-hashes.mjs";
 import { createTestDatabase } from "./helpers/test-database.js";
@@ -167,6 +168,50 @@ test("content hash batches reject stale file identity and then verify an exact u
   const saved = await submit(image.storageKey);
   assert.equal(saved.status, 200);
   assert.equal((await repository.getImageById(image.id)).contentSha256, contentSha256);
+});
+
+test("Cloudflare-side hashing reads R2 bytes once and is idempotent", async () => {
+  const database = createTestDatabase();
+  const repository = createGalleryRepository(database);
+  const image = await repository.upsertImage({
+    storageKey: "gallery/cloudflare-hash.webp",
+    fileName: "cloudflare-hash.webp",
+    fileUrl: "/file/gallery/cloudflare-hash.webp",
+    width: 1920,
+    height: 1080,
+  });
+  const bytes = new TextEncoder().encode("R2 internal bytes");
+  let reads = 0;
+  const env = {
+    GALLERY_DB: database,
+    GALLERY_ADMIN_KEY: "secret",
+    GALLERY_BUCKET: {
+      async get(key) {
+        assert.equal(key, image.storageKey);
+        reads += 1;
+        return { size: bytes.byteLength, async arrayBuffer() { return bytes.buffer; } };
+      },
+    },
+  };
+  const invoke = () => computeContentHashHandler({
+    env,
+    request: adminRequest("https://gallery.example/api/admin/images/content-hashes/compute", {
+      method: "POST",
+      body: JSON.stringify({
+        imageId: image.id,
+        expectedStorageKey: image.storageKey,
+        expectedFileUrl: image.fileUrl,
+      }),
+    }),
+  });
+
+  const first = await invoke();
+  const second = await invoke();
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+  assert.equal((await first.json()).contentSha256, createHash("sha256").update(bytes).digest("hex"));
+  assert.equal((await second.json()).idempotent, true);
+  assert.equal(reads, 1);
 });
 
 test("browser hashing uses the exact file bytes", async () => {

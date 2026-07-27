@@ -15,6 +15,8 @@ function parseArguments(args) {
     batchSize: 50,
     dryRun: false,
     reportPath: null,
+    maxImages: null,
+    hashMode: "remote",
   };
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index];
@@ -24,6 +26,8 @@ function parseArguments(args) {
     else if (argument === "--concurrency") options.concurrency = Number(args[++index]);
     else if (argument === "--batch-size") options.batchSize = Number(args[++index]);
     else if (argument === "--report") options.reportPath = args[++index];
+    else if (argument === "--max-images") options.maxImages = Number(args[++index]);
+    else if (argument === "--hash-mode") options.hashMode = String(args[++index] ?? "").trim();
     else throw new Error(`Unknown argument: ${argument}`);
   }
   if (!Number.isInteger(options.concurrency) || options.concurrency < 1 || options.concurrency > 8) {
@@ -31,6 +35,12 @@ function parseArguments(args) {
   }
   if (!Number.isInteger(options.batchSize) || options.batchSize < 1 || options.batchSize > 100) {
     throw new Error("--batch-size must be an integer between 1 and 100");
+  }
+  if (options.maxImages !== null && (!Number.isInteger(options.maxImages) || options.maxImages < 1)) {
+    throw new Error("--max-images must be a positive integer");
+  }
+  if (!["remote", "local"].includes(options.hashMode)) {
+    throw new Error("--hash-mode must be remote or local");
   }
   options.baseUrl = String(options.baseUrl).replace(/\/+$/, "");
   return options;
@@ -80,7 +90,26 @@ export async function hashResponseBody(response) {
   return hash.digest("hex");
 }
 
-async function mapWithConcurrency(items, concurrency, worker) {
+async function hashUrlSha256(url, { attempts = 3, timeoutMs = 120000 } = {}) {
+  let lastError;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await hashResponseBody(await fetch(url, { signal: controller.signal }));
+    } catch (error) {
+      lastError = error;
+    } finally {
+      clearTimeout(timer);
+    }
+    if (attempt + 1 < attempts) {
+      await new Promise((resolve) => setTimeout(resolve, 300 * (2 ** attempt)));
+    }
+  }
+  throw lastError;
+}
+
+async function mapWithConcurrency(items, concurrency, worker, onSettled = () => {}) {
   const results = new Array(items.length);
   let cursor = 0;
   await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, async () => {
@@ -90,6 +119,8 @@ async function mapWithConcurrency(items, concurrency, worker) {
         results[index] = { ok: true, value: await worker(items[index], index) };
       } catch (error) {
         results[index] = { ok: false, error };
+      } finally {
+        onSettled(results[index], index);
       }
     }
   }));
@@ -166,28 +197,51 @@ export async function backfillImageHashes(options) {
   if (!adminKey) throw new Error("The Gallery admin key file is empty.");
 
   const initialImages = await listAllImages(options.baseUrl, adminKey);
-  const pending = initialImages.filter((image) => !image.contentSha256);
+  const allPending = initialImages.filter((image) => !image.contentSha256);
+  const pending = options.maxImages === null ? allPending : allPending.slice(0, options.maxImages);
   const failures = [];
   let updatedCount = 0;
 
   for (let index = 0; index < pending.length; index += options.batchSize) {
     const batch = pending.slice(index, index + options.batchSize);
+    const remoteCompute = options.hashMode === "remote" && !options.dryRun;
+    let settledInBatch = 0;
     const hashed = await mapWithConcurrency(batch, options.concurrency, async (image) => {
+      if (remoteCompute) {
+        return await fetchJson(`${options.baseUrl}/api/admin/images/content-hashes/compute`, adminKey, {
+          method: "POST",
+          body: JSON.stringify({
+            imageId: image.id,
+            expectedStorageKey: image.storageKey,
+            expectedFileUrl: image.fileUrl,
+          }),
+        });
+      }
       const fileUrl = new URL(image.fileUrl, `${options.baseUrl}/`);
-      const contentSha256 = await hashResponseBody(await fetchWithRetry(fileUrl));
       return {
         imageId: image.id,
         expectedStorageKey: image.storageKey,
         expectedFileUrl: image.fileUrl,
-        contentSha256,
+        contentSha256: await hashUrlSha256(fileUrl),
       };
+    }, () => {
+      settledInBatch += 1;
+      if (settledInBatch % 10 === 0 || settledInBatch === batch.length) {
+        console.error(JSON.stringify({
+          phase: "hash",
+          processed: index + settledInBatch,
+          total: pending.length,
+        }));
+      }
     });
     const assignments = [];
     hashed.forEach((result, batchIndex) => {
       if (result.ok) assignments.push(result.value);
       else failures.push({ imageId: batch[batchIndex].id, stage: "hash", error: result.error?.message ?? String(result.error) });
     });
-    if (assignments.length && !options.dryRun) {
+    if (remoteCompute) {
+      updatedCount += assignments.length;
+    } else if (assignments.length && !options.dryRun) {
       const submitted = await submitHashAssignments(options.baseUrl, adminKey, assignments);
       updatedCount += submitted.updatedCount;
       failures.push(...submitted.failures);
@@ -206,7 +260,8 @@ export async function backfillImageHashes(options) {
   return {
     dryRun: options.dryRun,
     imageCount: finalImages.length,
-    pendingAtStart: pending.length,
+    pendingAtStart: allPending.length,
+    attemptedCount: pending.length,
     updatedCount,
     remainingWithoutHash: finalImages.filter((image) => !image.contentSha256).length,
     duplicateHashGroups: duplicates.length,
