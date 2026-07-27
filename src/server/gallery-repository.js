@@ -283,10 +283,6 @@ function tagAssignmentEntries(assignmentsJson) {
   ];
 }
 
-function escapedLikePattern(value) {
-  return `%${String(value).replace(/[\\%_]/g, "\\$&")}%`;
-}
-
 function attachTagNames(images, tagRows) {
   const namesByImageId = new Map();
 
@@ -1884,25 +1880,29 @@ export function createGalleryRepository(database) {
       if (!Number.isInteger(normalizedOffset) || normalizedOffset < 0) {
         throw new RangeError("offset must be a non-negative integer");
       }
+      if (normalizedQuery.length > 200) {
+        throw new RangeError("query must not exceed 200 characters");
+      }
 
-      const pattern = escapedLikePattern(normalizedQuery);
       const whereSql = normalizedQuery
         ? fileNameOnly
-          ? `WHERE images.file_name LIKE ? ESCAPE '\\'`
+          ? `WHERE instr(lower(images.file_name), lower(?)) > 0`
           : `
-          WHERE images.file_name LIKE ? ESCAPE '\\'
-             OR categories.name LIKE ? ESCAPE '\\'
+          WHERE instr(lower(images.file_name), lower(?)) > 0
+             OR instr(lower(categories.name), lower(?)) > 0
              OR EXISTS (
                SELECT 1
                FROM image_tags
                INNER JOIN tags ON tags.id = image_tags.tag_id
                WHERE image_tags.image_id = images.id
-                 AND tags.name LIKE ? ESCAPE '\\'
+                 AND instr(lower(tags.name), lower(?)) > 0
              )
         `
         : "";
       const filterParams = normalizedQuery
-        ? fileNameOnly ? [pattern] : [pattern, pattern, pattern]
+        ? fileNameOnly
+          ? [normalizedQuery]
+          : [normalizedQuery, normalizedQuery, normalizedQuery]
         : [];
       const countRow = await first(
         database,

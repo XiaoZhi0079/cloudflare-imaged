@@ -183,15 +183,30 @@ test("listImagesPage can restrict search to file names without tag false positiv
     width: 1920,
     height: 1080,
   });
+  const longFileName = "European-LaceLoungewear-Bedroom-0046--77d68271.png";
+  const longNameMatch = await repository.upsertImage({
+    storageKey: `gallery/${longFileName}`,
+    fileName: longFileName,
+    fileUrl: `/file/gallery/${longFileName}`,
+    width: 1920,
+    height: 1080,
+  });
   await repository.replaceImageTags(tagOnlyMatch.id, [matchingTag.id]);
 
   const generic = await repository.listImagesPage({ query: "dress-search", limit: 20 });
   const fileNamesOnly = await repository.listImagesPage({ fileNameQuery: "dress-search", limit: 20 });
+  const fullLongName = await repository.listImagesPage({ fileNameQuery: longFileName, limit: 20 });
 
   assert.deepEqual(new Set(generic.images.map((image) => image.id)), new Set([fileNameMatch.id, tagOnlyMatch.id]));
   assert.deepEqual(fileNamesOnly.images.map((image) => image.id), [fileNameMatch.id]);
   assert.equal(fileNamesOnly.totalCount, 1);
   assert.equal(fileNamesOnly.hasMore, false);
+  assert.equal(longFileName.length, 50);
+  assert.deepEqual(fullLongName.images.map((image) => image.id), [longNameMatch.id]);
+  await assert.rejects(
+    repository.listImagesPage({ fileNameQuery: "x".repeat(201), limit: 20 }),
+    /query must not exceed 200 characters/,
+  );
 });
 
 test("scanImageIds keeps a stable numeric-ID snapshot across gaps and new uploads", async () => {

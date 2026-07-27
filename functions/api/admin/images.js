@@ -63,6 +63,11 @@ async function handleRequest({ env, request }) {
       if (url.searchParams.has("query") && url.searchParams.has("file_name")) {
         return jsonResponse({ error: "query and file_name cannot be combined" }, 400);
       }
+      const query = url.searchParams.get("query") ?? "";
+      const fileNameQuery = url.searchParams.has("file_name") ? url.searchParams.get("file_name") ?? "" : null;
+      if (query.length > 200 || (fileNameQuery !== null && fileNameQuery.length > 200)) {
+        return jsonResponse({ error: "search text must not exceed 200 characters" }, 400);
+      }
       const limit = url.searchParams.has("limit") ? Number(url.searchParams.get("limit")) : 50;
       const offset = url.searchParams.has("offset") ? Number(url.searchParams.get("offset")) : 0;
       if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
@@ -72,8 +77,8 @@ async function handleRequest({ env, request }) {
         return jsonResponse({ error: "offset must be a non-negative integer" }, 400);
       }
       const page = await repository.listImagesPage({
-        query: url.searchParams.get("query") ?? "",
-        fileNameQuery: url.searchParams.has("file_name") ? url.searchParams.get("file_name") ?? "" : null,
+        query,
+        fileNameQuery,
         limit,
         offset,
       });

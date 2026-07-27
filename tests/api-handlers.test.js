@@ -417,6 +417,14 @@ test("admin images handler searches strictly by file name with bounded paginatio
     width: 1920,
     height: 1080,
   });
+  const longFileName = "European-LaceLoungewear-Bedroom-0046--77d68271.png";
+  const longNameMatch = await repository.upsertImage({
+    storageKey: `gallery/${longFileName}`,
+    fileName: longFileName,
+    fileUrl: `/file/gallery/${longFileName}`,
+    width: 1920,
+    height: 1080,
+  });
   await repository.replaceImageTags(tagOnlyMatch.id, [matchingTag.id]);
   const headers = { "x-gallery-admin-key": "gallery-secret" };
 
@@ -431,12 +439,26 @@ test("admin images handler searches strictly by file name with bounded paginatio
   assert.equal(payload.count, 1);
   assert.equal(payload.hasMore, false);
 
+  const longNameResponse = await adminImagesHandler({
+    env,
+    request: new Request(`https://gallery.example.com/api/admin/images?file_name=${encodeURIComponent(longFileName)}&limit=20&offset=0`, { headers }),
+  });
+  assert.equal(longNameResponse.status, 200);
+  assert.deepEqual((await longNameResponse.json()).images.map((image) => image.id), [longNameMatch.id]);
+
   const ambiguous = await adminImagesHandler({
     env,
     request: new Request("https://gallery.example.com/api/admin/images?query=asian&file_name=dress", { headers }),
   });
   assert.equal(ambiguous.status, 400);
   assert.deepEqual(await ambiguous.json(), { error: "query and file_name cannot be combined" });
+
+  const tooLong = await adminImagesHandler({
+    env,
+    request: new Request(`https://gallery.example.com/api/admin/images?file_name=${"x".repeat(201)}`, { headers }),
+  });
+  assert.equal(tooLong.status, 400);
+  assert.deepEqual(await tooLong.json(), { error: "search text must not exceed 200 characters" });
 });
 
 test("admin exact image handler returns one image and a typed 404", async () => {
