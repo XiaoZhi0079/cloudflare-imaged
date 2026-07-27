@@ -5,7 +5,7 @@ import { createLibraryState } from "./library-state.js?v=20260715-featured-filte
 import { createNotifier } from "./notifications.js";
 import { buildImagePreviewUrl, renderImageCard } from "./renderers/image-card.js?v=20260722-detail-drafts";
 import { buildDirectImageUrl, buildDownloadImageUrl } from "./image-links.js?v=20260727-technical-info";
-import { createUploadRunner, describeUploadFailure, inspectImageFile } from "./upload.js?v=20260727-technical-info";
+import { createUploadRunner, describeUploadFailure, inspectImageFile } from "./upload.js?v=20260727-technical-left";
 import { buildImageVariantUrl } from "../image-variants.js?v=20260722-detail-drafts";
 
 const elements = {
@@ -581,7 +581,7 @@ function openDetail(image, opener, { sequenceIds = null, focusField = true } = {
   const save = createElement("button", { type: "submit", className: "admin-button-primary" }, "保存修改");
   const actions = createElement("div", { className: "detail-form-actions" });
   actions.append(remove, save);
-  form.append(nameLabel, categoryLabel, tags, technicalInfo, error, actions);
+  form.append(nameLabel, categoryLabel, tags, error, actions);
   const controls = {
     imageId: Number(image.id),
     fileName,
@@ -601,7 +601,7 @@ function openDetail(image, opener, { sequenceIds = null, focusField = true } = {
   form.addEventListener("submit", saveDetail);
   remove.addEventListener("click", () => deleteDetailImage(image, { remove, save, error }));
   const previewPane = createElement("div", { className: "detail-preview-pane" });
-  previewPane.append(previewStage, dimensions);
+  previewPane.append(previewStage, dimensions, technicalInfo);
   const editPane = createElement("div", { className: "detail-edit-pane" });
   editPane.append(form);
   const workspace = createElement("div", { className: "admin-detail-workspace" });

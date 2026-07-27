@@ -387,6 +387,10 @@ test("image detail exposes copyable identity and direct browse and download URLs
   assert.match(source, /buildDirectImageUrl\(image\.fileUrl\)/);
   assert.match(source, /buildDownloadImageUrl\(image\.fileUrl\)/);
   assert.match(source, /target\s*=\s*"_blank"/);
+  assert.match(source, /previewPane\.append\(previewStage, dimensions, technicalInfo\)/);
+  assert.match(source, /form\.append\(nameLabel, categoryLabel, tags, error, actions\)/);
+  assert.doesNotMatch(source, /form\.append\([^\n]*technicalInfo/);
+  assert.match(workbenchCss, /\.detail-preview-pane\s*\{[^}]*display:grid[^}]*align-content:start[^}]*gap:12px/s);
   assert.match(workbenchCss, /\.detail-technical-row\s*\{[^}]*grid-template-columns:82px minmax\(0,1fr\) auto/s);
   assert.match(workbenchCss, /@media \(max-width:720px\)[\s\S]*\.detail-technical-row\s*\{[^}]*grid-template-columns:minmax\(0,1fr\) auto/s);
 });
