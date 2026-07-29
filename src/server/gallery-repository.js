@@ -1284,6 +1284,13 @@ export function createGalleryRepository(database) {
         || new Set(drafts.map((draft) => draft.storageKey)).size !== drafts.length) {
         throw repositoryError("DUPLICATE_UPLOAD_SESSION", "Upload IDs and storage keys must be unique within a batch.");
       }
+      const contentHashes = drafts.map((draft) => draft.contentSha256).filter(Boolean);
+      if (new Set(contentHashes).size !== contentHashes.length) {
+        throw repositoryError(
+          "DUPLICATE_IMAGE_CONTENT",
+          "Upload drafts must not contain duplicate image content.",
+        );
+      }
 
       const serializedDrafts = drafts.map((draft) => ({
         ...draft,
@@ -1296,11 +1303,18 @@ export function createGalleryRepository(database) {
             DELETE FROM upload_sessions
             WHERE status = 'pending'
               AND expires_at <= CURRENT_TIMESTAMP
-              AND storage_key IN (
-                SELECT json_extract(value, '$.storageKey') FROM json_each(?)
+              AND (
+                storage_key IN (
+                  SELECT json_extract(value, '$.storageKey') FROM json_each(?)
+                )
+                OR content_sha256 IN (
+                  SELECT json_extract(value, '$.contentSha256')
+                  FROM json_each(?)
+                  WHERE json_extract(value, '$.contentSha256') IS NOT NULL
+                )
               )
           `,
-          params: [draftsJson],
+          params: [draftsJson, draftsJson],
         },
         {
           sql: `
@@ -1357,6 +1371,21 @@ export function createGalleryRepository(database) {
                 FROM drafts AS candidate
                 INNER JOIN images ON images.storage_key = candidate.storage_key
               )
+              AND NOT EXISTS (
+                SELECT 1
+                FROM drafts AS candidate
+                INNER JOIN images ON images.content_sha256 = candidate.content_sha256
+                WHERE candidate.content_sha256 IS NOT NULL
+              )
+              AND NOT EXISTS (
+                SELECT 1
+                FROM drafts AS candidate
+                INNER JOIN upload_sessions AS existing
+                  ON existing.content_sha256 = candidate.content_sha256
+                WHERE candidate.content_sha256 IS NOT NULL
+                  AND existing.status = 'pending'
+                  AND existing.id <> candidate.id
+              )
               AND NOT EXISTS (SELECT 1 FROM upload_sessions WHERE id = draft.id)
           `,
           params: [draftsJson],
@@ -1368,8 +1397,11 @@ export function createGalleryRepository(database) {
       const missingDrafts = drafts.filter((draft) => !sessionsById.has(draft.id));
       let storageSessionsByKey = new Map();
       let imagesByStorageKey = new Map();
+      let contentSessionsByHash = new Map();
+      let imagesByContentHash = new Map();
       if (missingDrafts.length) {
         const storageKeysJson = JSON.stringify(missingDrafts.map((draft) => draft.storageKey));
+        const contentHashesJson = JSON.stringify(missingDrafts.map((draft) => draft.contentSha256).filter(Boolean));
         const storageSessions = await all(
           database,
           `
@@ -1397,6 +1429,36 @@ export function createGalleryRepository(database) {
           const image = mapImageRow(row);
           return [image.storageKey, image];
         }));
+        if (contentHashesJson !== "[]") {
+          const contentSessions = await all(
+            database,
+            `
+              SELECT ${SELECT_UPLOAD_SESSION_COLUMNS}
+              FROM upload_sessions
+              WHERE status = 'pending'
+                AND content_sha256 IN (SELECT CAST(value AS TEXT) FROM json_each(?))
+            `,
+            [contentHashesJson],
+          );
+          contentSessionsByHash = new Map(contentSessions.map((row) => {
+            const session = mapUploadSession(row);
+            return [session.contentSha256, session];
+          }));
+          const contentImageRows = await all(
+            database,
+            `
+              SELECT ${SELECT_IMAGE_COLUMNS}
+              FROM images
+              LEFT JOIN categories ON categories.id = images.category_id
+              WHERE images.content_sha256 IN (SELECT CAST(value AS TEXT) FROM json_each(?))
+            `,
+            [contentHashesJson],
+          );
+          imagesByContentHash = new Map(contentImageRows.map((row) => {
+            const image = mapImageRow(row);
+            return [image.contentSha256, image];
+          }));
+        }
       }
 
       return drafts.map((draft) => {
@@ -1407,6 +1469,10 @@ export function createGalleryRepository(database) {
             ? session
             : storageSessionsByKey.get(draft.storageKey) ?? null,
           existingImage: imagesByStorageKey.get(draft.storageKey) ?? null,
+          contentSession: session?.contentSha256 === draft.contentSha256
+            ? session
+            : contentSessionsByHash.get(draft.contentSha256) ?? null,
+          existingContentImage: imagesByContentHash.get(draft.contentSha256) ?? null,
         };
       });
     },
@@ -1512,6 +1578,15 @@ export function createGalleryRepository(database) {
           ]);
         } catch (error) {
           if (/unique constraint|constraint failed/i.test(String(error?.message ?? error))) {
+            if (/images\.content_sha256/i.test(String(error?.message ?? error))) {
+              const duplicates = await this.getImagesByContentHashes(
+                initialSessions.map((session) => session.contentSha256).filter(Boolean),
+              );
+              throw repositoryError("DUPLICATE_IMAGE_CONTENT", "Image content already exists.", {
+                uploadIds: pendingIds,
+                duplicates,
+              });
+            }
             throw repositoryError("UPLOAD_STORAGE_CONFLICT", "An upload storage key is already owned by another image.", {
               uploadIds: pendingIds,
             });
@@ -1684,6 +1759,29 @@ export function createGalleryRepository(database) {
       }
 
       return attachTagNames([mapImageRow(image)], await getImageTagRows(database, [image.id]))[0];
+    },
+
+    async getImagesByContentHashes(contentHashes) {
+      const hashes = [...new Set((Array.isArray(contentHashes) ? contentHashes : [])
+        .map((value) => normalizeContentSha256(value))
+        .filter(Boolean))];
+      if (!hashes.length) return [];
+      if (hashes.length > 50) throw new RangeError("No more than 50 content hashes may be queried at once.");
+      const rows = await all(
+        database,
+        `
+          SELECT ${SELECT_IMAGE_COLUMNS}
+          FROM images
+          LEFT JOIN categories ON categories.id = images.category_id
+          WHERE images.content_sha256 IN (SELECT CAST(value AS TEXT) FROM json_each(?))
+        `,
+        [JSON.stringify(hashes)],
+      );
+      const imagesByHash = new Map(rows.map((row) => {
+        const image = mapImageRow(row);
+        return [image.contentSha256, image];
+      }));
+      return hashes.map((hash) => imagesByHash.get(hash)).filter(Boolean);
     },
 
     async getExistingImageIds(imageIds) {

@@ -5,7 +5,7 @@ import { createLibraryState } from "./library-state.js?v=20260715-featured-filte
 import { createNotifier } from "./notifications.js";
 import { buildImagePreviewUrl, renderImageCard } from "./renderers/image-card.js?v=20260728-image-delivery";
 import { buildDirectImageUrl, buildDownloadImageUrl } from "./image-links.js?v=20260727-technical-info";
-import { createUploadRunner, describeUploadFailure, inspectImageFile } from "./upload.js?v=20260727-technical-left";
+import { createUploadRunner, describeUploadFailure, inspectImageFile } from "./upload.js?v=20260730-content-deduplication";
 import { buildImageVariantUrl } from "../image-variants.js?v=20260728-image-delivery";
 
 const elements = {
@@ -972,6 +972,15 @@ function uploadStatusText(task) {
   }[task.status];
 }
 
+function uploadFailureCounts(tasks) {
+  return tasks.reduce((counts, task) => {
+    if (task.status !== "error") return counts;
+    if (task.errorCode === "DUPLICATE_IMAGE_CONTENT") counts.duplicate += 1;
+    else if (task.retryable !== false) counts.retryable += 1;
+    return counts;
+  }, { duplicate: 0, retryable: 0 });
+}
+
 function visibleUploadTasks(tasks, limit = 80) {
   if (tasks.length <= limit) return tasks;
   const important = tasks.filter((task) => task.status === "error" || ["preparing", "signing", "uploading", "completing"].includes(task.status));
@@ -987,7 +996,14 @@ function renderUploadTaskRows(tasks, container) {
     const row = createElement("div", { className: `upload-task is-${task.status}` });
     const copy = createElement("div", { className: "upload-task-copy" });
     copy.append(createElement("strong", {}, task.file.name), createElement("small", {}, uploadStatusText(task)));
-    row.append(copy, createElement("span", { className: "upload-task-state" }, task.status === "success" ? "完成" : task.status === "error" ? "失败" : "处理中"));
+    const stateText = task.status === "success"
+      ? "完成"
+      : task.errorCode === "DUPLICATE_IMAGE_CONTENT"
+        ? "已跳过"
+        : task.status === "error"
+          ? "失败"
+          : "处理中";
+    row.append(copy, createElement("span", { className: "upload-task-state" }, stateText));
     container.append(row);
   }
   if (visible.length < tasks.length) container.append(createElement("p", { className: "upload-task-limit" }, `仅显示 ${visible.length} / ${tasks.length} 项`));
@@ -1046,15 +1062,25 @@ function renderBackgroundUpload() {
   const header = createElement("header");
   const copy = createElement("div", { className: "admin-upload-status-copy" });
   copy.append(
-    createElement("strong", {}, busy ? "后台上传中" : counts.error ? "上传需要处理" : "上传已完成"),
+    createElement("strong", {}, busy
+      ? "后台上传中"
+      : failures.retryable
+        ? "上传需要处理"
+        : failures.duplicate
+          ? "重复图片已跳过"
+          : "上传已完成"),
     createElement("span", { "aria-live": "polite" }, counts.error
-      ? `${counts.success} 张成功，${counts.error} 张失败`
+      ? [
+        `${counts.success} 张成功`,
+        failures.duplicate ? `${failures.duplicate} 张重复已跳过` : "",
+        failures.retryable ? `${failures.retryable} 张失败` : "",
+      ].filter(Boolean).join("，")
       : `${completed} / ${counts.total} 已完成`),
   );
   const actions = createElement("div", { className: "admin-upload-status-actions" });
   const toggle = createElement("button", { type: "button" }, uploadSession.expanded ? "收起" : "展开");
   const retry = createElement("button", { type: "button" }, "重试失败项");
-  retry.hidden = busy || counts.error === 0;
+  retry.hidden = busy || failures.retryable === 0;
   const dismiss = createElement("button", { type: "button", "aria-label": "关闭上传任务", title: "关闭" }, "×");
   dismiss.disabled = busy;
   actions.append(toggle, retry, dismiss);
@@ -1104,8 +1130,14 @@ async function runBackgroundUpload({ retry = false } = {}) {
     mergeUploadResults(session.runner);
     renderUploadSession();
     const counts = session.runner.counts();
-    if (counts.error) notifier.error(`${counts.success} 张上传成功，${counts.error} 张失败，可在上传任务中重试。`);
-    else if (counts.total) notifier.success(`已上传 ${counts.success} 张图片`);
+    const failures = uploadFailureCounts(session.runner.tasks());
+    if (failures.retryable) {
+      notifier.error(`${counts.success} 张上传成功，${failures.retryable} 张失败，可在上传任务中重试。`);
+    } else if (failures.duplicate) {
+      notifier.success(`${counts.success} 张上传成功，${failures.duplicate} 张重复图片已跳过。`);
+    } else if (counts.total) {
+      notifier.success(`已上传 ${counts.success} 张图片`);
+    }
   }
 }
 
@@ -1197,7 +1229,11 @@ function openUploadDialog() {
       const payload = await client.request("/api/admin/images/upload/init", {
         method: "POST",
         body: JSON.stringify({
-          files: batch.map((task) => ({ ...task.draft, uploadId: task.uploadId })),
+          files: batch.map((task) => ({
+            ...task.draft,
+            uploadId: task.uploadId,
+            clientItemId: task.id,
+          })),
           ...metadata,
         }),
       });

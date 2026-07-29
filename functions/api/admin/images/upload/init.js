@@ -85,6 +85,50 @@ function conflictResponse(message, details = {}) {
   return jsonResponse({ error: message, code: "UPLOAD_CONFLICT", ...details }, 409);
 }
 
+function duplicateContentResponse(duplicates, details = {}) {
+  const count = duplicates.length;
+  const reasons = new Set(duplicates.map((item) => item.reason));
+  const error = reasons.size === 1 && reasons.has("same_batch")
+    ? count === 1
+      ? "本次选择中有两张内容完全相同的图片，将保留第一张并跳过后续重复项。"
+      : `本次选择中有 ${count} 张重复图片，将保留每组第一张并跳过后续重复项。`
+    : reasons.size === 1 && reasons.has("upload_in_progress")
+      ? count === 1
+        ? "相同图片正在上传中，本次重复任务已跳过。"
+        : `${count} 张相同图片正在上传中，本次重复任务已跳过。`
+      : count === 1
+        ? "这张图片与图库中已有图片内容完全相同，已跳过上传。"
+        : `发现 ${count} 张内容重复的图片，已跳过上传。`;
+  return jsonResponse({
+    error,
+    code: "DUPLICATE_IMAGE_CONTENT",
+    duplicates,
+    ...details,
+  }, 409);
+}
+
+function duplicateItem(file, { reason, existingImage = null, pendingSession = null } = {}) {
+  return {
+    uploadId: file.uploadId ?? null,
+    clientItemId: file.clientItemId ?? null,
+    fileName: file.name,
+    contentSha256: file.contentSha256,
+    reason,
+    ...(existingImage ? {
+      existingImage: {
+        id: existingImage.id,
+        publicId: existingImage.publicId,
+        fileName: existingImage.fileName,
+        fileUrl: existingImage.fileUrl,
+      },
+    } : {}),
+    ...(pendingSession ? {
+      pendingUploadId: pendingSession.id,
+      pendingFileName: pendingSession.fileName,
+    } : {}),
+  };
+}
+
 async function handleRequest({ env, request }) {
   const startedAt = Date.now();
   const requestId = request.headers.get("cf-ray") ?? crypto.randomUUID();
@@ -127,7 +171,37 @@ async function handleRequest({ env, request }) {
     return jsonResponse({ error: "每张图片都必须提供有效的 SHA-256 内容哈希。" }, 400);
   }
 
+  const seenContentHashes = new Set();
+  const repeatedFiles = [];
+  for (const file of files) {
+    if (seenContentHashes.has(file.contentSha256)) {
+      repeatedFiles.push(file);
+    } else {
+      seenContentHashes.add(file.contentSha256);
+    }
+  }
+  if (repeatedFiles.length) {
+    return duplicateContentResponse(
+      repeatedFiles.map((file) => duplicateItem(file, { reason: "same_batch" })),
+      { requestId },
+    );
+  }
+
   const repository = getRepository(env);
+  const existingImages = await repository.getImagesByContentHashes(files.map((file) => file.contentSha256));
+  if (existingImages.length) {
+    const imagesByHash = new Map(existingImages.map((image) => [image.contentSha256, image]));
+    return duplicateContentResponse(
+      files
+        .filter((file) => imagesByHash.has(file.contentSha256))
+        .map((file) => duplicateItem(file, {
+          reason: "existing_image",
+          existingImage: imagesByHash.get(file.contentSha256),
+        })),
+      { requestId },
+    );
+  }
+
   const globalTagIds = normalizeTagIds(payload?.tagIds);
   const fileTagIds = files.map((file) => file.tagIds ?? globalTagIds);
   if (fileTagIds.some((tagIds) => tagIds.length === 0)) {
@@ -236,6 +310,26 @@ async function handleRequest({ env, request }) {
     id: draft.uploadId,
     ...draft,
   })));
+  const contentConflicts = reservations.flatMap((reservation, index) => {
+    const draft = uploadDrafts[index];
+    if (reservation.session) return [];
+    if (reservation.existingContentImage) {
+      return [duplicateItem(identifiedFiles[index], {
+        reason: "existing_image",
+        existingImage: reservation.existingContentImage,
+      })];
+    }
+    if (reservation.contentSession && reservation.contentSession.id !== draft.uploadId) {
+      return [duplicateItem(identifiedFiles[index], {
+        reason: "upload_in_progress",
+        pendingSession: reservation.contentSession,
+      })];
+    }
+    return [];
+  });
+  if (contentConflicts.length) {
+    return duplicateContentResponse(contentConflicts, { requestId });
+  }
   for (const [index, draft] of uploadDrafts.entries()) {
       const reservation = reservations[index];
       if (!reservation.session || !sessionMatches(reservation.session, draft)) {

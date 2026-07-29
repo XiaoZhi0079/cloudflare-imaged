@@ -44,6 +44,9 @@ function createMockBucket() {
         customMetadata: { ...(entry.customMetadata ?? {}) },
       };
     },
+    async delete(key) {
+      objects.delete(key);
+    },
   };
 }
 
@@ -158,7 +161,7 @@ test("admin upload init reserves a 20-image heterogeneous batch within a fixed D
     size: 12345,
     width: 1920,
     height: 1080,
-    contentSha256: TEST_SHA256,
+    contentSha256: (index + 1).toString(16).padStart(64, "0"),
     categoryId: category.id,
     tagIds: [tag.id],
   }));
@@ -466,23 +469,273 @@ test("upload init rejects a different session targeting a reserved storage key",
   const env = createTestEnv();
   const repository = createGalleryRepository(env.GALLERY_DB);
   const tag = await repository.createTag({ name: "冲突标签", sortOrder: 1, isVisible: true });
-  const requestInit = (uploadId) => adminUploadInitHandler({
+  const requestInit = (uploadId, contentSha256 = TEST_SHA256) => adminUploadInitHandler({
     env,
     request: new Request("https://gallery.example.com/api/admin/images/upload/init", {
       method: "POST",
       headers: { "content-type": "application/json", "x-gallery-admin-key": "gallery-secret" },
       body: JSON.stringify({
         tagIds: [tag.id],
-        files: [{ uploadId, name: "reserved.webp", type: "image/webp", size: 3, width: 1920, height: 1080, contentSha256: TEST_SHA256 }],
+        files: [{ uploadId, name: "reserved.webp", type: "image/webp", size: 3, width: 1920, height: 1080, contentSha256 }],
       }),
     }),
   });
 
   assert.equal((await requestInit("6af0b175-3c6b-4a20-a1ab-52b77fbab671")).status, 200);
-  const conflict = await requestInit("2f204b26-d2c7-46d0-95cb-8cad1176f639");
+  const conflict = await requestInit("2f204b26-d2c7-46d0-95cb-8cad1176f639", "b".repeat(64));
   assert.equal(conflict.status, 409);
   assert.equal((await conflict.json()).code, "UPLOAD_CONFLICT");
   assert.equal(env.GALLERY_DB.prepare("SELECT COUNT(*) AS count FROM upload_sessions").get().count, 1);
+});
+
+test("upload init rejects content already stored in the gallery with a friendly conflict", async () => {
+  const env = createTestEnv();
+  const repository = createGalleryRepository(env.GALLERY_DB);
+  const tag = await repository.createTag({ name: "重复检测", sortOrder: 1, isVisible: true });
+  const existing = await repository.upsertImage({
+    contentSha256: TEST_SHA256,
+    storageKey: "gallery/existing.webp",
+    fileName: "existing.webp",
+    fileUrl: "/file/gallery/existing.webp",
+    width: 1920,
+    height: 1080,
+  });
+
+  const response = await adminUploadInitHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/images/upload/init", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-gallery-admin-key": "gallery-secret" },
+      body: JSON.stringify({
+        tagIds: [tag.id],
+        files: [{
+          uploadId: "6af0b175-3c6b-4a20-a1ab-52b77fbab671",
+          clientItemId: "upload-1",
+          name: "duplicate.webp",
+          type: "image/webp",
+          size: 3,
+          width: 1920,
+          height: 1080,
+          contentSha256: TEST_SHA256,
+        }],
+      }),
+    }),
+  });
+
+  assert.equal(response.status, 409);
+  const payload = await response.json();
+  assert.equal(payload.code, "DUPLICATE_IMAGE_CONTENT");
+  assert.equal(payload.duplicates[0].clientItemId, "upload-1");
+  assert.deepEqual(payload.duplicates[0].existingImage, {
+    id: existing.id,
+    publicId: existing.publicId,
+    fileName: existing.fileName,
+    fileUrl: existing.fileUrl,
+  });
+  assert.equal(env.GALLERY_DB.prepare("SELECT COUNT(*) AS count FROM upload_sessions").get().count, 0);
+});
+
+test("upload init rejects byte-identical files in one batch without reserving partial sessions", async () => {
+  const env = createTestEnv();
+  const repository = createGalleryRepository(env.GALLERY_DB);
+  const tag = await repository.createTag({ name: "批内重复", sortOrder: 1, isVisible: true });
+  const files = ["duplicate-a.webp", "duplicate-b.webp"].map((name, index) => ({
+    uploadId: `${index + 1}1111111-1111-4111-8111-111111111111`,
+    clientItemId: `upload-${index + 1}`,
+    name,
+    type: "image/webp",
+    size: 3,
+    width: 1920,
+    height: 1080,
+    contentSha256: TEST_SHA256,
+  }));
+
+  const response = await adminUploadInitHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/images/upload/init", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-gallery-admin-key": "gallery-secret" },
+      body: JSON.stringify({ tagIds: [tag.id], files }),
+    }),
+  });
+
+  assert.equal(response.status, 409);
+  const payload = await response.json();
+  assert.equal(payload.code, "DUPLICATE_IMAGE_CONTENT");
+  assert.deepEqual(payload.duplicates.map((item) => ({
+    fileName: item.fileName,
+    reason: item.reason,
+  })), [{
+    fileName: "duplicate-b.webp",
+    reason: "same_batch",
+  }]);
+  assert.equal(env.GALLERY_DB.prepare("SELECT COUNT(*) AS count FROM upload_sessions").get().count, 0);
+});
+
+test("upload init rejects content already reserved under a different file name", async () => {
+  const env = createTestEnv();
+  const repository = createGalleryRepository(env.GALLERY_DB);
+  const tag = await repository.createTag({ name: "并发重复", sortOrder: 1, isVisible: true });
+  const first = await repository.reserveUploadSession({
+    id: "11111111-1111-4111-8111-111111111111",
+    publicId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    contentSha256: TEST_SHA256,
+    storageKey: "gallery/first.webp",
+    fileName: "first.webp",
+    fileUrl: "/file/gallery/first.webp",
+    contentType: "image/webp",
+    fileSize: 3,
+    width: 1920,
+    height: 1080,
+    tagIds: [tag.id],
+  });
+  assert.ok(first.session);
+
+  const response = await adminUploadInitHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/images/upload/init", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-gallery-admin-key": "gallery-secret" },
+      body: JSON.stringify({
+        tagIds: [tag.id],
+        files: [{
+          uploadId: "22222222-2222-4222-8222-222222222222",
+          clientItemId: "upload-2",
+          name: "second.webp",
+          type: "image/webp",
+          size: 3,
+          width: 1920,
+          height: 1080,
+          contentSha256: TEST_SHA256,
+        }],
+      }),
+    }),
+  });
+
+  assert.equal(response.status, 409);
+  const payload = await response.json();
+  assert.equal(payload.code, "DUPLICATE_IMAGE_CONTENT");
+  assert.equal(payload.duplicates[0].reason, "upload_in_progress");
+  assert.equal(payload.duplicates[0].pendingUploadId, first.session.id);
+  assert.equal(env.GALLERY_DB.prepare("SELECT COUNT(*) AS count FROM upload_sessions").get().count, 1);
+});
+
+test("upload completion maps a database hash race to a friendly conflict and cleans the duplicate object", async () => {
+  const env = createTestEnv();
+  const repository = createGalleryRepository(env.GALLERY_DB);
+  const tag = await repository.createTag({ name: "完成竞态", sortOrder: 1, isVisible: true });
+  const existing = await repository.upsertImage({
+    contentSha256: TEST_SHA256,
+    storageKey: "gallery/existing-race.webp",
+    fileName: "existing-race.webp",
+    fileUrl: "/file/gallery/existing-race.webp",
+    width: 1920,
+    height: 1080,
+  });
+  const uploadId = "6af0b175-3c6b-4a20-a1ab-52b77fbab671";
+  env.GALLERY_DB.prepare(`
+    INSERT INTO upload_sessions (
+      id, public_id, content_sha256, storage_key, file_name, file_url,
+      content_type, file_size, width, height, tag_ids, client_item_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    uploadId,
+    "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    TEST_SHA256,
+    "gallery/race-loser.webp",
+    "race-loser.webp",
+    "/file/gallery/race-loser.webp",
+    "image/webp",
+    3,
+    1920,
+    1080,
+    JSON.stringify([tag.id]),
+    "upload-1",
+  );
+  await env.GALLERY_BUCKET.put("gallery/race-loser.webp", new Uint8Array([1, 2, 3]));
+
+  const response = await adminUploadCompleteHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/images/upload/complete", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-gallery-admin-key": "gallery-secret" },
+      body: JSON.stringify({
+        tagIds: [tag.id],
+        files: [{
+          uploadId,
+          storageKey: "gallery/race-loser.webp",
+          fileName: "race-loser.webp",
+          width: 1920,
+          height: 1080,
+        }],
+      }),
+    }),
+  });
+
+  assert.equal(response.status, 409);
+  const payload = await response.json();
+  assert.equal(payload.code, "DUPLICATE_IMAGE_CONTENT");
+  assert.equal(payload.duplicates[0].existingImage.id, existing.id);
+  assert.equal(env.GALLERY_DB.prepare("SELECT COUNT(*) AS count FROM images").get().count, 1);
+  assert.equal(env.GALLERY_DB.prepare("SELECT COUNT(*) AS count FROM upload_sessions").get().count, 0);
+  assert.equal(await env.GALLERY_BUCKET.head("gallery/race-loser.webp"), null);
+});
+
+test("upload completion never deletes an R2 object already owned by an existing image", async () => {
+  const env = createTestEnv();
+  const repository = createGalleryRepository(env.GALLERY_DB);
+  const tag = await repository.createTag({ name: "对象保护", sortOrder: 1, isVisible: true });
+  await repository.upsertImage({
+    contentSha256: TEST_SHA256,
+    storageKey: "gallery/canonical.webp",
+    fileName: "canonical.webp",
+    fileUrl: "/file/gallery/canonical.webp",
+    width: 1920,
+    height: 1080,
+  });
+  await env.GALLERY_BUCKET.put("gallery/canonical.webp", new Uint8Array([1, 2, 3]));
+  const uploadId = "6af0b175-3c6b-4a20-a1ab-52b77fbab671";
+  env.GALLERY_DB.prepare(`
+    INSERT INTO upload_sessions (
+      id, public_id, content_sha256, storage_key, file_name, file_url,
+      content_type, file_size, width, height, tag_ids, client_item_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    uploadId,
+    "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    TEST_SHA256,
+    "gallery/canonical.webp",
+    "canonical.webp",
+    "/file/gallery/canonical.webp",
+    "image/webp",
+    3,
+    1920,
+    1080,
+    JSON.stringify([tag.id]),
+    "upload-1",
+  );
+
+  const response = await adminUploadCompleteHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/images/upload/complete", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-gallery-admin-key": "gallery-secret" },
+      body: JSON.stringify({
+        tagIds: [tag.id],
+        files: [{
+          uploadId,
+          storageKey: "gallery/canonical.webp",
+          fileName: "canonical.webp",
+          width: 1920,
+          height: 1080,
+        }],
+      }),
+    }),
+  });
+
+  assert.equal(response.status, 409);
+  assert.notEqual(await env.GALLERY_BUCKET.head("gallery/canonical.webp"), null);
+  assert.equal(env.GALLERY_DB.prepare("SELECT COUNT(*) AS count FROM images").get().count, 1);
 });
 
 test("upload completion rejects changed tags without mutating D1", async () => {

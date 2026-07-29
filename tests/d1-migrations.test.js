@@ -9,6 +9,7 @@ const tagGroupsUrl = new URL("../migrations/0003_tag_groups.sql", import.meta.ur
 const uploadSessionsUrl = new URL("../migrations/0004_upload_sessions.sql", import.meta.url);
 const uploadOperationsUrl = new URL("../migrations/0005_upload_operations_and_paging.sql", import.meta.url);
 const imageIdentityUrl = new URL("../migrations/0006_image_identity_and_hash.sql", import.meta.url);
+const uniqueImageContentUrl = new URL("../migrations/0007_unique_image_content.sql", import.meta.url);
 const schemaUrl = new URL("../schema.sql", import.meta.url);
 
 const BUSINESS_TABLES = [
@@ -43,6 +44,7 @@ const BUSINESS_INDEXES = [
   "idx_tags_group_order",
   "idx_tags_visible_order",
   "idx_upload_sessions_operation",
+  "idx_upload_sessions_pending_content_sha256",
   "idx_upload_sessions_public_id",
   "idx_upload_sessions_status_expiry",
 ];
@@ -92,6 +94,7 @@ test("migrations prepare a fresh database and are idempotent", () => {
   const uploadSessions = readFileSync(uploadSessionsUrl, "utf8");
   const uploadOperations = readFileSync(uploadOperationsUrl, "utf8");
   const imageIdentity = readFileSync(imageIdentityUrl, "utf8");
+  const uniqueImageContent = readFileSync(uniqueImageContentUrl, "utf8");
   const database = new DatabaseSync(":memory:");
 
   database.exec(baseline);
@@ -100,6 +103,7 @@ test("migrations prepare a fresh database and are idempotent", () => {
   database.exec(uploadSessions);
   database.exec(uploadOperations);
   database.exec(imageIdentity);
+  database.exec(uniqueImageContent);
   database.exec(baseline);
   database.exec(albums);
 
@@ -107,6 +111,14 @@ test("migrations prepare a fresh database and are idempotent", () => {
   assert.deepEqual(objectNames(database, "index"), BUSINESS_INDEXES);
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM categories").get().count, 3);
   assert.equal(database.prepare("SELECT COUNT(*) AS count FROM site_settings").get().count, 2);
+  assert.equal(
+    database.prepare("SELECT `unique` AS isUnique FROM pragma_index_list('images') WHERE name = 'idx_images_content_sha256'").get().isUnique,
+    1,
+  );
+  assert.equal(
+    database.prepare("SELECT `unique` AS isUnique FROM pragma_index_list('upload_sessions') WHERE name = 'idx_upload_sessions_pending_content_sha256'").get().isUnique,
+    1,
+  );
   assert.deepEqual(
     { ...database.prepare("SELECT name, slug, sort_order FROM tag_groups").get() },
     { name: "未分类", slug: "uncategorized", sort_order: 1 },
@@ -133,6 +145,7 @@ test("schema snapshot and baseline migration define identical objects", () => {
   migrationDatabase.exec(readFileSync(uploadSessionsUrl, "utf8"));
   migrationDatabase.exec(readFileSync(uploadOperationsUrl, "utf8"));
   migrationDatabase.exec(readFileSync(imageIdentityUrl, "utf8"));
+  migrationDatabase.exec(readFileSync(uniqueImageContentUrl, "utf8"));
   snapshotDatabase.exec(readFileSync(schemaUrl, "utf8"));
 
   assert.deepEqual(normalizedObjects(migrationDatabase), normalizedObjects(snapshotDatabase));

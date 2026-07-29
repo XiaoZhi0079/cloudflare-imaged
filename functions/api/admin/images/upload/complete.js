@@ -61,6 +61,17 @@ function conflictResponse(message, requestId, details = {}) {
   }, 409);
 }
 
+function duplicateContentResponse(duplicates, requestId) {
+  return jsonResponse({
+    error: duplicates.length === 1
+      ? "这张图片与图库中已有图片内容完全相同，已跳过上传。"
+      : `发现 ${duplicates.length} 张内容重复的图片，已跳过上传。`,
+    code: "DUPLICATE_IMAGE_CONTENT",
+    requestId,
+    duplicates,
+  }, 409);
+}
+
 function errorDetails(error) {
   return {
     name: String(error?.name ?? "Error").slice(0, 80),
@@ -229,6 +240,48 @@ async function handleRequest({ env, request }) {
     });
     if (error?.code === "UPLOAD_STORAGE_CONFLICT") {
       return conflictResponse("该存储位置已属于另一张图片，已拒绝覆盖。", requestId);
+    }
+    if (error?.code === "DUPLICATE_IMAGE_CONTENT") {
+      const imagesByHash = new Map((error.duplicates ?? [])
+        .map((image) => [image.contentSha256, image]));
+      const duplicateSessions = sessions.filter((session) => imagesByHash.has(session.contentSha256));
+      const duplicates = duplicateSessions.map((session) => {
+        const existingImage = imagesByHash.get(session.contentSha256);
+        return {
+          uploadId: session.id,
+          clientItemId: session.clientItemId,
+          fileName: session.fileName,
+          contentSha256: session.contentSha256,
+          reason: "existing_image",
+          existingImage: {
+            id: existingImage.id,
+            publicId: existingImage.publicId,
+            fileName: existingImage.fileName,
+            fileUrl: existingImage.fileUrl,
+          },
+        };
+      });
+      if (duplicates.length) {
+        try {
+          const storageOwners = await Promise.all(
+            duplicateSessions.map((session) => repository.getImageByStorageKey(session.storageKey)),
+          );
+          await repository.deletePendingUploadSessions(duplicateSessions.map((session) => session.id));
+          if (typeof env.GALLERY_BUCKET?.delete === "function") {
+            await Promise.all(duplicateSessions
+              .filter((session, index) => !storageOwners[index])
+              .map((session) => env.GALLERY_BUCKET.delete(session.storageKey)));
+          }
+        } catch (cleanupError) {
+          writeLog("error", {
+            requestId,
+            phase: "duplicate-cleanup",
+            durationMs: Date.now() - startedAt,
+            error: errorDetails(cleanupError),
+          });
+        }
+        return duplicateContentResponse(duplicates, requestId);
+      }
     }
     throw error;
   }

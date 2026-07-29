@@ -251,3 +251,27 @@ test("an expired pending reservation can be replaced safely", async () => {
   assert.equal(replacement.session.id, "2f204b26-d2c7-46d0-95cb-8cad1176f639");
   assert.equal(await repository.getUploadSessionById(input.id), null);
 });
+
+test("an expired pending reservation releases its content hash for a different storage key", async () => {
+  const { database, repository, tags, category } = await fixture();
+  const contentSha256 = "c".repeat(64);
+  const input = {
+    ...uploadSessionInput({ category, tags }),
+    contentSha256,
+  };
+  await repository.reserveUploadSession(input);
+  database.prepare("UPDATE upload_sessions SET expires_at = datetime('now', '-1 minute') WHERE id = ?").run(input.id);
+
+  const replacement = await repository.reserveUploadSession({
+    ...uploadSessionInput({
+      category,
+      tags,
+      id: "2f204b26-d2c7-46d0-95cb-8cad1176f639",
+      storageKey: "gallery/replacement-content.png",
+    }),
+    contentSha256,
+  });
+
+  assert.equal(replacement.session.id, "2f204b26-d2c7-46d0-95cb-8cad1176f639");
+  assert.equal(await repository.getUploadSessionById(input.id), null);
+});

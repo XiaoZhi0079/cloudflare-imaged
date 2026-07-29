@@ -458,7 +458,7 @@ test("changed admin assets use targeted cache-busting versions", () => {
     Array(libraryCardTagsReferences.length).fill(libraryCardTagsVersion),
   );
 
-  const uploadIdempotencyVersion = "20260727-technical-left";
+  const uploadIdempotencyVersion = "20260730-content-deduplication";
   const uploadIdempotencyReferences = [
     [libraryEntry, /from "\.\/upload\.js\?v=([^"]+)"/, "upload.js"],
   ];
@@ -473,9 +473,10 @@ test("changed admin assets use targeted cache-busting versions", () => {
   );
 
   const imageDeliveryVersion = "20260728-image-delivery";
+  const contentDeduplicationVersion = "20260730-content-deduplication";
   const libraryEntryMatch = libraryHtml.match(/src="\/assets\/admin\/library-page\.js\?v=([^"]+)"/);
   assert.ok(libraryEntryMatch, "library-page.js must include a cache-busting release version");
-  assert.equal(libraryEntryMatch[1], imageDeliveryVersion);
+  assert.equal(libraryEntryMatch[1], contentDeduplicationVersion);
 
   const workbenchDialogVersion = imageDeliveryVersion;
   const workbenchDialogMatch = libraryHtml.match(/href="\/assets\/admin\/workbench\.css\?v=([^"]+)"/);

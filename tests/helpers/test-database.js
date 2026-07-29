@@ -19,6 +19,9 @@ export const BASELINE_SQL = readFileSync(
 ) + "\n" + readFileSync(
   new URL("../../migrations/0006_image_identity_and_hash.sql", import.meta.url),
   "utf8",
+) + "\n" + readFileSync(
+  new URL("../../migrations/0007_unique_image_content.sql", import.meta.url),
+  "utf8",
 );
 
 export function createTestDatabase() {
