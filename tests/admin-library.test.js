@@ -364,6 +364,7 @@ test("image uploads continue in a bounded background task panel", () => {
   const workbenchCss = readFileSync(new URL("../public/assets/admin/workbench.css", import.meta.url), "utf8");
 
   assert.match(html, /id="admin-upload-status"[^>]*aria-label="后台上传任务"/);
+  assert.match(html, /id="admin-upload-open"[^>]*disabled[^>]*title="正在加载目录和标签"/);
   assert.match(source, /prepareFile:\s*inspectImageFile/);
   assert.match(source, /startUploadInBackground/);
   assert.match(source, /hideUploadDialog\(\);[\s\S]*runBackgroundUpload\(\)/);
@@ -372,6 +373,9 @@ test("image uploads continue in a bounded background task panel", () => {
   assert.match(source, /visibleUploadTasks\(tasks, limit = 80\)/);
   assert.match(source, /function scheduleUploadRender\(\)[\s\S]*requestAnimationFrame/);
   assert.match(source, /onChange:\s*scheduleUploadRender/);
+  assert.match(source, /const failures = uploadFailureCounts\(runner\.tasks\(\)\);/);
+  assert.match(source, /state\.setTags\(taxonomy\.tags\);[\s\S]*await client\.request\("\/api\/admin\/categories"\)[\s\S]*setUploadAvailability\(uploadReady/s);
+  assert.match(source, /function openUploadDialog\(\)[\s\S]*!state\.getCategories\(\)\.length \|\| !state\.getTags\(\)\.length/s);
   assert.doesNotMatch(source, /Promise\.all\(selected\.map\(\(file\) => measureImageFile/);
   assert.match(workbenchCss, /\.admin-upload-status\s*\{[^}]*position:fixed[^}]*width:min\(440px,calc\(100vw - 36px\)\)/s);
   assert.match(workbenchCss, /\.admin-upload-status-tasks\s*\{[^}]*max-height:min\(360px,46dvh\)[^}]*overflow:auto/s);

@@ -223,6 +223,11 @@ function renderLoading() {
   elements.visibleCount.textContent = "...";
 }
 
+function setUploadAvailability(ready, message = "") {
+  elements.uploadOpen.disabled = !ready;
+  elements.uploadOpen.title = ready ? "" : message;
+}
+
 function renderLoadError(tags, error) {
   elements.visibleCount.textContent = "-";
   const box = createElement("div", { className: "admin-error" });
@@ -236,25 +241,29 @@ function renderLoadError(tags, error) {
 async function loadLibrary(taxonomy) {
   showApp();
   bulkMode = false;
+  state = createLibraryState();
+  state.setTags(taxonomy.tags);
+  state.setTagGroups(taxonomy.tagGroups);
+  setUploadAvailability(false, "正在加载目录和标签");
   renderLoading();
-  let payloads;
   try {
-    payloads = await Promise.all([
-      client.request("/api/admin/images"),
-      client.request("/api/admin/categories"),
-    ]);
+    const { categories = [] } = await client.request("/api/admin/categories");
+    state.setCategories(categories);
+    const uploadReady = state.getCategories().length > 0 && state.getTags().length > 0;
+    setUploadAvailability(uploadReady, uploadReady ? "" : "请先创建至少一个目录和标签");
   } catch (error) {
     if (error instanceof AdminUnauthorizedError) throw error;
     renderLoadError(taxonomy, error);
     return;
   }
-  const [{ images = [] }, { categories = [] }] = payloads;
-  state = createLibraryState();
-  state.setTags(taxonomy.tags);
-  state.setTagGroups(taxonomy.tagGroups);
-  state.setCategories(categories);
-  state.setImages(images);
-  renderAll();
+  try {
+    const { images = [] } = await client.request("/api/admin/images");
+    state.setImages(images);
+    renderAll();
+  } catch (error) {
+    if (error instanceof AdminUnauthorizedError) throw error;
+    renderLoadError(taxonomy, error);
+  }
 }
 
 async function authenticate(key) {
@@ -1056,6 +1065,7 @@ function renderBackgroundUpload() {
   }
   const { runner } = uploadSession;
   const counts = runner.counts();
+  const failures = uploadFailureCounts(runner.tasks());
   const completed = counts.success + counts.error;
   const busy = uploadIsBusy();
   const panel = createElement("div", { className: "admin-upload-status-panel" });
@@ -1175,6 +1185,10 @@ function startUploadInBackground(runner, controls) {
 }
 
 function openUploadDialog() {
+  if (!state.getCategories().length || !state.getTags().length) {
+    notifier.error("目录和标签尚未加载完成，请稍后重试。");
+    return;
+  }
   if (uploadSession?.started) {
     const counts = uploadSession.runner.counts();
     if (!uploadIsBusy() && counts.error === 0) dismissUploadSession();

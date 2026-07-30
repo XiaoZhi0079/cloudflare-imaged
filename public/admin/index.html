@@ -26,7 +26,7 @@
         <div class="admin-top-actions"><a href="/">查看前台</a><button type="button" data-admin-logout>退出</button></div>
       </header>
       <main class="workbench">
-        <header class="workbench-heading"><div><p class="admin-eyebrow">Library</p><h1>图片库 <span id="admin-visible-count">0</span></h1></div><div class="workbench-heading-actions"><button id="admin-bulk-toggle" type="button" aria-pressed="false">批量管理</button><button id="admin-upload-open" class="admin-button-primary" type="button">上传图片</button></div></header>
+        <header class="workbench-heading"><div><p class="admin-eyebrow">Library</p><h1>图片库 <span id="admin-visible-count">0</span></h1></div><div class="workbench-heading-actions"><button id="admin-bulk-toggle" type="button" aria-pressed="false">批量管理</button><button id="admin-upload-open" class="admin-button-primary" type="button" disabled title="正在加载目录和标签">上传图片</button></div></header>
         <section class="workbench-command" aria-label="搜索和排序"><label class="admin-field"><span>搜索图片</span><input id="admin-search" type="search" placeholder="文件名或标签" /></label><label class="admin-field"><span>排序</span><select id="admin-sort"><option value="newest">最新上传</option><option value="name">文件名</option></select></label><button id="admin-filter-toggle" type="button" aria-expanded="false" aria-controls="admin-filters">筛选</button><button id="admin-density" type="button" aria-pressed="false">紧凑视图</button></section>
         <div class="workbench-layout">
           <aside id="admin-filters" class="filter-rail">
@@ -42,6 +42,6 @@
       <section id="admin-detail-overlay" class="admin-overlay admin-detail-overlay" hidden></section>
       <div id="admin-dialog-host"></div><div id="admin-toast-host" class="admin-toast-host" aria-live="polite"></div>
     </div>
-    <script type="module" src="/assets/admin/library-page.js?v=20260730-content-deduplication"></script>
+    <script type="module" src="/assets/admin/library-page.js?v=20260730-upload-readiness"></script>
   </body>
 </html>
