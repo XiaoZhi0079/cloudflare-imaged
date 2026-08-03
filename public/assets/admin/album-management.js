@@ -35,6 +35,8 @@ export function createAlbumManagementController({ root, client, dialogs, notifie
   let selectedId = null;
   let draft = null;
   let library = null;
+  let libraryNextOffset = 0;
+  let libraryHasMore = true;
   let busy = false;
   let dirty = false;
 
@@ -160,14 +162,27 @@ export function createAlbumManagementController({ root, client, dialogs, notifie
   }
   async function addImages() {
     if (!draft) return;
-    if (!library) library = (await client.request("/api/admin/images")).images ?? [];
+    if (!library) library = [];
+    const loadLibraryPage = async () => {
+      if (!libraryHasMore) return;
+      const page = await client.request(`/api/admin/images?limit=100&offset=${libraryNextOffset}&sort=newest`);
+      const known = new Set(library.map((image) => Number(image.id)));
+      library.push(...(page.images ?? []).filter((image) => !known.has(Number(image.id))));
+      libraryNextOffset = Number(page.nextOffset ?? library.length);
+      libraryHasMore = Boolean(page.hasMore);
+    };
+    if (!library.length) await loadLibraryPage();
     const selected = new Set(draft.images.map((image) => Number(image.id)));
     const filters = [{ value: "all", label: "全部" }, { value: "4k", label: "4K" }, { value: "2k", label: "2K" }, { value: "1k", label: "1K" }, { value: "other", label: "其他" }, { value: "ineligible", label: "非轮播比例" }];
     const body = document.createElement("div"); body.className = "site-picker"; let active = "all";
-    body.innerHTML = `<div class="site-picker-filters">${filters.map((filter) => `<button type="button" data-tier="${filter.value}">${filter.label}</button>`).join("")}</div><div class="site-picker-grid"></div>`;
+    body.innerHTML = `<div class="site-picker-filters">${filters.map((filter) => `<button type="button" data-tier="${filter.value}">${filter.label}</button>`).join("")}</div><div class="site-picker-grid"></div><button type="button" data-action="load-more-library">继续加载图片</button>`;
     const grid = body.querySelector(".site-picker-grid");
-    const render = () => { const visible = library.filter((image) => active === "all" || pickerTier(image) === active); grid.innerHTML = visible.map((image) => `<label class="site-picker-card"><input type="checkbox" value="${image.id}"${selected.has(Number(image.id)) ? " checked" : ""}><img src="${escapeHtml(image.fileUrl)}" alt="${escapeHtml(image.fileName)}"><span>${escapeHtml(image.fileName)}</span><small>${escapeHtml(image.width)}×${escapeHtml(image.height)}</small></label>`).join(""); };
-    body.addEventListener("click", (event) => { const button = event.target.closest("[data-tier]"); if (button) { active = button.dataset.tier; render(); } });
+    const loadMore = body.querySelector('[data-action="load-more-library"]');
+    const render = () => { const visible = library.filter((image) => active === "all" || pickerTier(image) === active); grid.innerHTML = visible.map((image) => `<label class="site-picker-card"><input type="checkbox" value="${image.id}"${selected.has(Number(image.id)) ? " checked" : ""}><img src="${escapeHtml(image.fileUrl)}" alt="${escapeHtml(image.fileName)}"><span>${escapeHtml(image.fileName)}</span><small>${escapeHtml(image.width)}×${escapeHtml(image.height)}</small></label>`).join(""); loadMore.hidden = !libraryHasMore; loadMore.textContent = `继续加载（已加载 ${library.length} 张）`; };
+    body.addEventListener("click", async (event) => {
+      const button = event.target.closest("[data-tier]"); if (button) { active = button.dataset.tier; render(); return; }
+      if (event.target.closest('[data-action="load-more-library"]')) { loadMore.disabled = true; await loadLibraryPage(); loadMore.disabled = false; render(); }
+    });
     body.addEventListener("change", (event) => { if (!event.target.matches('input[type="checkbox"]')) return; const id = Number(event.target.value); if (event.target.checked) selected.add(id); else selected.delete(id); });
     render();
     if (!await dialogs.open({ title: "添加图片到图集", body, confirmLabel: "应用", valueReader: () => true })) return;

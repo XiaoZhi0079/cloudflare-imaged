@@ -46,7 +46,8 @@ const elements = {
 const keyStore = createAdminKeyStore();
 const dialogs = createDialogHost(elements.dialogHost);
 const notifier = createNotifier(document.querySelector("#admin-toast-host"));
-let state = createLibraryState();
+let state = createLibraryState({ initialRenderLimit: Number.MAX_SAFE_INTEGER });
+let libraryPage = { totalCount: 0, nextOffset: 0, hasMore: false, loading: false, generation: 0 };
 let searchTimer = null;
 let compact = false;
 let bulkMode = false;
@@ -59,9 +60,46 @@ let detailSequenceIds = [];
 let detailPreloadImages = new Map();
 let uploadSession = null;
 let uploadRenderFrame = null;
+let uploadPollTimer = null;
+const UPLOAD_TRACKING_KEY = "gallery-admin-upload-operations-v1";
+
+function readTrackedUploads() {
+  try {
+    const value = JSON.parse(localStorage.getItem(UPLOAD_TRACKING_KEY) ?? "[]");
+    return Array.isArray(value) ? value : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeTrackedUploads(records) {
+  localStorage.setItem(UPLOAD_TRACKING_KEY, JSON.stringify(records.slice(-5)));
+}
+
+function persistActiveUpload() {
+  if (!uploadSession?.started || !uploadSession.operationId) return;
+  const record = {
+    operationId: uploadSession.operationId,
+    updatedAt: new Date().toISOString(),
+    tasks: uploadSession.runner.tasks().map((task) => ({
+      clientItemId: task.id,
+      uploadId: task.upload?.uploadId ?? task.uploadId ?? null,
+      fileName: task.file?.name ?? task.fileName ?? task.upload?.fileName ?? "未命名图片",
+      status: task.status,
+      error: task.error ?? null,
+      errorCode: task.errorCode ?? null,
+    })),
+  };
+  const others = readTrackedUploads().filter((item) => item?.operationId !== record.operationId);
+  writeTrackedUploads([...others, record]);
+}
+
+function forgetTrackedUpload(operationId) {
+  writeTrackedUploads(readTrackedUploads().filter((item) => item?.operationId !== operationId));
+}
 
 function showAuth(message = "") {
-  state = createLibraryState();
+  state = createLibraryState({ initialRenderLimit: Number.MAX_SAFE_INTEGER });
   bulkMode = false;
   closeDetail({ restoreFocus: false });
   closeUpload({ restoreFocus: false });
@@ -182,7 +220,8 @@ function renderFilters() {
         const next = state.getFilters().tagNames;
         if (input.checked) next.add(tag.name); else next.delete(tag.name);
         state.setTagsFilter(next); label.classList.toggle("is-selected", input.checked);
-        elements.selectedTagCount.textContent = `已选 ${next.size}`; renderLibrary();
+        elements.selectedTagCount.textContent = `已选 ${next.size}`;
+        void fetchLibraryPage({ reset: true });
       });
       label.append(input, createElement("span", {}, tag.name), createElement("small", {}, count)); options.append(label);
     }
@@ -194,14 +233,16 @@ function renderLibrary() {
   const visible = state.visibleImages();
   const rendered = state.renderedImages();
   const selectedIds = state.getSelectedIds();
-  elements.visibleCount.textContent = visible.length === state.getImages().length
-    ? String(visible.length)
-    : `${visible.length} / ${state.getImages().length}`;
+  elements.visibleCount.textContent = libraryPage.totalCount > state.getImages().length
+    ? `${state.getImages().length} / ${libraryPage.totalCount}`
+    : String(libraryPage.totalCount || visible.length);
   elements.imageList.classList.toggle("is-compact", compact);
   elements.imageList.innerHTML = rendered.length
     ? rendered.map((image) => renderImageCard(image, { selected: selectedIds.has(Number(image.id)), selectionMode: bulkMode })).join("")
     : `<div class="admin-empty">${state.getImages().length ? "没有符合当前筛选的图片" : "图片库为空"}</div>`;
-  elements.loadMore.hidden = !state.hasMore();
+  elements.loadMore.hidden = !libraryPage.hasMore;
+  elements.loadMore.disabled = libraryPage.loading;
+  elements.loadMore.textContent = libraryPage.loading ? "正在加载..." : "继续加载";
   elements.bulkToolbar.hidden = !bulkMode;
   elements.bulkCount.textContent = `已选择 ${selectedIds.size} 张`;
   elements.bulkToggle.textContent = bulkMode ? "完成" : "批量管理";
@@ -228,12 +269,12 @@ function setUploadAvailability(ready, message = "") {
   elements.uploadOpen.title = ready ? "" : message;
 }
 
-function renderLoadError(tags, error) {
+function renderLoadError(taxonomy, error, retryAction = () => loadLibrary(taxonomy)) {
   elements.visibleCount.textContent = "-";
   const box = createElement("div", { className: "admin-error" });
   box.append(createElement("span", {}, errorMessage(error)));
   const retry = createElement("button", { type: "button" }, "重新加载");
-  retry.addEventListener("click", () => loadLibrary(tags));
+  retry.addEventListener("click", retryAction);
   box.append(retry);
   elements.imageList.replaceChildren(box);
 }
@@ -241,7 +282,8 @@ function renderLoadError(tags, error) {
 async function loadLibrary(taxonomy) {
   showApp();
   bulkMode = false;
-  state = createLibraryState();
+  state = createLibraryState({ initialRenderLimit: Number.MAX_SAFE_INTEGER });
+  libraryPage = { totalCount: 0, nextOffset: 0, hasMore: false, loading: false, generation: libraryPage.generation + 1 };
   state.setTags(taxonomy.tags);
   state.setTagGroups(taxonomy.tagGroups);
   setUploadAvailability(false, "正在加载目录和标签");
@@ -257,12 +299,69 @@ async function loadLibrary(taxonomy) {
     return;
   }
   try {
-    const { images = [] } = await client.request("/api/admin/images");
-    state.setImages(images);
-    renderAll();
+    await fetchLibraryPage({ reset: true });
+    await restoreTrackedUpload();
   } catch (error) {
     if (error instanceof AdminUnauthorizedError) throw error;
     renderLoadError(taxonomy, error);
+  }
+}
+
+function selectedFilterTagIds() {
+  const selectedNames = state.getFilters().tagNames;
+  return state.getTags()
+    .filter((tag) => selectedNames.has(tag.name))
+    .map((tag) => Number(tag.id))
+    .filter((id) => Number.isInteger(id) && id > 0);
+}
+
+function libraryPagePath(offset) {
+  const filters = state.getFilters();
+  const params = new URLSearchParams({
+    limit: "48",
+    offset: String(offset),
+    sort: filters.sort,
+  });
+  const query = String(filters.query ?? "").trim();
+  if (query) params.set("query", query);
+  const tagIds = selectedFilterTagIds();
+  if (tagIds.length) params.set("tag_ids", tagIds.join(","));
+  return `/api/admin/images?${params.toString()}`;
+}
+
+async function fetchLibraryPage({ reset = false } = {}) {
+  if (libraryPage.loading && !reset) return;
+  const generation = reset ? libraryPage.generation + 1 : libraryPage.generation;
+  if (reset) {
+    libraryPage = { totalCount: 0, nextOffset: 0, hasMore: false, loading: true, generation };
+    state.setImages([]);
+    renderLoading();
+  } else {
+    libraryPage.loading = true;
+    renderLibrary();
+  }
+  const offset = reset ? 0 : libraryPage.nextOffset;
+  try {
+    const page = await client.request(libraryPagePath(offset));
+    if (generation !== libraryPage.generation) return;
+    const current = reset ? [] : state.getImages();
+    const known = new Set(current.map((image) => Number(image.id)));
+    const additions = (page.images ?? []).filter((image) => !known.has(Number(image.id)));
+    state.syncImages([...current, ...additions]);
+    libraryPage.totalCount = Number(page.totalCount ?? state.getImages().length);
+    libraryPage.nextOffset = Number(page.nextOffset ?? offset + additions.length);
+    libraryPage.hasMore = Boolean(page.hasMore);
+    renderAll();
+  } catch (error) {
+    if (generation !== libraryPage.generation) return;
+    if (error instanceof AdminUnauthorizedError) throw error;
+    if (reset) renderLoadError(null, error, () => void fetchLibraryPage({ reset: true }));
+    else notifier.error(errorMessage(error));
+  } finally {
+    if (generation === libraryPage.generation) {
+      libraryPage.loading = false;
+      renderLibrary();
+    }
   }
 }
 
@@ -985,9 +1084,10 @@ function uploadFailureCounts(tasks) {
   return tasks.reduce((counts, task) => {
     if (task.status !== "error") return counts;
     if (task.errorCode === "DUPLICATE_IMAGE_CONTENT") counts.duplicate += 1;
+    else if (task.errorCode === "UPLOAD_RESELECT_REQUIRED") counts.interrupted += 1;
     else if (task.retryable !== false) counts.retryable += 1;
     return counts;
-  }, { duplicate: 0, retryable: 0 });
+  }, { duplicate: 0, retryable: 0, interrupted: 0 });
 }
 
 function visibleUploadTasks(tasks, limit = 80) {
@@ -1053,6 +1153,9 @@ function dismissUploadSession({ restoreFocus = false } = {}) {
   elements.uploadStatus.hidden = true;
   elements.uploadStatus.replaceChildren();
   elements.uploadOpen.textContent = "上传图片";
+  forgetTrackedUpload(uploadSession?.operationId);
+  clearInterval(uploadPollTimer);
+  uploadPollTimer = null;
   uploadSession = null;
   if (restoreFocus) opener?.focus();
 }
@@ -1074,6 +1177,8 @@ function renderBackgroundUpload() {
   copy.append(
     createElement("strong", {}, busy
       ? "后台上传中"
+      : failures.interrupted
+        ? "上传被页面刷新中断"
       : failures.retryable
         ? "上传需要处理"
         : failures.duplicate
@@ -1087,10 +1192,12 @@ function renderBackgroundUpload() {
       ].filter(Boolean).join("，")
       : `${completed} / ${counts.total} 已完成`),
   );
+  if (uploadSession.operationId) copy.append(createElement("small", {}, `任务 ${uploadSession.operationId}`));
   const actions = createElement("div", { className: "admin-upload-status-actions" });
   const toggle = createElement("button", { type: "button" }, uploadSession.expanded ? "收起" : "展开");
   const retry = createElement("button", { type: "button" }, "重试失败项");
-  retry.hidden = busy || failures.retryable === 0;
+  retry.textContent = failures.interrupted ? "清理任务并重新选择" : "重试失败项";
+  retry.hidden = busy || (failures.retryable === 0 && failures.interrupted === 0);
   const dismiss = createElement("button", { type: "button", "aria-label": "关闭上传任务", title: "关闭" }, "×");
   dismiss.disabled = busy;
   actions.append(toggle, retry, dismiss);
@@ -1126,6 +1233,7 @@ function scheduleUploadRender() {
   if (uploadRenderFrame !== null) return;
   uploadRenderFrame = requestAnimationFrame(() => {
     uploadRenderFrame = null;
+    persistActiveUpload();
     renderUploadSession();
   });
 }
@@ -1153,8 +1261,101 @@ async function runBackgroundUpload({ retry = false } = {}) {
 
 function retryBackgroundUpload() {
   if (!uploadSession?.started || uploadIsBusy()) return;
+  if (uploadSession.recovered) {
+    const uploadIds = uploadSession.runner.tasks().map((task) => task.uploadId).filter(Boolean);
+    void client.request("/api/admin/images/upload/sessions", {
+      method: "DELETE",
+      body: JSON.stringify({ uploadIds }),
+    }).then(() => {
+      dismissUploadSession();
+      openUploadDialog();
+    }).catch((error) => notifier.error(errorMessage(error)));
+    return;
+  }
   uploadSession.expanded = true;
   void runBackgroundUpload({ retry: true });
+}
+
+async function pollUploadStatus() {
+  const session = uploadSession;
+  if (!session?.started || !session.operationId) return;
+  try {
+    const payload = await client.request(`/api/admin/images/upload/sessions?operation_id=${encodeURIComponent(session.operationId)}`);
+    if (uploadSession !== session) return;
+    session.serverSessions = payload.sessions ?? [];
+    if (session.recovered) session.runner = recoveredRunner(session.serverSessions);
+    renderUploadSession();
+    if (session.serverSessions.length && session.serverSessions.every((item) => item.status === "completed")) {
+      clearInterval(uploadPollTimer);
+      uploadPollTimer = null;
+    }
+  } catch (error) {
+    if (!(error instanceof AdminUnauthorizedError)) console.warn("Unable to poll upload status", errorMessage(error));
+  }
+}
+
+function startUploadStatusPolling() {
+  clearInterval(uploadPollTimer);
+  void pollUploadStatus();
+  uploadPollTimer = setInterval(() => void pollUploadStatus(), 3000);
+}
+
+function recoveredRunner(sessions) {
+  const tasks = sessions.map((session) => {
+    const completed = session.status === "completed";
+    const message = session.objectPresent
+      ? "图片文件已到达存储，但页面在图库写入前刷新。请清理任务后重新选择同一文件。"
+      : "页面刷新中断了文件传输。请清理任务后重新选择同一文件。";
+    return {
+      id: session.clientItemId ?? session.uploadId,
+      uploadId: session.uploadId,
+      fileName: session.fileName,
+      file: { name: session.fileName },
+      status: completed ? "success" : "error",
+      error: completed ? null : session.errorMessage || message,
+      errorCode: completed ? null : "UPLOAD_RESELECT_REQUIRED",
+      retryable: false,
+      result: null,
+    };
+  });
+  return {
+    tasks: () => tasks.map((task) => ({ ...task })),
+    counts: () => tasks.reduce((counts, task) => {
+      if (task.status === "success") counts.success += 1;
+      else counts.error += 1;
+      return counts;
+    }, { total: tasks.length, queued: 0, active: 0, success: 0, error: 0 }),
+    isRunning: () => false,
+  };
+}
+
+async function restoreTrackedUpload() {
+  if (uploadSession) return;
+  const tracked = readTrackedUploads().sort((left, right) => String(right.updatedAt).localeCompare(String(left.updatedAt)))[0];
+  if (!tracked?.operationId) return;
+  try {
+    const payload = await client.request(`/api/admin/images/upload/sessions?operation_id=${encodeURIComponent(tracked.operationId)}`);
+    const sessions = payload.sessions ?? [];
+    if (!sessions.length) {
+      forgetTrackedUpload(tracked.operationId);
+      return;
+    }
+    uploadSession = {
+      operationId: tracked.operationId,
+      runner: recoveredRunner(sessions),
+      opener: elements.uploadOpen,
+      controls: null,
+      modalOpen: false,
+      started: true,
+      expanded: true,
+      recovered: true,
+      serverSessions: sessions,
+    };
+    renderUploadSession();
+    if (sessions.some((session) => session.status !== "completed")) startUploadStatusPolling();
+  } catch (error) {
+    if (!(error instanceof AdminUnauthorizedError)) console.warn("Unable to restore upload status", errorMessage(error));
+  }
 }
 
 function startUploadInBackground(runner, controls) {
@@ -1178,8 +1379,10 @@ function startUploadInBackground(runner, controls) {
   uploadSession.started = true;
   uploadSession.expanded = true;
   uploadSession.controls = null;
+  persistActiveUpload();
   hideUploadDialog();
   renderUploadSession();
+  startUploadStatusPolling();
   notifier.success(`${counts.total} 张图片已转入后台上传`);
   void runBackgroundUpload();
 }
@@ -1236,6 +1439,7 @@ function openUploadDialog() {
   elements.uploadDialog.hidden = false;
 
   const controls = { files, category, tagInputs, error, summary, tasks, start };
+  const operationId = crypto.randomUUID();
   const runner = createUploadRunner({
     batchSize: 12,
     prepareFile: inspectImageFile,
@@ -1248,12 +1452,32 @@ function openUploadDialog() {
             uploadId: task.uploadId,
             clientItemId: task.id,
           })),
+          operationId,
           ...metadata,
         }),
       });
       return (payload.uploads ?? []).map((upload, index) => ({ ...upload, taskId: batch[index]?.id }));
     },
-    uploadFile: uploadToSignedUrl,
+    uploadFile: async (file, upload) => {
+      try {
+        await uploadToSignedUrl(file, upload);
+        await client.request("/api/admin/images/upload/sessions", {
+          method: "PATCH",
+          body: JSON.stringify({ uploadIds: [upload.uploadId], phase: "object_uploaded" }),
+        });
+      } catch (error) {
+        await client.request("/api/admin/images/upload/sessions", {
+          method: "PATCH",
+          body: JSON.stringify({
+            uploadIds: [upload.uploadId],
+            phase: "failed",
+            errorCode: error?.payload?.code ?? "R2_UPLOAD_FAILED",
+            errorMessage: errorMessage(error),
+          }),
+        }).catch(() => {});
+        throw error;
+      }
+    },
     completeUploads: async (batch, metadata) => {
       const payload = await client.request("/api/admin/images/upload/complete", {
         method: "POST",
@@ -1272,7 +1496,7 @@ function openUploadDialog() {
     },
     onChange: scheduleUploadRender,
   });
-  uploadSession = { runner, opener, panel, controls, modalOpen: true, started: false, expanded: true };
+  uploadSession = { operationId, runner, opener, panel, controls, modalOpen: true, started: false, expanded: true };
   renderUploadSession();
 
   files.addEventListener("change", () => {
@@ -1304,9 +1528,15 @@ elements.logout.addEventListener("click", () => {
 });
 elements.search.addEventListener("input", () => {
   clearTimeout(searchTimer);
-  searchTimer = setTimeout(() => { state.setQuery(elements.search.value); renderLibrary(); }, 150);
+  searchTimer = setTimeout(() => {
+    state.setQuery(elements.search.value);
+    void fetchLibraryPage({ reset: true });
+  }, 250);
 });
-elements.sort.addEventListener("change", () => { state.setSort(elements.sort.value); renderLibrary(); });
+elements.sort.addEventListener("change", () => {
+  state.setSort(elements.sort.value);
+  void fetchLibraryPage({ reset: true });
+});
 elements.density.addEventListener("click", () => {
   compact = !compact;
   elements.density.textContent = compact ? "舒适视图" : "紧凑视图";
@@ -1322,10 +1552,10 @@ elements.clearFilters.addEventListener("click", () => {
   state.resetFilters();
   elements.search.value = "";
   elements.tagFilterSearch.value = "";
-  renderAll();
+  void fetchLibraryPage({ reset: true });
 });
 elements.tagFilterSearch.addEventListener("input", renderFilters);
-elements.loadMore.addEventListener("click", () => { state.showMore(); renderLibrary(); });
+elements.loadMore.addEventListener("click", () => { void fetchLibraryPage(); });
 elements.imageList.addEventListener("click", (event) => {
   const action = event.target.closest("[data-action]")?.dataset.action;
   const card = event.target.closest("[data-image-id]");

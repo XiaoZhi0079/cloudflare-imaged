@@ -1,12 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { copyFile, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
 import sharp from "sharp";
 
-import { GalleryMcpError } from "../dist/errors.js";
+import { GalleryApiError, GalleryMcpError } from "../dist/errors.js";
 import { processUploadManifest } from "../dist/services/manifest-service.js";
 
 async function createImage(filePath, color) {
@@ -204,6 +204,172 @@ test("manifest bounds concurrent R2 uploads and omits successful records by defa
     assert.deepEqual(result.failures, []);
     assert.equal("items" in result, false);
     assert.doesNotMatch(JSON.stringify(result), /fileUrl|storage_key|image-0/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("manifest skips same-batch duplicate items and initializes the remaining files", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "gallery-manifest-"));
+  try {
+    const first = path.join(root, "first.png");
+    const duplicate = path.join(root, "duplicate.png");
+    const third = path.join(root, "third.png");
+    await createImage(first, "#ffffff");
+    await copyFile(first, duplicate);
+    await createImage(third, "#000000");
+
+    const initBatches = [];
+    let initAttempt = 0;
+    const api = {
+      initUpload: async (files, _directoryId, _tagIds, options) => {
+        initAttempt += 1;
+        initBatches.push(files.map((file) => file.clientItemId));
+        if (initAttempt === 1) {
+          const repeated = files.find((file) => file.clientItemId === "duplicate");
+          throw new GalleryApiError("Duplicate content in this batch.", {
+            status: 409,
+            code: "DUPLICATE_IMAGE_CONTENT",
+            retryable: false,
+            details: {
+              duplicates: [{
+                uploadId: repeated.uploadId,
+                clientItemId: repeated.clientItemId,
+                fileName: repeated.name,
+                contentSha256: repeated.contentSha256,
+                reason: "same_batch",
+              }],
+            },
+          });
+        }
+        return files.map((file) => ({
+          uploadId: file.uploadId,
+          operationId: options.operationId,
+          clientItemId: file.clientItemId,
+          storageKey: `directory-${file.categoryId}/${file.name}`,
+          fileName: file.name,
+          fileUrl: `https://gallery.example.com/file/${file.name}`,
+          contentType: "image/png",
+          method: "PUT",
+          headers: { "content-type": "image/png" },
+          uploadUrl: `https://r2.example.com/${file.name}`,
+        }));
+      },
+      putObject: async () => undefined,
+      completeUpload: async (files) => files.map((file, index) => ({
+        id: index + 1,
+        fileName: file.fileName,
+        fileUrl: `https://gallery.example.com/file/${file.fileName}`,
+        width: file.width,
+        height: file.height,
+        tags: ["tag"],
+      })),
+    };
+    const taxonomy = {
+      validateUploadSelection: async (_directoryId, selections) => selections.flatMap((item) => item.tagIds),
+    };
+
+    const result = await processUploadManifest(
+      { api, taxonomy, config: config(root) },
+      [
+        manifestItem("first", first),
+        manifestItem("duplicate", duplicate),
+        manifestItem("third", third),
+      ],
+      { continueOnError: false, dryRun: false, resultDetail: "all" },
+    );
+
+    assert.deepEqual(initBatches, [
+      ["first", "duplicate", "third"],
+      ["first", "third"],
+    ]);
+    assert.equal(result.uploaded_count, 2);
+    assert.equal(result.failed_count, 0);
+    assert.equal(result.duplicate_count, 1);
+    assert.deepEqual(result.items.map((item) => item.status), ["uploaded", "skipped", "uploaded"]);
+    assert.equal(result.items[1].code, "DUPLICATE_IMAGE_CONTENT");
+    assert.equal(result.items[1].duplicate.reason, "same_batch");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("manifest skips a completion-race duplicate without returning resume parameters", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "gallery-manifest-"));
+  try {
+    const first = path.join(root, "first.png");
+    const second = path.join(root, "second.png");
+    await createImage(first, "#ffffff");
+    await createImage(second, "#000000");
+
+    let completionAttempt = 0;
+    const completionBatches = [];
+    const api = {
+      initUpload: async (files, _directoryId, _tagIds, options) => files.map((file) => ({
+        uploadId: file.uploadId,
+        operationId: options.operationId,
+        clientItemId: file.clientItemId,
+        storageKey: `directory-${file.categoryId}/${file.name}`,
+        fileName: file.name,
+        fileUrl: `https://gallery.example.com/file/${file.name}`,
+        contentType: "image/png",
+        method: "PUT",
+        headers: { "content-type": "image/png" },
+        uploadUrl: `https://r2.example.com/${file.name}`,
+      })),
+      putObject: async () => undefined,
+      completeUpload: async (files) => {
+        completionAttempt += 1;
+        completionBatches.push(files.map((file) => file.fileName));
+        if (completionAttempt === 1) {
+          throw new GalleryApiError("Image content already exists.", {
+            status: 409,
+            code: "DUPLICATE_IMAGE_CONTENT",
+            retryable: false,
+            details: {
+              duplicates: [{
+                uploadId: files[0].uploadId,
+                clientItemId: "first",
+                reason: "existing_image",
+                existingImage: {
+                  id: 77,
+                  publicId: "11111111-1111-4111-8111-111111111111",
+                  fileName: "existing.png",
+                  fileUrl: "https://gallery.example.com/file/existing.png",
+                },
+              }],
+            },
+          });
+        }
+        return files.map((file) => ({
+          id: 88,
+          fileName: file.fileName,
+          fileUrl: `https://gallery.example.com/file/${file.fileName}`,
+          width: file.width,
+          height: file.height,
+          tags: ["tag"],
+        }));
+      },
+    };
+    const taxonomy = {
+      validateUploadSelection: async (_directoryId, selections) => selections.flatMap((item) => item.tagIds),
+    };
+
+    const result = await processUploadManifest(
+      { api, taxonomy, config: config(root) },
+      [manifestItem("first", first), manifestItem("second", second)],
+      { continueOnError: false, dryRun: false, resultDetail: "all" },
+    );
+
+    assert.deepEqual(completionBatches, [["first.png", "second.png"], ["second.png"]]);
+    assert.equal(result.uploaded_count, 1);
+    assert.equal(result.failed_count, 0);
+    assert.equal(result.duplicate_count, 1);
+    assert.equal(result.items[0].status, "skipped");
+    assert.equal(result.items[0].phase, "complete");
+    assert.equal(result.items[0].duplicate.existingImage.id, 77);
+    assert.equal(result.items[0].resume_parameters, undefined);
+    assert.equal(result.items[1].status, "uploaded");
   } finally {
     await rm(root, { recursive: true, force: true });
   }

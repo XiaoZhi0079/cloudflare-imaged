@@ -58,7 +58,7 @@ async function handleRequest({ env, request }) {
 
   if (request.method === "GET") {
     const url = new URL(request.url);
-    const paginated = ["query", "file_name", "limit", "offset"].some((name) => url.searchParams.has(name));
+    const paginated = ["query", "file_name", "tag_ids", "sort", "limit", "offset"].some((name) => url.searchParams.has(name));
     if (paginated) {
       if (url.searchParams.has("query") && url.searchParams.has("file_name")) {
         return jsonResponse({ error: "query and file_name cannot be combined" }, 400);
@@ -70,15 +70,26 @@ async function handleRequest({ env, request }) {
       }
       const limit = url.searchParams.has("limit") ? Number(url.searchParams.get("limit")) : 50;
       const offset = url.searchParams.has("offset") ? Number(url.searchParams.get("offset")) : 0;
+      const tagIds = String(url.searchParams.get("tag_ids") ?? "")
+        .split(",").filter(Boolean).map(Number);
+      const sort = url.searchParams.get("sort") ?? "newest";
       if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
         return jsonResponse({ error: "limit must be an integer between 1 and 100" }, 400);
       }
       if (!Number.isInteger(offset) || offset < 0) {
         return jsonResponse({ error: "offset must be a non-negative integer" }, 400);
       }
+      if (tagIds.some((id) => !Number.isInteger(id) || id <= 0) || tagIds.length > 100) {
+        return jsonResponse({ error: "tag_ids must contain at most 100 positive integers" }, 400);
+      }
+      if (!["newest", "name"].includes(sort)) {
+        return jsonResponse({ error: "sort must be newest or name" }, 400);
+      }
       const page = await repository.listImagesPage({
         query,
         fileNameQuery,
+        tagIds,
+        sort,
         limit,
         offset,
       });

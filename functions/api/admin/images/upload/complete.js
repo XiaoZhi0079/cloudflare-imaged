@@ -211,6 +211,9 @@ async function handleRequest({ env, request }) {
 
   let results;
   try {
+    await repository.updateUploadSessionPhase(sessions.map((session) => session.id), {
+      phase: "database_commit",
+    });
     results = await repository.completeUploadSessions(sessions.map((session) => session.id));
     for (const result of results) {
       writeLog("info", {
@@ -228,6 +231,11 @@ async function handleRequest({ env, request }) {
       });
     }
   } catch (error) {
+    await repository.updateUploadSessionPhase(sessions.map((session) => session.id), {
+      phase: "failed",
+      errorCode: String(error?.code ?? "UPLOAD_COMPLETE_FAILED").slice(0, 80),
+      errorMessage: String(error?.message ?? error).replace(/\s+/g, " ").slice(0, 240),
+    }).catch(() => {});
     writeLog("error", {
       requestId,
       phase: error?.code === "IMAGE_TAG_VERIFICATION_FAILED" ? "tag-verification" : "database-commit",

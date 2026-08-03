@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 
-import { GalleryMcpError, toToolError } from "../errors.js";
+import { duplicateImageDetails, GalleryMcpError, toToolError } from "../errors.js";
 import type {
+  DuplicateImageContentDetail,
   GalleryMcpConfig,
   InspectedUploadFile,
   InspectedUploadFileMetadata,
@@ -71,6 +72,54 @@ function failedResult(
     ...toToolError(error),
     ...details,
   };
+}
+
+function duplicateResult(
+  entry: PreparedManifestItem,
+  phase: "init" | "complete",
+  duplicate: DuplicateImageContentDetail,
+  operationId: string,
+  uploadId: string,
+) {
+  const existing = duplicate.existingImage;
+  const message = existing
+    ? `Identical content already exists as Gallery image ${existing.id}; the duplicate upload was skipped.`
+    : duplicate.reason === "upload_in_progress"
+      ? "Identical content is already being uploaded; this duplicate item was skipped."
+      : "Identical content was already present in this upload batch; this duplicate item was skipped.";
+  return {
+    client_item_id: entry.item.clientItemId,
+    local_file_name: entry.metadata.name,
+    status: "skipped",
+    phase,
+    code: "DUPLICATE_IMAGE_CONTENT",
+    message,
+    operation_id: operationId,
+    upload_id: uploadId,
+    duplicate,
+  };
+}
+
+function duplicateEntryIndexes<T extends PreparedManifestItem>(
+  entries: T[],
+  uploadIds: Map<number, string>,
+  duplicates: DuplicateImageContentDetail[],
+): Map<number, DuplicateImageContentDetail> {
+  const matches = new Map<number, DuplicateImageContentDetail>();
+  for (const duplicate of duplicates) {
+    const byClientItem = duplicate.clientItemId
+      ? entries.find((entry) => !matches.has(entry.index) && entry.item.clientItemId === duplicate.clientItemId)
+      : undefined;
+    const byUploadId = duplicate.uploadId
+      ? entries.find((entry) => !matches.has(entry.index) && uploadIds.get(entry.index) === duplicate.uploadId)
+      : undefined;
+    const byHash = duplicate.contentSha256
+      ? entries.find((entry) => !matches.has(entry.index) && entry.metadata.contentSha256 === duplicate.contentSha256)
+      : undefined;
+    const entry = byClientItem ?? byUploadId ?? byHash;
+    if (entry) matches.set(entry.index, duplicate);
+  }
+  return matches;
 }
 
 function chunks<T>(items: T[], size: number): T[][] {
@@ -154,7 +203,7 @@ async function uploadWithConcurrency(
       "An earlier upload failed and continue_on_error is false.",
     );
   }
-  return { uploaded, aborted };
+  return { uploaded: uploaded.sort((left, right) => left.index - right.index), aborted };
 }
 
 export async function processUploadManifest(
@@ -231,46 +280,73 @@ export async function processUploadManifest(
         }
 
         const uploadIds = new Map(chunk.map((entry) => [entry.index, randomUUID()]));
-        let descriptors: UploadDescriptor[];
+        let descriptors: UploadDescriptor[] = [];
+        let activeChunk = [...chunk];
+        let initFailed = false;
         const initStartedAt = Date.now();
-        try {
-          descriptors = await api.initUpload(
-            chunk.map((entry) => ({
-              uploadId: uploadIds.get(entry.index)!,
-              clientItemId: entry.item.clientItemId,
-              categoryId: entry.selection.directoryId,
-              tagIds: entry.selection.tagIds,
-              name: entry.metadata.name,
-              type: entry.metadata.type,
-              size: entry.metadata.size,
-              width: entry.metadata.width,
-              height: entry.metadata.height,
-              contentSha256: entry.metadata.contentSha256,
-            })),
-            null,
-            null,
-            { operationId, namingStrategy: "original-unique" },
-          );
-          logPhase({
-            phase: "init",
-            operationId,
-            itemCount: chunk.length,
-            durationMs: Date.now() - initStartedAt,
-          });
-        } catch (error) {
-          for (const entry of chunk) {
-            results[entry.index] = failedResult(entry, "init", error, {
-              operation_id: operationId,
-              upload_id: uploadIds.get(entry.index),
+        while (activeChunk.length > 0) {
+          try {
+            descriptors = await api.initUpload(
+              activeChunk.map((entry) => ({
+                uploadId: uploadIds.get(entry.index)!,
+                clientItemId: entry.item.clientItemId,
+                categoryId: entry.selection.directoryId,
+                tagIds: entry.selection.tagIds,
+                name: entry.metadata.name,
+                type: entry.metadata.type,
+                size: entry.metadata.size,
+                width: entry.metadata.width,
+                height: entry.metadata.height,
+                contentSha256: entry.metadata.contentSha256,
+              })),
+              null,
+              null,
+              { operationId, namingStrategy: "original-unique" },
+            );
+            logPhase({
+              phase: "init",
+              operationId,
+              itemCount: activeChunk.length,
+              duplicateCount: chunk.length - activeChunk.length,
+              durationMs: Date.now() - initStartedAt,
             });
+            break;
+          } catch (error) {
+            const duplicates = duplicateImageDetails(error);
+            const matched = duplicateEntryIndexes(activeChunk, uploadIds, duplicates);
+            if (matched.size > 0) {
+              for (const entry of activeChunk) {
+                const duplicate = matched.get(entry.index);
+                if (!duplicate) continue;
+                results[entry.index] = duplicateResult(
+                  entry,
+                  "init",
+                  duplicate,
+                  operationId,
+                  uploadIds.get(entry.index)!,
+                );
+              }
+              activeChunk = activeChunk.filter((entry) => !matched.has(entry.index));
+              continue;
+            }
+            for (const entry of activeChunk) {
+              results[entry.index] = failedResult(entry, "init", error, {
+                operation_id: operationId,
+                upload_id: uploadIds.get(entry.index),
+              });
+            }
+            uploadAborted = !options.continueOnError;
+            initFailed = true;
+            break;
           }
-          uploadAborted = !options.continueOnError;
+        }
+        if (initFailed || activeChunk.length === 0) {
           continue;
         }
 
         const descriptorsById = new Map(descriptors.map((descriptor) => [descriptor.uploadId, descriptor]));
         const work: UploadWorkItem[] = [];
-        for (const entry of chunk) {
+        for (const entry of activeChunk) {
           const uploadId = uploadIds.get(entry.index);
           const descriptor = uploadId ? descriptorsById.get(uploadId) : undefined;
           if (!uploadId || !descriptor) {
@@ -314,53 +390,71 @@ export async function processUploadManifest(
         if (uploadResult.uploaded.length === 0) continue;
 
         const completeStartedAt = Date.now();
-        try {
-          const images = await api.completeUpload(
-            uploadResult.uploaded.map((entry) => ({
-              uploadId: entry.uploadId,
-              storageKey: entry.descriptor.storageKey,
-              fileName: entry.descriptor.fileName,
-              width: entry.file.width,
-              height: entry.file.height,
-            })),
-            null,
-            null,
-          );
-          if (images.length !== uploadResult.uploaded.length) {
-            throw new GalleryMcpError("Gallery returned an incomplete upload completion response.", {
-              code: "UPLOAD_RECORD_MISSING",
-              retryable: true,
-              suggestion: "Resume completion for the affected upload IDs; do not upload the image bytes again.",
+        let pendingCompletion = [...uploadResult.uploaded];
+        while (pendingCompletion.length > 0) {
+          try {
+            const images = await api.completeUpload(
+              pendingCompletion.map((entry) => ({
+                uploadId: entry.uploadId,
+                storageKey: entry.descriptor.storageKey,
+                fileName: entry.descriptor.fileName,
+                width: entry.file.width,
+                height: entry.file.height,
+              })),
+              null,
+              null,
+            );
+            if (images.length !== pendingCompletion.length) {
+              throw new GalleryMcpError("Gallery returned an incomplete upload completion response.", {
+                code: "UPLOAD_RECORD_MISSING",
+                retryable: true,
+                suggestion: "Resume completion for the affected upload IDs; do not upload the image bytes again.",
+              });
+            }
+            for (const [index, entry] of pendingCompletion.entries()) {
+              const image = images[index];
+              if (!image) continue;
+              results[entry.index] = {
+                client_item_id: entry.item.clientItemId,
+                local_file_name: entry.file.name,
+                status: "uploaded",
+                operation_id: operationId,
+                upload_id: entry.uploadId,
+                storage_key: entry.descriptor.storageKey,
+                image,
+              };
+            }
+            logPhase({
+              phase: "complete",
+              operationId,
+              itemCount: images.length,
+              duplicateCount: uploadResult.uploaded.length - pendingCompletion.length,
+              durationMs: Date.now() - completeStartedAt,
             });
+            break;
+          } catch (error) {
+            const duplicates = duplicateImageDetails(error);
+            const completionUploadIds = new Map(pendingCompletion.map((entry) => [entry.index, entry.uploadId]));
+            const matched = duplicateEntryIndexes(pendingCompletion, completionUploadIds, duplicates);
+            if (matched.size > 0) {
+              for (const entry of pendingCompletion) {
+                const duplicate = matched.get(entry.index);
+                if (!duplicate) continue;
+                results[entry.index] = duplicateResult(entry, "complete", duplicate, operationId, entry.uploadId);
+              }
+              pendingCompletion = pendingCompletion.filter((entry) => !matched.has(entry.index));
+              continue;
+            }
+            for (const entry of pendingCompletion) {
+              results[entry.index] = failedResult(entry, "complete", error, {
+                operation_id: operationId,
+                upload_id: entry.uploadId,
+                resume_parameters: completionParameters(entry),
+              });
+            }
+            uploadAborted = !options.continueOnError;
+            break;
           }
-          for (const [index, entry] of uploadResult.uploaded.entries()) {
-            const image = images[index];
-            if (!image) continue;
-            results[entry.index] = {
-              client_item_id: entry.item.clientItemId,
-              local_file_name: entry.file.name,
-              status: "uploaded",
-              operation_id: operationId,
-              upload_id: entry.uploadId,
-              storage_key: entry.descriptor.storageKey,
-              image,
-            };
-          }
-          logPhase({
-            phase: "complete",
-            operationId,
-            itemCount: images.length,
-            durationMs: Date.now() - completeStartedAt,
-          });
-        } catch (error) {
-          for (const entry of uploadResult.uploaded) {
-            results[entry.index] = failedResult(entry, "complete", error, {
-              operation_id: operationId,
-              upload_id: entry.uploadId,
-              resume_parameters: completionParameters(entry),
-            });
-          }
-          uploadAborted = !options.continueOnError;
         }
       }
     }
@@ -373,6 +467,7 @@ export async function processUploadManifest(
     message: "The manifest item was not processed.",
   });
   const failures = completedResults.filter((result) => result.status === "failed");
+  const duplicates = completedResults.filter((result) => result.code === "DUPLICATE_IMAGE_CONTENT");
   return {
     operation_id: operationId,
     dry_run: options.dryRun,
@@ -382,7 +477,9 @@ export async function processUploadManifest(
     uploaded_count: completedResults.filter((result) => result.status === "uploaded").length,
     failed_count: failures.length,
     skipped_count: completedResults.filter((result) => result.status === "skipped").length,
+    duplicate_count: duplicates.length,
     ...(resultDetail === "failures" ? { failures } : {}),
+    ...(resultDetail === "failures" && duplicates.length > 0 ? { duplicates } : {}),
     ...(resultDetail === "all" ? { items: completedResults } : {}),
   };
 }

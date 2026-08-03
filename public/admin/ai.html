@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gallery AI 提案中心</title>
+    <link rel="stylesheet" href="/assets/admin/admin.css?v=20260804-ai-workflow" />
+    <link rel="stylesheet" href="/assets/admin/workbench.css?v=20260804-ai-workflow" />
+    <link rel="stylesheet" href="/assets/admin/ai.css?v=20260804-ai-workflow" />
+  </head>
+  <body class="admin-body">
+    <section id="admin-auth-view" class="admin-auth-view" data-auth-fallback="visible">
+      <form id="admin-login-form" class="admin-login-panel" novalidate>
+        <p class="admin-eyebrow">Gallery Admin</p><h1>进入管理台</h1>
+        <label class="admin-field"><span>管理密钥</span><input id="admin-key" type="password" autocomplete="current-password" required /></label>
+        <p id="admin-login-error" class="admin-field-error" aria-live="polite"></p>
+        <button id="admin-login" class="admin-button-primary" type="submit">验证并进入</button>
+      </form>
+    </section>
+    <div id="admin-app" hidden>
+      <header class="admin-topbar">
+        <a class="admin-brand" href="/admin/">Gallery 管理</a>
+        <nav class="admin-nav" aria-label="管理页面"><a href="/admin/">图片库</a><a href="/admin/featured.html">图集管理</a><a href="/admin/settings.html">标签与分类</a><a class="is-active" href="/admin/ai.html">AI 提案</a></nav>
+        <div class="admin-top-actions"><a href="/">查看前台</a><button type="button" data-admin-logout>退出</button></div>
+      </header>
+      <main class="workbench ai-workbench">
+        <header class="workbench-heading"><div><p class="admin-eyebrow">AI ORGANIZATION</p><h1>AI 提案中心</h1><p class="admin-muted">AI 只提交建议；名称、目录、标签与新标签候选均需审核后才会应用。</p></div></header>
+        <section class="ai-summary" aria-label="工作流概览"><div><strong id="ai-pending-count">0</strong><span>待审核提案</span></div><div><strong id="ai-candidate-count">0</strong><span>新标签候选</span></div><div><strong id="ai-selected-count">0</strong><span>已选择</span></div></section>
+        <section class="ai-candidate-section"><header><div><h2>新标签候选</h2><p>先确认标签及所属分类，再应用引用它们的图片提案。</p></div></header><div id="ai-candidate-list" class="ai-candidate-list"></div></section>
+        <section class="ai-proposal-section">
+          <header class="ai-proposal-toolbar"><div><h2>图片变更提案</h2><label>状态 <select id="ai-status"><option value="pending">待审核</option><option value="approved">已通过</option><option value="failed">失败</option><option value="rejected">已拒绝</option><option value="applied">已应用</option><option value="all">全部</option></select></label></div><div><button id="ai-reject-selected" type="button" disabled>拒绝</button><button id="ai-approve-selected" type="button" disabled>通过</button><button id="ai-apply-selected" class="admin-button-primary" type="button" disabled>应用已通过项</button></div></header>
+          <div id="ai-proposal-list" class="ai-proposal-list" aria-live="polite"></div>
+          <button id="ai-load-more" type="button" hidden>继续加载</button>
+        </section>
+      </main>
+      <div id="admin-toast-host" class="admin-toast-host" aria-live="polite"></div>
+    </div>
+    <script type="module" src="/assets/admin/ai-page.js?v=20260804-ai-workflow"></script>
+  </body>
+</html>

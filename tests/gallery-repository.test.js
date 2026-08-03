@@ -209,6 +209,22 @@ test("listImagesPage can restrict search to file names without tag false positiv
   );
 });
 
+test("listImagesPage performs server-side all-tag filtering and stable name sorting", async () => {
+  const repository = createGalleryRepository(createTestDatabase());
+  const group = await repository.createTagGroup({ name: "paged filters" });
+  const firstTag = await repository.createTag({ name: "paged-a", groupId: group.id });
+  const secondTag = await repository.createTag({ name: "paged-b", groupId: group.id });
+  const both = await repository.upsertImage({ storageKey: "scenery/alpha.png", fileName: "alpha.png", fileUrl: "https://gallery.test/file/scenery/alpha.png" });
+  const one = await repository.upsertImage({ storageKey: "scenery/zeta.png", fileName: "zeta.png", fileUrl: "https://gallery.test/file/scenery/zeta.png" });
+  await repository.replaceImageTags(both.id, [firstTag.id, secondTag.id]);
+  await repository.replaceImageTags(one.id, [firstTag.id]);
+  const page = await repository.listImagesPage({ tagIds: [firstTag.id, secondTag.id], sort: "name", limit: 10 });
+  assert.equal(page.totalCount, 1);
+  assert.deepEqual(page.images.map((image) => image.fileName), ["alpha.png"]);
+  assert.deepEqual(page.tagIds, [firstTag.id, secondTag.id]);
+  assert.equal(page.sort, "name");
+});
+
 test("scanImageIds keeps a stable numeric-ID snapshot across gaps and new uploads", async () => {
   const database = createTestDb();
   const insert = database.prepare("INSERT INTO images (storage_key, file_name, file_url, width, height) VALUES (?, ?, ?, ?, ?)");

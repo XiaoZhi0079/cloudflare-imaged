@@ -404,7 +404,9 @@ async function handleRequest({ env, request }) {
     durationMs: Date.now() - startedAt,
   }));
   return jsonResponse({
+    requestId,
     operationId,
+    durationMs: Date.now() - startedAt,
     uploads,
   });
 }
@@ -413,8 +415,10 @@ export async function onRequest(context) {
   try {
     return await handleRequest(context);
   } catch (error) {
+    const requestId = context.request.headers.get("cf-ray") ?? crypto.randomUUID();
     const name = String(error?.name || "Error").slice(0, 80);
     const message = String(error?.message || "未知运行时错误").replace(/\s+/g, " ").slice(0, 240);
-    return jsonResponse({ error: `初始化上传失败：${name}: ${message}` }, 500);
+    console.error(JSON.stringify({ level: "error", service: "gallery-upload-init", requestId, code: String(error?.code ?? "UPLOAD_INIT_FAILED"), message }));
+    return jsonResponse({ error: `初始化上传失败：${name}: ${message}`, code: String(error?.code ?? "UPLOAD_INIT_FAILED"), requestId }, 500);
   }
 }

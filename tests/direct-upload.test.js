@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 
 import { createGalleryRepository } from "../src/server/gallery-repository.js";
 import {
@@ -64,6 +65,47 @@ function createTestEnv({ database = createTestDatabase(), bucket = createMockBuc
     R2_SECRET_ACCESS_KEY: "test-secret-key",
   };
 }
+
+test("synthetic PNG completes the init, R2, D1, verification, and task-status flow", async () => {
+  const env = createTestEnv();
+  const repository = createGalleryRepository(env.GALLERY_DB);
+  const [category] = await repository.listCategories();
+  const group = await repository.createTagGroup({ name: "synthetic e2e group" });
+  const tag = await repository.createTag({ name: "synthetic e2e tag", groupId: group.id });
+  const bytes = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
+  const contentSha256 = createHash("sha256").update(bytes).digest("hex");
+  const uploadId = "10101010-1010-4010-8010-101010101010";
+  const operationId = "20202020-2020-4020-8020-202020202020";
+  const init = await adminUploadInitHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/images/upload/init", {
+      method: "POST", headers: { "content-type": "application/json", "x-gallery-admin-key": "gallery-secret" },
+      body: JSON.stringify({
+        operationId, categoryId: category.id, tagIds: [tag.id],
+        files: [{ uploadId, clientItemId: "synthetic-e2e", name: "synthetic-e2e.png", type: "image/png", size: bytes.length, width: 1, height: 1, contentSha256 }],
+      }),
+    }),
+  });
+  assert.equal(init.status, 200);
+  const descriptor = (await init.json()).uploads[0];
+  await env.GALLERY_BUCKET.put(descriptor.storageKey, bytes, { httpMetadata: { contentType: "image/png" } });
+  await repository.updateUploadSessionPhase([uploadId], { phase: "object_uploaded" });
+  const complete = await adminUploadCompleteHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/images/upload/complete", {
+      method: "POST", headers: { "content-type": "application/json", "x-gallery-admin-key": "gallery-secret" },
+      body: JSON.stringify({ categoryId: category.id, tagIds: [tag.id], files: [{ uploadId, storageKey: descriptor.storageKey, fileName: descriptor.fileName, width: 1, height: 1 }] }),
+    }),
+  });
+  assert.equal(complete.status, 200);
+  const image = (await complete.json()).images[0];
+  const session = await repository.getUploadSessionById(uploadId);
+  assert.equal(session.phase, "completed");
+  assert.equal(session.imageId, image.id);
+  assert.equal(image.contentSha256, undefined);
+  assert.equal((await repository.getImageById(image.id)).contentSha256, contentSha256);
+  assert.deepEqual(await repository.getImageTagIds(image.id), [tag.id]);
+});
 
 test("admin upload init handler returns direct-upload descriptors for each selected image", async () => {
   const env = createTestEnv();

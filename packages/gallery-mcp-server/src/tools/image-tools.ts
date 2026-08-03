@@ -444,7 +444,7 @@ export function registerImageTools(server: McpServer, dependencies: ImageToolDep
         continue_on_error: z.boolean().default(true).describe("When true, continue other items after one item fails. When false, stop uploads after the first failure."),
         dry_run: z.boolean().default(false).describe("Validate every item and report dimensions without uploading."),
         result_detail: z.enum(["summary", "failures", "all"]).default("failures")
-          .describe("Bound response size: summary returns counts, failures adds failed items, and all includes every item."),
+          .describe("Bound response size: summary returns counts, failures adds failed and safely skipped duplicate items, and all includes every item."),
         response_format: ResponseFormatSchema.describe("Return JSON or a Markdown code block."),
       }).strict(),
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },

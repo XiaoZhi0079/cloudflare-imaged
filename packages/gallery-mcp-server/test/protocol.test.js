@@ -28,9 +28,11 @@ test("stdio MCP handshake exposes grouped-tag and manifest tools", async () => {
     assert.deepEqual(
       response.tools.map((tool) => tool.name).sort(),
       [
+        "gallery_apply_approved_proposals",
         "gallery_apply_recognition_manifest",
         "gallery_cache_remote_image",
         "gallery_cache_remote_images",
+        "gallery_create_analysis_batch",
         "gallery_ensure_tag",
         "gallery_ensure_tag_group",
         "gallery_get_image",
@@ -39,6 +41,8 @@ test("stdio MCP handshake exposes grouped-tag and manifest tools", async () => {
         "gallery_get_remote_image_cache_status_batch",
         "gallery_get_taxonomy",
         "gallery_health_check",
+        "gallery_list_analysis_batches",
+        "gallery_list_image_proposals",
         "gallery_list_images",
         "gallery_mark_remote_image_analyzed",
         "gallery_resume_upload",
@@ -48,12 +52,19 @@ test("stdio MCP handshake exposes grouped-tag and manifest tools", async () => {
         "gallery_set_local_image_tags_batch",
         "gallery_set_remote_image_tags",
         "gallery_set_remote_image_tags_batch",
+        "gallery_submit_image_proposal",
         "gallery_upload_image",
         "gallery_upload_images",
         "gallery_upload_manifest",
       ],
     );
     assert.ok(response.tools.every((tool) => tool.inputSchema?.type === "object"));
+
+    const proposalSchema = response.tools.find((tool) => tool.name === "gallery_submit_image_proposal")?.inputSchema;
+    assert.ok(proposalSchema?.properties?.new_tag_candidates);
+    assert.equal(proposalSchema?.properties?.new_tag_candidates?.maxItems, 20);
+    const applyProposal = response.tools.find((tool) => tool.name === "gallery_apply_approved_proposals");
+    assert.equal(applyProposal?.annotations?.destructiveHint, true);
 
     for (const name of ["gallery_upload_image", "gallery_upload_images", "gallery_resume_upload"]) {
       const schema = response.tools.find((tool) => tool.name === name)?.inputSchema;

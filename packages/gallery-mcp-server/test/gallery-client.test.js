@@ -63,6 +63,56 @@ test("Gallery client retries transient JSON failures but not authorization failu
   assert.equal(authAttempts, 1);
 });
 
+test("Gallery client preserves bounded duplicate-image conflict details", async () => {
+  const duplicatePayload = {
+    error: "This image already exists.",
+    code: "DUPLICATE_IMAGE_CONTENT",
+    requestId: "ray-duplicate",
+    duplicates: [{
+      uploadId: "6af0b175-3c6b-4a20-a1ab-52b77fbab671",
+      clientItemId: "manifest-2",
+      fileName: "duplicate.png",
+      contentSha256: "A".repeat(64),
+      reason: "existing_image",
+      existingImage: {
+        id: 42,
+        publicId: "11111111-1111-4111-8111-111111111111",
+        fileName: "existing.png",
+        fileUrl: "https://gallery.example.com/file/existing.png",
+      },
+    }],
+  };
+  const client = new GalleryApiClient(config(), {
+    retryDelayMs: 0,
+    fetchImpl: async () => Response.json(duplicatePayload, { status: 409 }),
+  });
+
+  await assert.rejects(
+    () => client.initUpload([{
+      uploadId: duplicatePayload.duplicates[0].uploadId,
+      clientItemId: "manifest-2",
+      name: "duplicate.png",
+      type: "image/png",
+      size: 3,
+      width: 2,
+      height: 3,
+      contentSha256: "a".repeat(64),
+    }], 4, [2]),
+    (error) => {
+      assert.equal(error.code, "DUPLICATE_IMAGE_CONTENT");
+      assert.equal(error.status, 409);
+      assert.equal(error.retryable, false);
+      assert.match(error.suggestion, /Do not upload or resume/);
+      assert.equal(error.details.request_id, "ray-duplicate");
+      assert.deepEqual(error.details.duplicates[0], {
+        ...duplicatePayload.duplicates[0],
+        contentSha256: "a".repeat(64),
+      });
+      return true;
+    },
+  );
+});
+
 test("R2 upload receives only signed headers and never the Gallery admin key", async () => {
   let captured;
   const client = new GalleryApiClient(config(), {

@@ -1,6 +1,9 @@
 import { GalleryApiError, GalleryMcpError, apiErrorFromResponse } from "../errors.js";
 import type {
   Category,
+  AiAnalysisBatch,
+  AiImageProposal,
+  AiTagCandidateInput,
   GalleryImage,
   GalleryMcpConfig,
   GalleryTaxonomy,
@@ -323,5 +326,48 @@ export class GalleryApiClient {
       },
     });
     return payload.images ?? [];
+  }
+
+  async createAiAnalysisBatch(input: {
+    id: string; name: string; imageIds: number[]; snapshotMaxImageId?: number | null; operationId?: string;
+  }): Promise<AiAnalysisBatch> {
+    const payload = await this.request<{ batch: AiAnalysisBatch }>("api/admin/ai/batches", {
+      method: "POST", retry: false,
+      body: {
+        id: input.id, name: input.name, imageIds: input.imageIds,
+        snapshotMaxImageId: input.snapshotMaxImageId ?? null,
+        operationId: input.operationId ?? input.id, source: "mcp",
+      },
+    });
+    return payload.batch;
+  }
+
+  async listAiAnalysisBatches(limit: number, offset: number): Promise<AiAnalysisBatch[]> {
+    return (await this.request<{ batches: AiAnalysisBatch[] }>(`api/admin/ai/batches?limit=${limit}&offset=${offset}`)).batches ?? [];
+  }
+
+  async submitAiImageProposal(input: {
+    id: string; batchId: string; imageId: number; proposedFileName: string; proposedCategoryId: number;
+    proposedTagIds: number[]; newTagCandidates: AiTagCandidateInput[]; rationale?: string; confidence?: number;
+  }): Promise<AiImageProposal> {
+    return (await this.request<{ proposal: AiImageProposal }>("api/admin/ai/proposals", {
+      method: "POST", retry: false, body: input,
+    })).proposal;
+  }
+
+  async listAiImageProposals(status: string, batchId: string | null, limit: number, offset: number): Promise<{
+    proposals: AiImageProposal[]; totalCount: number; count: number; hasMore: boolean; nextOffset: number | null;
+  }> {
+    const params = new URLSearchParams({ status, limit: String(limit), offset: String(offset) });
+    if (batchId) params.set("batch_id", batchId);
+    return await this.request(`api/admin/ai/proposals?${params.toString()}`);
+  }
+
+  async applyApprovedAiProposals(proposalIds: string[]): Promise<{
+    appliedCount: number; failedCount: number; results: Array<{ proposalId: string; ok: boolean; code?: string; error?: string }>;
+  }> {
+    return await this.request("api/admin/ai/apply", {
+      method: "POST", retry: false, body: { proposalIds },
+    });
   }
 }

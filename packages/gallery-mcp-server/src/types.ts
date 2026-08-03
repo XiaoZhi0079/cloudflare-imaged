@@ -96,6 +96,24 @@ export interface UploadDescriptor {
   uploadUrl: string;
 }
 
+export interface DuplicateImageReference {
+  id: number;
+  publicId?: string;
+  fileName?: string;
+  fileUrl?: string;
+}
+
+export interface DuplicateImageContentDetail {
+  uploadId?: string;
+  clientItemId?: string;
+  fileName?: string;
+  contentSha256?: string;
+  reason?: string;
+  existingImage?: DuplicateImageReference;
+  pendingUploadId?: string;
+  pendingFileName?: string;
+}
+
 export interface InspectedUploadFile extends UploadDraft {
   absolutePath: string;
   bytes: Buffer;
@@ -145,4 +163,43 @@ export interface ToolErrorOutput {
   retryable: boolean;
   suggestion?: string;
   details?: Record<string, unknown>;
+}
+
+export interface AiAnalysisBatch {
+  id: string;
+  name: string;
+  status: string;
+  source: string;
+  snapshotMaxImageId: number | null;
+  operationId: string | null;
+  imageCount: number;
+  pendingCount: number;
+  proposedCount: number;
+  appliedCount: number;
+}
+
+export interface AiTagCandidateInput {
+  name: string;
+  groupId: number;
+}
+
+export interface AiImageProposal {
+  id: string;
+  batchId: string;
+  batchName: string;
+  imageId: number;
+  imagePublicId: string;
+  currentFileName: string;
+  currentStorageKey: string;
+  currentFileUrl: string;
+  proposedFileName: string;
+  proposedCategoryId: number;
+  proposedCategoryName: string;
+  proposedTagIds: number[];
+  candidateTagIds: number[];
+  rationale: string;
+  confidence: number | null;
+  status: string;
+  proposedTags?: Array<{ id: number; name: string }>;
+  tagCandidates?: Array<{ id: number; name: string; groupId: number; groupName: string; status: string }>;
 }

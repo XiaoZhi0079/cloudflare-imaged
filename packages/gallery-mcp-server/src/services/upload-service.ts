@@ -75,6 +75,9 @@ export async function uploadOneImage(
       height: file.height,
     }], selection.directoryId, selection.tagIds);
   } catch (error) {
+    if (error instanceof GalleryMcpError && error.code === "DUPLICATE_IMAGE_CONTENT") {
+      throw error;
+    }
     throw new GalleryMcpError("The image reached R2, but its Gallery record could not be completed.", {
       code: "UPLOAD_COMPLETION_REQUIRED",
       retryable: true,

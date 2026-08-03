@@ -1,5 +1,21 @@
 # Gallery MCP Server
 
+Current local protocol version: **0.12.0**.
+
+## AI organization proposal workflow
+
+The MCP server deliberately does not embed or call a vision model. Codex, Claude, or another external Agent uses its own authorized visual capability, while Gallery provides durable workflow tools:
+
+1. `gallery_scan_image_ids` fixes a stable numeric-ID snapshot.
+2. `gallery_cache_remote_images` stores verified originals in the local content-addressed cache.
+3. `gallery_create_analysis_batch` records the exact image IDs being analyzed.
+4. `gallery_get_taxonomy` supplies the current directories and two-level tag tree.
+5. `gallery_submit_image_proposal` submits a complete proposed name, directory, existing tags, and optional missing-tag candidates. Candidates recommend a parent tag group but do not create tags.
+6. A human reviews tag candidates and image proposals at `/admin/ai.html`.
+7. `gallery_apply_approved_proposals` applies only approved proposals. Numeric IDs, permanent public UUIDs, content SHA-256 values, and image bytes remain unchanged.
+
+This separation prevents a one-off visual observation from silently expanding the live taxonomy. Repeated candidate concepts accumulate an occurrence count for review.
+
 `gallery-mcp-server` exposes strictly separated local-file labeling and online Gallery administration tools. An external Agent analyzes images and chooses tags; this server validates grouped taxonomy selections. Local labeling writes sidecar JSON without uploading, while explicitly named remote/upload tools mutate Gallery.
 
 ## Requirements
@@ -301,7 +317,7 @@ The MCP server rejects unknown groups, unknown tags, duplicate groups, duplicate
 
 Do not ask the model to reproduce R2 upload URLs or manually call the two Gallery upload endpoints. The high-level upload tool owns that sequence.
 
-When an upload returns `UPLOAD_COMPLETION_REQUIRED`, pass its `resume_parameters`, including `upload_id`, unchanged to `gallery_resume_upload`. Do not upload the same file again.
+When an upload returns `UPLOAD_COMPLETION_REQUIRED`, pass its `resume_parameters`, including `upload_id`, unchanged to `gallery_resume_upload`. Do not upload the same file again. `DUPLICATE_IMAGE_CONTENT` is different: it is non-retryable, includes the matching existing image or pending upload when available, and must never be sent to the resume tool.
 
 For heterogeneous batches, call `gallery_upload_manifest`. Each item carries a stable `client_item_id`, its own local path, directory, and grouped tags:
 
@@ -324,7 +340,7 @@ For heterogeneous batches, call `gallery_upload_manifest`. Each item carries a s
 }
 ```
 
-Use `dry_run: true` first. The server validates the full manifest without uploading and does not retain all image bytes in memory. A normal run initializes one chunk at a time, uploads to R2 with bounded concurrency, and atomically completes each successful chunk in D1. By default `result_detail` is `failures`, so successful image records do not inflate MCP structured output. Use `summary` for counts only or `all` when per-item success details are explicitly required. By default one failure does not block unrelated items.
+Use `dry_run: true` first. The server validates the full manifest without uploading and does not retain all image bytes in memory. A normal run initializes one chunk at a time, uploads to R2 with bounded concurrency, and atomically completes each successful chunk in D1. If one item is byte-identical to an existing image, an in-progress upload, or an earlier item in the same manifest chunk, only that item is safely skipped and the rest of the chunk continues. Duplicate skips do not abort a run even when `continue_on_error` is false. By default `result_detail` is `failures`, so successful image records do not inflate MCP structured output; it also returns concise duplicate details so the Agent can reuse the existing image. Use `summary` for counts only or `all` when per-item success details are explicitly required. By default one failure does not block unrelated items.
 
 ## Tool surface and compatibility
 

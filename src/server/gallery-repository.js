@@ -1,5 +1,6 @@
 import { normalizeTagName, slugifyTagName } from "../shared/tag-utils.js";
 import { classifyFeaturedImage } from "../shared/featured-image-rules.js";
+import { getFileExtension, sanitizeFileName } from "./gallery-storage.js";
 
 const DEFAULT_SITE_SETTINGS = {
   issue_name: "图集",
@@ -39,10 +40,46 @@ const SELECT_UPLOAD_SESSION_COLUMNS = `
   operation_id AS operationId,
   client_item_id AS clientItemId,
   status,
+  phase,
+  error_code AS errorCode,
+  error_message AS errorMessage,
+  duration_ms AS durationMs,
+  completed_at AS completedAt,
   image_id AS imageId,
   created_at AS createdAt,
   updated_at AS updatedAt,
   expires_at AS expiresAt
+`;
+
+const SELECT_AI_PROPOSAL_COLUMNS = `
+  proposals.id,
+  proposals.batch_id AS batchId,
+  proposals.image_id AS imageId,
+  proposals.proposed_file_name AS proposedFileName,
+  proposals.proposed_category_id AS proposedCategoryId,
+  proposals.proposed_tag_ids AS proposedTagIdsJson,
+  proposals.candidate_tag_ids AS candidateTagIdsJson,
+  proposals.rationale,
+  proposals.confidence,
+  proposals.status,
+  proposals.review_note AS reviewNote,
+  proposals.reviewed_at AS reviewedAt,
+  proposals.applied_at AS appliedAt,
+  proposals.error_code AS errorCode,
+  proposals.error_message AS errorMessage,
+  proposals.created_at AS createdAt,
+  proposals.updated_at AS updatedAt,
+  batches.name AS batchName,
+  images.public_id AS imagePublicId,
+  images.file_name AS currentFileName,
+  images.storage_key AS currentStorageKey,
+  images.file_url AS currentFileUrl,
+  images.width,
+  images.height,
+  images.category_id AS currentCategoryId,
+  current_categories.name AS currentCategoryName,
+  proposed_categories.name AS proposedCategoryName,
+  proposed_categories.directory_slug AS proposedCategoryDirectorySlug
 `;
 
 const D1_MAX_BOUND_PARAMETERS = 100;
@@ -222,6 +259,11 @@ function mapUploadSession(row) {
     operationId: row.operationId ?? null,
     clientItemId: row.clientItemId ?? null,
     status: row.status,
+    phase: row.phase ?? (row.status === "completed" ? "completed" : "reserved"),
+    errorCode: row.errorCode ?? null,
+    errorMessage: row.errorMessage ?? null,
+    durationMs: row.durationMs === null || row.durationMs === undefined ? null : Number(row.durationMs),
+    completedAt: row.completedAt ?? null,
     imageId: row.imageId === null ? null : Number(row.imageId),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -234,6 +276,47 @@ function sameIntegerIds(left, right) {
   const normalizedRight = normalizeIntegerIds(right);
   return normalizedLeft.length === normalizedRight.length
     && normalizedLeft.every((value, index) => value === normalizedRight[index]);
+}
+
+function jsonIntegerIds(value) {
+  try {
+    return normalizeIntegerIds(JSON.parse(value ?? "[]"));
+  } catch {
+    return [];
+  }
+}
+
+function mapAiProposal(row) {
+  return row ? {
+    id: row.id,
+    batchId: row.batchId,
+    batchName: row.batchName,
+    imageId: Number(row.imageId),
+    imagePublicId: row.imagePublicId,
+    currentFileName: row.currentFileName,
+    currentStorageKey: row.currentStorageKey,
+    currentFileUrl: row.currentFileUrl,
+    width: row.width === null ? null : Number(row.width),
+    height: row.height === null ? null : Number(row.height),
+    currentCategoryId: row.currentCategoryId === null ? null : Number(row.currentCategoryId),
+    currentCategoryName: row.currentCategoryName ?? null,
+    proposedFileName: row.proposedFileName,
+    proposedCategoryId: Number(row.proposedCategoryId),
+    proposedCategoryName: row.proposedCategoryName,
+    proposedCategoryDirectorySlug: row.proposedCategoryDirectorySlug,
+    proposedTagIds: jsonIntegerIds(row.proposedTagIdsJson),
+    candidateTagIds: jsonIntegerIds(row.candidateTagIdsJson),
+    rationale: row.rationale ?? "",
+    confidence: row.confidence === null ? null : Number(row.confidence),
+    status: row.status,
+    reviewNote: row.reviewNote ?? null,
+    reviewedAt: row.reviewedAt ?? null,
+    appliedAt: row.appliedAt ?? null,
+    errorCode: row.errorCode ?? null,
+    errorMessage: row.errorMessage ?? null,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  } : null;
 }
 
 function repositoryError(code, message, details = {}) {
@@ -1224,6 +1307,42 @@ export function createGalleryRepository(database) {
       return ids.map((id) => sessionsById.get(id)).filter(Boolean);
     },
 
+    async listUploadSessionsByOperation(operationId) {
+      const normalized = String(operationId ?? "").trim();
+      if (!normalized) return [];
+      const rows = await all(
+        database,
+        `
+          SELECT ${SELECT_UPLOAD_SESSION_COLUMNS}
+          FROM upload_sessions
+          WHERE operation_id = ?
+          ORDER BY created_at ASC, id ASC
+          LIMIT 50
+        `,
+        [normalized],
+      );
+      return rows.map(mapUploadSession);
+    },
+
+    async updateUploadSessionPhase(uploadIds, { phase, errorCode = null, errorMessage = null } = {}) {
+      const ids = [...new Set((Array.isArray(uploadIds) ? uploadIds : [uploadIds])
+        .map((value) => String(value ?? "").trim()).filter(Boolean))];
+      const allowed = new Set(["reserved", "object_uploaded", "database_commit", "completed", "failed"]);
+      if (!ids.length || !allowed.has(phase)) {
+        throw repositoryError("INVALID_UPLOAD_PHASE", "Upload phase and upload IDs are required.");
+      }
+      await run(
+        database,
+        `
+          UPDATE upload_sessions
+          SET phase = ?, error_code = ?, error_message = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE id IN (SELECT CAST(value AS TEXT) FROM json_each(?))
+        `,
+        [phase, errorCode, errorMessage, JSON.stringify(ids)],
+      );
+      return await this.getUploadSessionsByIds(ids);
+    },
+
     async reserveUploadSession({
       id,
       publicId = null,
@@ -1568,7 +1687,12 @@ export function createGalleryRepository(database) {
                 UPDATE upload_sessions
                 SET
                   status = 'completed',
+                  phase = 'completed',
+                  error_code = NULL,
+                  error_message = NULL,
                   image_id = (SELECT id FROM images WHERE images.upload_id = upload_sessions.id),
+                  duration_ms = MAX(0, CAST((julianday('now') - julianday(created_at)) * 86400000 AS INTEGER)),
+                  completed_at = CURRENT_TIMESTAMP,
                   updated_at = CURRENT_TIMESTAMP
                 WHERE status = 'pending'
                   AND id IN (SELECT CAST(value AS TEXT) FROM json_each(?))
@@ -1967,7 +2091,7 @@ export function createGalleryRepository(database) {
       };
     },
 
-    async listImagesPage({ query = "", fileNameQuery = null, limit = 50, offset = 0 } = {}) {
+    async listImagesPage({ query = "", fileNameQuery = null, tagIds = [], sort = "newest", limit = 50, offset = 0 } = {}) {
       const fileNameOnly = fileNameQuery !== null && fileNameQuery !== undefined;
       const normalizedQuery = String(fileNameOnly ? fileNameQuery : query ?? "").trim();
       const normalizedLimit = Number(limit);
@@ -1981,27 +2105,41 @@ export function createGalleryRepository(database) {
       if (normalizedQuery.length > 200) {
         throw new RangeError("query must not exceed 200 characters");
       }
-
-      const whereSql = normalizedQuery
-        ? fileNameOnly
-          ? `WHERE instr(lower(images.file_name), lower(?)) > 0`
-          : `
-          WHERE instr(lower(images.file_name), lower(?)) > 0
-             OR instr(lower(categories.name), lower(?)) > 0
-             OR EXISTS (
-               SELECT 1
-               FROM image_tags
-               INNER JOIN tags ON tags.id = image_tags.tag_id
-               WHERE image_tags.image_id = images.id
-                 AND instr(lower(tags.name), lower(?)) > 0
-             )
-        `
-        : "";
-      const filterParams = normalizedQuery
-        ? fileNameOnly
-          ? [normalizedQuery]
-          : [normalizedQuery, normalizedQuery, normalizedQuery]
-        : [];
+      const normalizedTagIds = normalizeIntegerIds(tagIds);
+      const normalizedSort = sort === "name" ? "name" : "newest";
+      const whereParts = [];
+      const filterParams = [];
+      if (normalizedQuery) {
+        if (fileNameOnly) {
+          whereParts.push(`instr(lower(images.file_name), lower(?)) > 0`);
+          filterParams.push(normalizedQuery);
+        } else {
+          whereParts.push(`(
+            instr(lower(images.file_name), lower(?)) > 0
+            OR instr(lower(categories.name), lower(?)) > 0
+            OR EXISTS (
+              SELECT 1 FROM image_tags
+              INNER JOIN tags ON tags.id = image_tags.tag_id
+              WHERE image_tags.image_id = images.id
+                AND instr(lower(tags.name), lower(?)) > 0
+            )
+          )`);
+          filterParams.push(normalizedQuery, normalizedQuery, normalizedQuery);
+        }
+      }
+      if (normalizedTagIds.length) {
+        whereParts.push(`images.id IN (
+          SELECT image_id FROM image_tags
+          WHERE tag_id IN (SELECT CAST(value AS INTEGER) FROM json_each(?))
+          GROUP BY image_id
+          HAVING COUNT(DISTINCT tag_id) = ?
+        )`);
+        filterParams.push(JSON.stringify(normalizedTagIds), normalizedTagIds.length);
+      }
+      const whereSql = whereParts.length ? `WHERE ${whereParts.join(" AND ")}` : "";
+      const orderSql = normalizedSort === "name"
+        ? "lower(images.file_name) ASC, images.id ASC"
+        : "images.created_at DESC, images.id DESC";
       const countRow = await first(
         database,
         `
@@ -2019,7 +2157,7 @@ export function createGalleryRepository(database) {
           FROM images
           LEFT JOIN categories ON categories.id = images.category_id
           ${whereSql}
-          ORDER BY images.created_at DESC, images.id DESC
+          ORDER BY ${orderSql}
           LIMIT ? OFFSET ?
         `,
         [...filterParams, normalizedLimit, normalizedOffset],
@@ -2036,6 +2174,8 @@ export function createGalleryRepository(database) {
         count: taggedImages.length,
         offset: normalizedOffset,
         limit: normalizedLimit,
+        sort: normalizedSort,
+        tagIds: normalizedTagIds,
         hasMore: normalizedOffset + taggedImages.length < totalCount,
         nextOffset: normalizedOffset + taggedImages.length < totalCount
           ? normalizedOffset + taggedImages.length
@@ -2214,6 +2354,299 @@ export function createGalleryRepository(database) {
         );
       }
       return verified;
+    },
+
+    async createAiAnalysisBatch({ id, name, imageIds, snapshotMaxImageId = null, operationId = null, source = "mcp" }) {
+      const batchId = String(id ?? "").trim();
+      const normalizedName = String(name ?? "").trim().slice(0, 160);
+      const normalizedImageIds = normalizeIntegerIds(imageIds);
+      if (!UUID_PATTERN.test(batchId) || !normalizedName || !normalizedImageIds.length || normalizedImageIds.length > 100) {
+        throw repositoryError("INVALID_AI_ANALYSIS_BATCH", "A UUID, name, and 1-100 image IDs are required.");
+      }
+      const existingIds = new Set(await this.getExistingImageIds(normalizedImageIds));
+      const missingImageIds = normalizedImageIds.filter((imageId) => !existingIds.has(imageId));
+      if (missingImageIds.length) throw repositoryError("IMAGE_NOT_FOUND", "One or more images do not exist.", { missingImageIds });
+      const itemsJson = JSON.stringify(normalizedImageIds);
+      await runBatch(database, [
+        {
+          sql: `INSERT INTO ai_analysis_batches (id, name, source, snapshot_max_image_id, operation_id) VALUES (?, ?, ?, ?, ?)`,
+          params: [batchId, normalizedName, String(source ?? "mcp").slice(0, 40), snapshotMaxImageId, operationId],
+        },
+        {
+          sql: `
+            INSERT INTO ai_analysis_items (batch_id, image_id, content_sha256)
+            SELECT ?, images.id, images.content_sha256
+            FROM images
+            WHERE images.id IN (SELECT CAST(value AS INTEGER) FROM json_each(?))
+          `,
+          params: [batchId, itemsJson],
+        },
+      ]);
+      return await this.getAiAnalysisBatch(batchId);
+    },
+
+    async getAiAnalysisBatch(batchId) {
+      const row = await first(database, `
+        SELECT batches.id, batches.name, batches.status, batches.source,
+          batches.snapshot_max_image_id AS snapshotMaxImageId,
+          batches.operation_id AS operationId,
+          batches.created_at AS createdAt, batches.updated_at AS updatedAt,
+          COUNT(items.image_id) AS imageCount,
+          SUM(CASE WHEN items.status = 'pending' THEN 1 ELSE 0 END) AS pendingCount,
+          SUM(CASE WHEN items.status = 'proposed' THEN 1 ELSE 0 END) AS proposedCount,
+          SUM(CASE WHEN items.status = 'applied' THEN 1 ELSE 0 END) AS appliedCount
+        FROM ai_analysis_batches AS batches
+        LEFT JOIN ai_analysis_items AS items ON items.batch_id = batches.id
+        WHERE batches.id = ? GROUP BY batches.id
+      `, [batchId]);
+      return row ? {
+        ...row,
+        snapshotMaxImageId: row.snapshotMaxImageId === null ? null : Number(row.snapshotMaxImageId),
+        imageCount: Number(row.imageCount ?? 0), pendingCount: Number(row.pendingCount ?? 0),
+        proposedCount: Number(row.proposedCount ?? 0), appliedCount: Number(row.appliedCount ?? 0),
+      } : null;
+    },
+
+    async listAiAnalysisBatches({ limit = 20, offset = 0 } = {}) {
+      const ids = await all(database, `SELECT id FROM ai_analysis_batches ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`, [limit, offset]);
+      return (await Promise.all(ids.map((row) => this.getAiAnalysisBatch(row.id)))).filter(Boolean);
+    },
+
+    async submitAiImageProposal({
+      id, batchId, imageId, proposedFileName, proposedCategoryId, proposedTagIds = [],
+      newTagCandidates = [], rationale = "", confidence = null,
+    }) {
+      const proposalId = String(id ?? "").trim();
+      const normalizedImageId = Number(imageId);
+      const categoryId = Number(proposedCategoryId);
+      const tagIds = normalizeIntegerIds(proposedTagIds);
+      const fileName = String(proposedFileName ?? "").trim();
+      if (!UUID_PATTERN.test(proposalId) || !UUID_PATTERN.test(String(batchId ?? ""))
+        || !Number.isInteger(normalizedImageId) || !Number.isInteger(categoryId) || !fileName) {
+        throw repositoryError("INVALID_AI_PROPOSAL", "Proposal identity, image, file name, and category are required.");
+      }
+      const currentImage = await this.getImageById(normalizedImageId);
+      if (!currentImage) throw repositoryError("IMAGE_NOT_FOUND", "The proposed image does not exist.");
+      if (sanitizeFileName(fileName) !== fileName || /[\\/\u0000-\u001f\u007f]/.test(fileName)
+        || getFileExtension(fileName).toLocaleLowerCase("en-US") !== getFileExtension(currentImage.fileName).toLocaleLowerCase("en-US")) {
+        throw repositoryError("INVALID_PROPOSED_FILE_NAME", "The proposed basename must be safe and keep the original file extension.");
+      }
+      const item = await first(database, `SELECT status FROM ai_analysis_items WHERE batch_id = ? AND image_id = ?`, [batchId, normalizedImageId]);
+      if (!item) throw repositoryError("ANALYSIS_ITEM_NOT_FOUND", "The image is not part of this analysis batch.");
+      const category = await this.getCategoryById(categoryId);
+      if (!category) throw repositoryError("CATEGORY_NOT_FOUND", "The proposed category does not exist.");
+      const existingTagIds = new Set(await this.getExistingTagIds(tagIds));
+      const missingTagIds = tagIds.filter((tagId) => !existingTagIds.has(tagId));
+      if (missingTagIds.length) throw repositoryError("TAG_NOT_FOUND", "One or more proposed tags do not exist.", { missingTagIds });
+
+      const candidates = (Array.isArray(newTagCandidates) ? newTagCandidates : []).map((candidate) => ({
+        displayName: normalizeTagName(candidate?.name),
+        normalizedName: normalizeTagName(candidate?.name).toLocaleLowerCase("zh-CN"),
+        groupId: Number(candidate?.groupId),
+      })).filter((candidate) => candidate.displayName && Number.isInteger(candidate.groupId) && candidate.groupId > 0);
+      if (candidates.length > 20) throw repositoryError("TOO_MANY_TAG_CANDIDATES", "A proposal may suggest at most 20 new tags.");
+      const groupIds = normalizeIntegerIds(candidates.map((candidate) => candidate.groupId));
+      const existingGroupIds = new Set((await Promise.all(groupIds.map((groupId) => this.getTagGroupById(groupId))))
+        .filter(Boolean).map((group) => Number(group.id)));
+      const missingGroupIds = groupIds.filter((groupId) => !existingGroupIds.has(groupId));
+      if (missingGroupIds.length) throw repositoryError("TAG_GROUP_NOT_FOUND", "One or more suggested tag groups do not exist.", { missingGroupIds });
+
+      for (const candidate of candidates) {
+        await run(database, `
+          INSERT INTO ai_tag_candidates (normalized_name, display_name, suggested_group_id)
+          VALUES (?, ?, ?)
+          ON CONFLICT(normalized_name, suggested_group_id) DO UPDATE SET
+            display_name = excluded.display_name, updated_at = CURRENT_TIMESTAMP
+        `, [candidate.normalizedName, candidate.displayName, candidate.groupId]);
+      }
+      const candidateRows = candidates.length ? await all(database, `
+        SELECT id FROM ai_tag_candidates
+        WHERE (normalized_name || ':' || suggested_group_id) IN (
+          SELECT json_extract(value, '$.normalizedName') || ':' || json_extract(value, '$.groupId') FROM json_each(?)
+        )
+      `, [JSON.stringify(candidates)]) : [];
+      const candidateIds = normalizeIntegerIds(candidateRows.map((row) => row.id));
+      const candidateIdsJson = JSON.stringify(candidateIds);
+      await runBatch(database, [
+        {
+          sql: `
+            INSERT INTO ai_image_proposals (
+              id, batch_id, image_id, proposed_file_name, proposed_category_id,
+              proposed_tag_ids, candidate_tag_ids, rationale, confidence
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(batch_id, image_id) DO UPDATE SET
+              proposed_file_name = excluded.proposed_file_name,
+              proposed_category_id = excluded.proposed_category_id,
+              proposed_tag_ids = excluded.proposed_tag_ids,
+              candidate_tag_ids = excluded.candidate_tag_ids,
+              rationale = excluded.rationale,
+              confidence = excluded.confidence,
+              status = 'pending', review_note = NULL, reviewed_at = NULL,
+              error_code = NULL, error_message = NULL, updated_at = CURRENT_TIMESTAMP
+          `,
+          params: [proposalId, batchId, normalizedImageId, fileName, categoryId, JSON.stringify(tagIds), candidateIdsJson, String(rationale ?? "").slice(0, 2000), confidence],
+        },
+        { sql: `DELETE FROM ai_proposal_candidate_tags WHERE proposal_id = (SELECT id FROM ai_image_proposals WHERE batch_id = ? AND image_id = ?)`, params: [batchId, normalizedImageId] },
+        {
+          sql: `
+            INSERT INTO ai_proposal_candidate_tags (proposal_id, candidate_id)
+            SELECT proposals.id, CAST(value AS INTEGER)
+            FROM ai_image_proposals AS proposals, json_each(?)
+            WHERE proposals.batch_id = ? AND proposals.image_id = ?
+          `,
+          params: [candidateIdsJson, batchId, normalizedImageId],
+        },
+        { sql: `UPDATE ai_analysis_items SET status = 'proposed', updated_at = CURRENT_TIMESTAMP WHERE batch_id = ? AND image_id = ?`, params: [batchId, normalizedImageId] },
+        { sql: `UPDATE ai_analysis_batches SET status = 'reviewing', updated_at = CURRENT_TIMESTAMP WHERE id = ?`, params: [batchId] },
+      ]);
+      await run(database, `
+        UPDATE ai_tag_candidates SET occurrence_count = MAX(1, (
+          SELECT COUNT(*) FROM ai_proposal_candidate_tags WHERE candidate_id = ai_tag_candidates.id
+        )), updated_at = CURRENT_TIMESTAMP
+        WHERE id IN (SELECT CAST(value AS INTEGER) FROM json_each(?))
+      `, [candidateIdsJson]);
+      return await this.getAiImageProposalByBatchImage(batchId, normalizedImageId);
+    },
+
+    async getAiImageProposalByBatchImage(batchId, imageId) {
+      const row = await first(database, `
+        SELECT ${SELECT_AI_PROPOSAL_COLUMNS}
+        FROM ai_image_proposals AS proposals
+        INNER JOIN ai_analysis_batches AS batches ON batches.id = proposals.batch_id
+        INNER JOIN images ON images.id = proposals.image_id
+        LEFT JOIN categories AS current_categories ON current_categories.id = images.category_id
+        INNER JOIN categories AS proposed_categories ON proposed_categories.id = proposals.proposed_category_id
+        WHERE proposals.batch_id = ? AND proposals.image_id = ?
+      `, [batchId, imageId]);
+      return mapAiProposal(row);
+    },
+
+    async getAiImageProposal(proposalId) {
+      const row = await first(database, `
+        SELECT ${SELECT_AI_PROPOSAL_COLUMNS}
+        FROM ai_image_proposals AS proposals
+        INNER JOIN ai_analysis_batches AS batches ON batches.id = proposals.batch_id
+        INNER JOIN images ON images.id = proposals.image_id
+        LEFT JOIN categories AS current_categories ON current_categories.id = images.category_id
+        INNER JOIN categories AS proposed_categories ON proposed_categories.id = proposals.proposed_category_id
+        WHERE proposals.id = ?
+      `, [proposalId]);
+      return mapAiProposal(row);
+    },
+
+    async listAiImageProposals({ status = "pending", batchId = null, limit = 50, offset = 0 } = {}) {
+      const where = ["(? = 'all' OR proposals.status = ?)", "(? IS NULL OR proposals.batch_id = ?)"];
+      const params = [status, status, batchId, batchId];
+      const countRow = await first(database, `SELECT COUNT(*) AS totalCount FROM ai_image_proposals AS proposals WHERE ${where.join(" AND ")}`, params);
+      const rows = await all(database, `
+        SELECT ${SELECT_AI_PROPOSAL_COLUMNS}
+        FROM ai_image_proposals AS proposals
+        INNER JOIN ai_analysis_batches AS batches ON batches.id = proposals.batch_id
+        INNER JOIN images ON images.id = proposals.image_id
+        LEFT JOIN categories AS current_categories ON current_categories.id = images.category_id
+        INNER JOIN categories AS proposed_categories ON proposed_categories.id = proposals.proposed_category_id
+        WHERE ${where.join(" AND ")}
+        ORDER BY proposals.created_at DESC, proposals.id DESC LIMIT ? OFFSET ?
+      `, [...params, limit, offset]);
+      const proposals = rows.map(mapAiProposal);
+      const candidateIds = normalizeIntegerIds(proposals.flatMap((proposal) => proposal.candidateTagIds));
+      const candidateRows = candidateIds.length ? await all(database, `
+        SELECT candidates.id, candidates.display_name AS name, candidates.suggested_group_id AS groupId,
+          candidates.status, candidates.occurrence_count AS occurrenceCount,
+          candidates.created_tag_id AS createdTagId, tag_groups.name AS groupName
+        FROM ai_tag_candidates AS candidates
+        INNER JOIN tag_groups ON tag_groups.id = candidates.suggested_group_id
+        WHERE candidates.id IN (SELECT CAST(value AS INTEGER) FROM json_each(?))
+      `, [JSON.stringify(candidateIds)]) : [];
+      const candidateById = new Map(candidateRows.map((candidate) => [Number(candidate.id), { ...candidate, id: Number(candidate.id), groupId: Number(candidate.groupId), occurrenceCount: Number(candidate.occurrenceCount), createdTagId: candidate.createdTagId === null ? null : Number(candidate.createdTagId) }]));
+      const tagRows = await this.listTags();
+      const tagById = new Map(tagRows.map((tag) => [Number(tag.id), { id: Number(tag.id), name: tag.name }]));
+      return {
+        proposals: proposals.map((proposal) => ({
+          ...proposal,
+          proposedTags: proposal.proposedTagIds.map((id) => tagById.get(id)).filter(Boolean),
+          tagCandidates: proposal.candidateTagIds.map((id) => candidateById.get(id)).filter(Boolean),
+        })),
+        totalCount: Number(countRow?.totalCount ?? 0), count: proposals.length, limit, offset,
+        hasMore: offset + proposals.length < Number(countRow?.totalCount ?? 0),
+        nextOffset: offset + proposals.length < Number(countRow?.totalCount ?? 0) ? offset + proposals.length : null,
+      };
+    },
+
+    async reviewAiImageProposals(proposalIds, { status, note = "" } = {}) {
+      const ids = [...new Set((Array.isArray(proposalIds) ? proposalIds : []).map(String).filter((id) => UUID_PATTERN.test(id)))];
+      if (!ids.length || !["approved", "rejected"].includes(status)) throw repositoryError("INVALID_PROPOSAL_REVIEW", "Proposal IDs and an approved/rejected status are required.");
+      await runBatch(database, [
+        {
+          sql: `UPDATE ai_image_proposals SET status = ?, review_note = ?, reviewed_at = CURRENT_TIMESTAMP, error_code = NULL, error_message = NULL, updated_at = CURRENT_TIMESTAMP WHERE status IN ('pending','approved','rejected','failed') AND id IN (SELECT CAST(value AS TEXT) FROM json_each(?))`,
+          params: [status, String(note ?? "").slice(0, 1000), JSON.stringify(ids)],
+        },
+        {
+          sql: `UPDATE ai_analysis_items SET status = 'reviewed', updated_at = CURRENT_TIMESTAMP WHERE (batch_id, image_id) IN (SELECT batch_id, image_id FROM ai_image_proposals WHERE id IN (SELECT CAST(value AS TEXT) FROM json_each(?)))`,
+          params: [JSON.stringify(ids)],
+        },
+      ]);
+      return (await Promise.all(ids.map((id) => this.getAiImageProposal(id)))).filter(Boolean);
+    },
+
+    async listAiTagCandidates({ status = "pending", limit = 50, offset = 0 } = {}) {
+      return await all(database, `
+        SELECT candidates.id, candidates.display_name AS name, candidates.suggested_group_id AS groupId,
+          tag_groups.name AS groupName, candidates.status, candidates.occurrence_count AS occurrenceCount,
+          candidates.created_tag_id AS createdTagId, candidates.created_at AS createdAt
+        FROM ai_tag_candidates AS candidates INNER JOIN tag_groups ON tag_groups.id = candidates.suggested_group_id
+        WHERE (? = 'all' OR candidates.status = ?)
+        ORDER BY candidates.occurrence_count DESC, candidates.id DESC LIMIT ? OFFSET ?
+      `, [status, status, limit, offset]).then((rows) => rows.map((row) => ({ ...row, id: Number(row.id), groupId: Number(row.groupId), occurrenceCount: Number(row.occurrenceCount), createdTagId: row.createdTagId === null ? null : Number(row.createdTagId) })));
+    },
+
+    async reviewAiTagCandidate(candidateId, { status } = {}) {
+      const id = Number(candidateId);
+      if (!Number.isInteger(id) || !["approved", "rejected"].includes(status)) throw repositoryError("INVALID_TAG_CANDIDATE_REVIEW", "Candidate ID and approved/rejected status are required.");
+      const candidate = await first(database, `SELECT * FROM ai_tag_candidates WHERE id = ?`, [id]);
+      if (!candidate) return null;
+      let createdTagId = candidate.created_tag_id === null ? null : Number(candidate.created_tag_id);
+      if (status === "approved" && !createdTagId) {
+        const existing = await first(database, `SELECT id, group_id AS groupId FROM tags WHERE lower(name) = lower(?)`, [candidate.display_name]);
+        if (existing && Number(existing.groupId) !== Number(candidate.suggested_group_id)) {
+          throw repositoryError("AI_TAG_GROUP_CONFLICT", "A tag with this name already exists in another parent group.");
+        }
+        const tag = existing ?? await this.createTag({ name: candidate.display_name, groupId: Number(candidate.suggested_group_id) });
+        createdTagId = Number(tag.id);
+      }
+      await run(database, `UPDATE ai_tag_candidates SET status = ?, created_tag_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [status, createdTagId, id]);
+      return (await this.listAiTagCandidates({ status: "all", limit: 100, offset: 0 })).find((item) => item.id === id) ?? null;
+    },
+
+    async applyAiProposalMetadata(proposalId, { storageKey, fileName, fileUrl }) {
+      const proposal = await this.getAiImageProposal(proposalId);
+      if (!proposal) throw repositoryError("AI_PROPOSAL_NOT_FOUND", "Proposal not found.");
+      if (proposal.status !== "approved") throw repositoryError("AI_PROPOSAL_NOT_APPROVED", "Only approved proposals may be applied.");
+      const candidates = proposal.candidateTagIds.length ? await all(database, `SELECT id, status, created_tag_id AS createdTagId FROM ai_tag_candidates WHERE id IN (SELECT CAST(value AS INTEGER) FROM json_each(?))`, [JSON.stringify(proposal.candidateTagIds)]) : [];
+      const unresolved = candidates.filter((candidate) => candidate.status === "pending" || (candidate.status === "approved" && !candidate.createdTagId));
+      if (unresolved.length) throw repositoryError("AI_TAG_CANDIDATES_UNRESOLVED", "Approve or reject every proposed new tag before applying this image.", { candidateIds: unresolved.map((item) => Number(item.id)) });
+      const tagIds = normalizeIntegerIds([...proposal.proposedTagIds, ...candidates.filter((candidate) => candidate.status === "approved").map((candidate) => candidate.createdTagId)]);
+      const assignmentsJson = JSON.stringify([{ imageId: proposal.imageId, tagIds }]);
+      await runBatch(database, [
+        { sql: `UPDATE images SET storage_key = ?, file_name = ?, file_url = ?, category_id = ?, sync_status = 'ok', note = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, params: [storageKey, fileName, fileUrl, proposal.proposedCategoryId, proposal.imageId] },
+        ...tagAssignmentEntries(assignmentsJson),
+        { sql: `UPDATE ai_image_proposals SET status = 'applied', applied_at = CURRENT_TIMESTAMP, error_code = NULL, error_message = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'approved'`, params: [proposalId] },
+        { sql: `UPDATE ai_analysis_items SET status = 'applied', updated_at = CURRENT_TIMESTAMP WHERE batch_id = ? AND image_id = ?`, params: [proposal.batchId, proposal.imageId] },
+      ]);
+      const actualTagIds = await this.getImageTagIds(proposal.imageId);
+      if (!sameIntegerIds(actualTagIds, tagIds)) throw repositoryError("IMAGE_TAG_VERIFICATION_FAILED", "Applied proposal tags did not verify.", { expectedTagIds: tagIds, actualTagIds });
+      const appliedProposal = await this.getAiImageProposal(proposalId);
+      const appliedImage = await this.getImageById(proposal.imageId);
+      if (!appliedProposal || appliedProposal.status !== "applied" || !appliedImage
+        || appliedImage.storageKey !== storageKey || appliedImage.fileName !== fileName
+        || Number(appliedImage.category?.id) !== Number(proposal.proposedCategoryId)) {
+        throw repositoryError("AI_PROPOSAL_VERIFICATION_FAILED", "Applied proposal metadata did not verify.");
+      }
+      return { proposal: appliedProposal, image: appliedImage, tagIds };
+    },
+
+    async failAiImageProposal(proposalId, error) {
+      await run(database, `UPDATE ai_image_proposals SET status = 'failed', error_code = ?, error_message = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [String(error?.code ?? "AI_PROPOSAL_APPLY_FAILED").slice(0, 80), String(error?.message ?? error).replace(/\s+/g, " ").slice(0, 240), proposalId]);
     },
 
     async listImagesByTagSlugs(tagSlugs) {
