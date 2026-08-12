@@ -8,7 +8,8 @@ const elements = {
   form: document.querySelector("#admin-login-form"), key: document.querySelector("#admin-key"),
   login: document.querySelector("#admin-login"), error: document.querySelector("#admin-login-error"),
   logout: document.querySelector("[data-admin-logout]"), status: document.querySelector("#ai-status"),
-  pendingCount: document.querySelector("#ai-pending-count"), candidateCount: document.querySelector("#ai-candidate-count"),
+  pendingCount: document.querySelector("#ai-pending-count"), noChangeCount: document.querySelector("#ai-no-change-count"),
+  candidateCount: document.querySelector("#ai-candidate-count"),
   selectedCount: document.querySelector("#ai-selected-count"), candidates: document.querySelector("#ai-candidate-list"),
   proposals: document.querySelector("#ai-proposal-list"), loadMore: document.querySelector("#ai-load-more"),
   approve: document.querySelector("#ai-approve-selected"), reject: document.querySelector("#ai-reject-selected"),
@@ -61,16 +62,27 @@ function renderProposals() {
     preview.append(image);
     const copy = node("div", { className: "ai-proposal-copy" });
     copy.append(node("h3", {}, proposal.proposedFileName));
+    const diff = node("div", { className: "ai-diff-summary", "aria-label": "变更摘要" });
+    if (proposal.changes?.fileName) diff.append(node("span", {}, "修改名称"));
+    if (proposal.changes?.directory) diff.append(node("span", {}, "移动目录"));
+    if (proposal.changes?.tags?.addedIds?.length) diff.append(node("span", { className: "is-add" }, `新增 ${proposal.changes.tags.addedIds.length} 个标签`));
+    if (proposal.changes?.tags?.removedIds?.length) diff.append(node("span", { className: "is-remove" }, `移除 ${proposal.changes.tags.removedIds.length} 个标签`));
+    if (proposal.changes?.candidateTagIds?.length) diff.append(node("span", { className: "is-add" }, `建议 ${proposal.changes.candidateTagIds.length} 个新标签`));
+    copy.append(diff);
     const changes = node("dl", { className: "ai-proposal-change" });
     const rows = [
-      ["当前名称", proposal.currentFileName], ["当前目录", proposal.currentCategoryName || "未设置"],
-      ["建议目录", proposal.proposedCategoryName], ["状态", proposal.status],
+      ["名称", proposal.changes?.fileName ? `${proposal.currentFileName} → ${proposal.proposedFileName}` : "保持不变"],
+      ["目录", proposal.changes?.directory ? `${proposal.currentCategoryName || "未设置"} → ${proposal.proposedCategoryName}` : "保持不变"],
+      ["状态", proposal.status],
     ];
     for (const [label, value] of rows) changes.append(node("dt", {}, label), node("dd", {}, String(value ?? "")));
     copy.append(changes);
+    const currentById = new Map((proposal.currentTags ?? []).map((tag) => [Number(tag.id), tag.name]));
+    const proposedById = new Map((proposal.proposedTags ?? []).map((tag) => [Number(tag.id), tag.name]));
     const tags = node("div", { className: "ai-tag-list" });
-    for (const tag of proposal.proposedTags ?? []) tags.append(node("span", {}, tag.name));
-    for (const candidate of proposal.tagCandidates ?? []) tags.append(node("span", {}, `候选：${candidate.name}`));
+    for (const id of proposal.changes?.tags?.addedIds ?? []) tags.append(node("span", {}, `新增：${proposedById.get(Number(id)) || `#${id}`}`));
+    for (const id of proposal.changes?.tags?.removedIds ?? []) tags.append(node("span", {}, `移除：${currentById.get(Number(id)) || `#${id}`}`));
+    for (const candidate of proposal.tagCandidates ?? []) tags.append(node("span", {}, `新标签候选：${candidate.name}`));
     copy.append(tags);
     if (proposal.rationale) copy.append(node("p", {}, proposal.rationale));
     copy.append(node("div", { className: "ai-proposal-meta" }, `图片 #${proposal.imageId} · 批次 ${proposal.batchName}${proposal.confidence === null ? "" : ` · 置信度 ${Math.round(proposal.confidence * 100)}%`}`));
@@ -108,7 +120,9 @@ async function loadProposals({ reset = false } = {}) {
     const payload = await client.request(`/api/admin/ai/proposals?status=${encodeURIComponent(elements.status.value)}&limit=50&offset=${offset}`);
     proposals = [...proposals, ...(payload.proposals ?? [])];
     page = { offset, nextOffset: Number(payload.nextOffset ?? offset + (payload.count ?? 0)), hasMore: Boolean(payload.hasMore), loading: false };
-    elements.pendingCount.textContent = String(payload.totalCount ?? proposals.length); renderProposals();
+    elements.pendingCount.textContent = String(payload.summary?.pendingProposalCount ?? (elements.status.value === "pending" ? payload.totalCount : 0) ?? 0);
+    elements.noChangeCount.textContent = String(payload.summary?.noChangeCount ?? 0);
+    renderProposals();
   } catch (error) { page.loading = false; elements.proposals.innerHTML = `<div class="admin-error">${error.message}</div>`; }
 }
 

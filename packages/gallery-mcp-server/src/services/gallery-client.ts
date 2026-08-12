@@ -3,6 +3,7 @@ import type {
   Category,
   AiAnalysisBatch,
   AiImageProposal,
+  AiProposalSubmissionResult,
   AiTagCandidateInput,
   GalleryImage,
   GalleryMcpConfig,
@@ -349,14 +350,15 @@ export class GalleryApiClient {
   async submitAiImageProposal(input: {
     id: string; batchId: string; imageId: number; proposedFileName: string; proposedCategoryId: number;
     proposedTagIds: number[]; newTagCandidates: AiTagCandidateInput[]; rationale?: string; confidence?: number;
-  }): Promise<AiImageProposal> {
-    return (await this.request<{ proposal: AiImageProposal }>("api/admin/ai/proposals", {
+  }): Promise<AiProposalSubmissionResult> {
+    return await this.request<AiProposalSubmissionResult>("api/admin/ai/proposals", {
       method: "POST", retry: false, body: input,
-    })).proposal;
+    });
   }
 
   async listAiImageProposals(status: string, batchId: string | null, limit: number, offset: number): Promise<{
     proposals: AiImageProposal[]; totalCount: number; count: number; hasMore: boolean; nextOffset: number | null;
+    summary?: { pendingProposalCount: number; noChangeCount: number };
   }> {
     const params = new URLSearchParams({ status, limit: String(limit), offset: String(offset) });
     if (batchId) params.set("batch_id", batchId);

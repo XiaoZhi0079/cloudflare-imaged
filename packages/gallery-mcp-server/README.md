@@ -10,7 +10,7 @@ The MCP server deliberately does not embed or call a vision model. Codex, Claude
 2. `gallery_cache_remote_images` stores verified originals in the local content-addressed cache.
 3. `gallery_create_analysis_batch` records the exact image IDs being analyzed.
 4. `gallery_get_taxonomy` supplies the current directories and two-level tag tree.
-5. `gallery_submit_image_proposal` submits a complete proposed name, directory, existing tags, and optional missing-tag candidates. Candidates recommend a parent tag group but do not create tags.
+5. `gallery_submit_image_proposal` submits a complete analyzed name, directory, existing-tag set, and optional missing-tag candidates. Gallery compares it with current metadata: identical results become `no_change` and never enter the review queue; only real differences create a proposal. Candidates recommend a parent tag group but do not create tags.
 6. A human reviews tag candidates and image proposals at `/admin/ai.html`.
 7. `gallery_apply_approved_proposals` applies only approved proposals. Numeric IDs, permanent public UUIDs, content SHA-256 values, and image bytes remain unchanged.
 

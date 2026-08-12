@@ -1,5 +1,5 @@
 .ai-workbench { max-width: 1500px; }
-.ai-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 24px; }
+.ai-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 24px; }
 .ai-summary > div { display: flex; align-items: baseline; justify-content: space-between; padding: 18px 20px; border: 1px solid var(--admin-border, #dedbd4); border-radius: 16px; background: #fff; }
 .ai-summary strong { font-size: 2rem; }
 .ai-summary span { color: #6f6b64; }
@@ -23,5 +23,7 @@
 .ai-proposal-change { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 5px 10px; }
 .ai-proposal-change dt { color: #777168; }.ai-proposal-change dd { margin: 0; overflow-wrap: anywhere; }
 .ai-tag-list { display: flex; gap: 6px; flex-wrap: wrap; }.ai-tag-list span { padding: 4px 8px; border-radius: 999px; background: #efede8; font-size: .84rem; }
+.ai-diff-summary { display: flex; gap: 7px; flex-wrap: wrap; }.ai-diff-summary span { padding: 5px 9px; border-radius: 999px; background: #ece9e3; color: #4f4a43; font-size: .84rem; }
+.ai-diff-summary .is-add { background: #e6f2e8; color: #245d31; }.ai-diff-summary .is-remove { background: #f8e8e5; color: #8a3428; }
 .ai-proposal-meta { color: #777168; font-size: .86rem; }
 @media (max-width: 800px) { .ai-summary { grid-template-columns: 1fr; }.ai-proposal { grid-template-columns: auto 1fr; }.ai-proposal-preview { grid-column: 2; }.ai-proposal-copy { grid-column: 2; } }

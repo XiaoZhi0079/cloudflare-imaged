@@ -268,3 +268,30 @@ test("Gallery client scans a fixed numeric-ID snapshot without OFFSET pagination
   assert.equal(requests[1].search, "?after_id=100&limit=50&snapshot_max_id=2000");
   assert.ok(requests.every((url) => !url.searchParams.has("offset")));
 });
+
+test("Gallery client preserves proposal and no-change analysis outcomes", async () => {
+  const responses = [
+    { outcome: "no_change", imageId: 42, proposal: null, changes: { fileName: null, directory: null, tags: { addedIds: [], removedIds: [] }, candidateTagIds: [] } },
+    { outcome: "proposal_created", imageId: 43, proposal: { id: "proposal-43", imageId: 43 }, changes: { fileName: { from: "old.png", to: "new.png" }, directory: null, tags: { addedIds: [], removedIds: [] }, candidateTagIds: [] } },
+  ];
+  const requests = [];
+  const client = new GalleryApiClient(config(), {
+    retryDelayMs: 0,
+    fetchImpl: async (input, init) => {
+      requests.push({ url: new URL(String(input)), body: JSON.parse(init.body) });
+      return Response.json(responses.shift());
+    },
+  });
+  const base = {
+    id: "11111111-1111-4111-8111-111111111111", batchId: "22222222-2222-4222-8222-222222222222",
+    proposedFileName: "same.png", proposedCategoryId: 1, proposedTagIds: [], newTagCandidates: [],
+  };
+
+  const unchanged = await client.submitAiImageProposal({ ...base, imageId: 42 });
+  const changed = await client.submitAiImageProposal({ ...base, imageId: 43, proposedFileName: "new.png" });
+
+  assert.equal(unchanged.outcome, "no_change");
+  assert.equal(changed.outcome, "proposal_created");
+  assert.equal(changed.proposal.id, "proposal-43");
+  assert.ok(requests.every(({ url }) => url.pathname === "/api/admin/ai/proposals"));
+});

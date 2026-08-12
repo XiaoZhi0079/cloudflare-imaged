@@ -28,6 +28,9 @@ export const BASELINE_SQL = readFileSync(
 ) + "\n" + readFileSync(
   new URL("../../migrations/0009_ai_organization_workflow.sql", import.meta.url),
   "utf8",
+) + "\n" + readFileSync(
+  new URL("../../migrations/0010_ai_no_change_outcomes.sql", import.meta.url),
+  "utf8",
 );
 
 export function createTestDatabase() {

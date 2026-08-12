@@ -176,6 +176,7 @@ export interface AiAnalysisBatch {
   pendingCount: number;
   proposedCount: number;
   appliedCount: number;
+  noChangeCount: number;
 }
 
 export interface AiTagCandidateInput {
@@ -192,6 +193,9 @@ export interface AiImageProposal {
   currentFileName: string;
   currentStorageKey: string;
   currentFileUrl: string;
+  currentCategoryId: number | null;
+  currentCategoryName: string | null;
+  currentTagIds: number[];
   proposedFileName: string;
   proposedCategoryId: number;
   proposedCategoryName: string;
@@ -200,6 +204,22 @@ export interface AiImageProposal {
   rationale: string;
   confidence: number | null;
   status: string;
+  changes?: AiProposalChanges;
+  currentTags?: Array<{ id: number; name: string }>;
   proposedTags?: Array<{ id: number; name: string }>;
   tagCandidates?: Array<{ id: number; name: string; groupId: number; groupName: string; status: string }>;
+}
+
+export interface AiProposalChanges {
+  fileName: { from: string; to: string } | null;
+  directory: { fromId: number | null; fromName: string | null; toId: number } | null;
+  tags: { addedIds: number[]; removedIds: number[] };
+  candidateTagIds: number[];
+}
+
+export interface AiProposalSubmissionResult {
+  outcome: "proposal_created" | "no_change";
+  imageId: number;
+  proposal: AiImageProposal | null;
+  changes: AiProposalChanges;
 }

@@ -54,7 +54,7 @@ export function registerAiOrganizationTools(server: McpServer, api: GalleryApiCl
     "gallery_submit_image_proposal",
     {
       title: "Submit Gallery Image Organization Proposal",
-      description: "Submit or replace the pending organization proposal for one image in an analysis batch. Existing tags use IDs. Missing visual concepts must be sent as new_tag_candidates with a recommended parent tag-group ID; Gallery accumulates them for human review instead of creating tags immediately. This tool never changes the image itself.",
+      description: "Submit one complete analysis result for an image in a batch. Gallery compares the proposed name, directory, complete existing-tag set, and missing-tag candidates with current metadata. An identical result is recorded as no_change and creates no review card; only a real difference creates or replaces a pending proposal. This tool never changes the image itself.",
       inputSchema: z.object({
         batch_id: z.string().uuid(),
         image_id: z.number().int().positive(),
@@ -71,16 +71,21 @@ export function registerAiOrganizationTools(server: McpServer, api: GalleryApiCl
       }).strict(),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
     },
-    async ({ batch_id, image_id, proposed_file_name, proposed_directory_id, proposed_tag_ids, new_tag_candidates, rationale, confidence, response_format }) => runTool(response_format as ResponseFormat, async () => ({
-      proposal: await api.submitAiImageProposal({
+    async ({ batch_id, image_id, proposed_file_name, proposed_directory_id, proposed_tag_ids, new_tag_candidates, rationale, confidence, response_format }) => runTool(response_format as ResponseFormat, async () => {
+      const result = await api.submitAiImageProposal({
         id: randomUUID(), batchId: batch_id, imageId: image_id,
         proposedFileName: proposed_file_name, proposedCategoryId: proposed_directory_id,
         proposedTagIds: proposed_tag_ids,
         newTagCandidates: new_tag_candidates.map((candidate) => ({ name: candidate.name, groupId: candidate.group_id })),
         rationale, ...(confidence === undefined ? {} : { confidence }),
-      }),
-      next_step: "Review new tag candidates and this proposal in /admin/ai.html. Applying is blocked until every referenced candidate is resolved.",
-    })),
+      });
+      return {
+        ...result,
+        next_step: result.outcome === "no_change"
+          ? "No review is needed for this image. Continue with the next analysis item."
+          : "Review new tag candidates and this proposal in /admin/ai.html. Applying is blocked until every referenced candidate is resolved.",
+      };
+    }),
   );
 
   server.registerTool(

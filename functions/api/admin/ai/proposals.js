@@ -16,13 +16,13 @@ export async function onRequest({ env, request }) {
     }
     const body = await parseRequestJson(request);
     if (request.method === "POST") {
-      const proposal = await repository.submitAiImageProposal({
+      const result = await repository.submitAiImageProposal({
         id: body?.id ?? crypto.randomUUID(), batchId: body?.batchId, imageId: body?.imageId,
         proposedFileName: body?.proposedFileName, proposedCategoryId: body?.proposedCategoryId,
         proposedTagIds: body?.proposedTagIds, newTagCandidates: body?.newTagCandidates,
         rationale: body?.rationale, confidence: body?.confidence,
       });
-      return jsonResponse({ requestId, proposal }, 201);
+      return jsonResponse({ requestId, ...result }, result.outcome === "proposal_created" ? 201 : 200);
     }
     if (request.method === "PATCH") {
       const proposals = await repository.reviewAiImageProposals(body?.proposalIds, { status: body?.status, note: body?.note });
