@@ -88,6 +88,7 @@ export function toApiTag(tag) {
     slug: tag.slug,
     sortOrder: Number(tag.sort_order ?? tag.sortOrder ?? 0),
     isVisible: Number(tag.is_visible ?? tag.isVisible ?? 0) === 1,
+    imageCount: Number(tag.image_count ?? tag.imageCount ?? 0),
     ...(hasGroup
       ? {
           groupId,

@@ -426,7 +426,8 @@ async function getTagById(database, tagId) {
     `
       SELECT tags.id, tags.name, tags.slug, tags.sort_order, tags.is_visible,
              tag_groups.id AS group_id, tag_groups.name AS group_name,
-             tag_groups.slug AS group_slug, tag_groups.sort_order AS group_sort_order
+             tag_groups.slug AS group_slug, tag_groups.sort_order AS group_sort_order,
+             (SELECT COUNT(*) FROM image_tags WHERE image_tags.tag_id = tags.id) AS image_count
       FROM tags
       LEFT JOIN tag_groups ON tag_groups.id = tags.group_id
       WHERE tags.id = ?
@@ -513,9 +514,15 @@ async function listTagsOrdered(database) {
     `
       SELECT tags.id, tags.name, tags.slug, tags.sort_order, tags.is_visible,
              tag_groups.id AS group_id, tag_groups.name AS group_name,
-             tag_groups.slug AS group_slug, tag_groups.sort_order AS group_sort_order
+             tag_groups.slug AS group_slug, tag_groups.sort_order AS group_sort_order,
+             COALESCE(tag_usage.image_count, 0) AS image_count
       FROM tags
       LEFT JOIN tag_groups ON tag_groups.id = tags.group_id
+      LEFT JOIN (
+        SELECT tag_id, COUNT(*) AS image_count
+        FROM image_tags
+        GROUP BY tag_id
+      ) AS tag_usage ON tag_usage.tag_id = tags.id
       ORDER BY tag_groups.sort_order ASC, tags.sort_order ASC, tags.name ASC, tags.id ASC
     `,
   );
@@ -1149,9 +1156,15 @@ export function createGalleryRepository(database) {
         `
           SELECT tags.id, tags.name, tags.slug, tags.sort_order, tags.is_visible,
                  tag_groups.id AS group_id, tag_groups.name AS group_name,
-                 tag_groups.slug AS group_slug, tag_groups.sort_order AS group_sort_order
+                 tag_groups.slug AS group_slug, tag_groups.sort_order AS group_sort_order,
+                 COALESCE(tag_usage.image_count, 0) AS image_count
           FROM tags
           INNER JOIN tag_groups ON tag_groups.id = tags.group_id
+          LEFT JOIN (
+            SELECT tag_id, COUNT(*) AS image_count
+            FROM image_tags
+            GROUP BY tag_id
+          ) AS tag_usage ON tag_usage.tag_id = tags.id
           WHERE tags.is_visible = 1
           ORDER BY tag_groups.sort_order ASC, tags.sort_order ASC, tags.name ASC, tags.id ASC
         `,

@@ -212,9 +212,12 @@ function renderFilters() {
     section.append(createElement("h4", {}, group.name));
     const options = createElement("div", { className: "filter-tag-group-options" });
     for (const tag of group.tags) {
-      const count = state.getImages().filter((image) => (image.tags ?? []).includes(tag.name)).length;
+      const count = Number(tag.imageCount ?? 0);
       const selected = tagNames.has(tag.name);
-      const label = createElement("label", { className: `filter-option filter-tag-option${selected ? " is-selected" : ""}` });
+      const label = createElement("label", {
+        className: `filter-option filter-tag-option${selected ? " is-selected" : ""}`,
+        title: `${tag.name}：全库 ${count} 张`,
+      });
       const input = createElement("input", { type: "checkbox", value: tag.name, checked: selected });
       input.addEventListener("change", () => {
         const next = state.getFilters().tagNames;

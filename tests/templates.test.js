@@ -473,10 +473,10 @@ test("changed admin assets use targeted cache-busting versions", () => {
   );
 
   const imageDeliveryVersion = "20260728-image-delivery";
-  const uploadReadinessVersion = "20260730-upload-readiness";
+  const tagCountVersion = "20260813-tag-counts";
   const libraryEntryMatch = libraryHtml.match(/src="\/assets\/admin\/library-page\.js\?v=([^"]+)"/);
   assert.ok(libraryEntryMatch, "library-page.js must include a cache-busting release version");
-  assert.equal(libraryEntryMatch[1], uploadReadinessVersion);
+  assert.equal(libraryEntryMatch[1], tagCountVersion);
 
   const workbenchDialogVersion = imageDeliveryVersion;
   const workbenchDialogMatch = libraryHtml.match(/href="\/assets\/admin\/workbench\.css\?v=([^"]+)"/);

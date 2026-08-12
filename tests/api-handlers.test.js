@@ -40,6 +40,7 @@ function expectedAdminTag(tag) {
     slug: tag.slug,
     sortOrder: Number(tag.sortOrder ?? tag.sort_order),
     isVisible: Number(tag.is_visible ?? tag.isVisible) === 1 || tag.isVisible === true,
+    imageCount: Number(tag.imageCount ?? tag.image_count ?? 0),
     groupId: 1,
     group: defaultTagGroup,
   };
@@ -150,6 +151,27 @@ test("public images handler intersects repeated tag parameters", async () => {
 
   assert.equal(response.status, 200);
   assert.deepEqual((await response.json()).images.map((image) => image.id), [both.id]);
+});
+
+test("admin tags handler returns full-library image counts", async () => {
+  const env = createTestEnv();
+  const repository = createGalleryRepository(env.GALLERY_DB);
+  const tag = await repository.createTag({ name: "统计标签", sortOrder: 1, isVisible: true });
+  const first = await repository.upsertImage({ storageKey: "gallery/tag-count-1.webp", fileName: "tag-count-1.webp", fileUrl: "/file/gallery/tag-count-1.webp" });
+  const second = await repository.upsertImage({ storageKey: "gallery/tag-count-2.webp", fileName: "tag-count-2.webp", fileUrl: "/file/gallery/tag-count-2.webp" });
+  await repository.replaceImageTags(first.id, [tag.id]);
+  await repository.replaceImageTags(second.id, [tag.id]);
+
+  const response = await adminTagsHandler({
+    env,
+    request: new Request("https://gallery.example.com/api/admin/tags", {
+      headers: { "x-gallery-admin-key": "gallery-secret" },
+    }),
+  });
+  const payload = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(payload.tags.find((item) => item.id === tag.id).imageCount, 2);
 });
 
 test("admin tags require a tag group", async () => {

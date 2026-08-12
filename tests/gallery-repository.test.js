@@ -91,6 +91,25 @@ test("upsertImage updates imported image metadata instead of duplicating rows", 
   assert.equal(adminImages[0].height, 1620);
 });
 
+test("tag lists expose stable full-library image counts", async () => {
+  const repository = createGalleryRepository(createTestDatabase());
+  const portrait = await repository.createTag({ name: "全库人像", sortOrder: 1, isVisible: true });
+  const dress = await repository.createTag({ name: "全库礼服", sortOrder: 2, isVisible: true });
+  const first = await repository.upsertImage({ storageKey: "gallery/count-1.webp", fileName: "count-1.webp", fileUrl: "/file/gallery/count-1.webp" });
+  const second = await repository.upsertImage({ storageKey: "gallery/count-2.webp", fileName: "count-2.webp", fileUrl: "/file/gallery/count-2.webp" });
+  const third = await repository.upsertImage({ storageKey: "gallery/count-3.webp", fileName: "count-3.webp", fileUrl: "/file/gallery/count-3.webp" });
+  await repository.replaceImageTags(first.id, [portrait.id, dress.id]);
+  await repository.replaceImageTags(second.id, [portrait.id]);
+  await repository.replaceImageTags(third.id, [portrait.id]);
+
+  const adminCounts = new Map((await repository.listTags()).map((tag) => [tag.name, Number(tag.image_count)]));
+  const publicCounts = new Map((await repository.listVisibleTags()).map((tag) => [tag.name, Number(tag.image_count)]));
+  assert.equal(adminCounts.get("全库人像"), 3);
+  assert.equal(adminCounts.get("全库礼服"), 1);
+  assert.equal(publicCounts.get("全库人像"), 3);
+  assert.equal(publicCounts.get("全库礼服"), 1);
+});
+
 test("image lists batch tag lookups within the D1 100-parameter limit", async () => {
   const database = createTestDb();
   const tag = createGalleryRepository(database);
@@ -312,6 +331,7 @@ test("updateTag renames a tag and updates its order and visibility", async () =>
     group_name: "未分类",
     group_slug: "uncategorized",
     group_sort_order: 1,
+    image_count: 0,
   });
   assert.deepEqual(await repository.listVisibleTags(), []);
 });

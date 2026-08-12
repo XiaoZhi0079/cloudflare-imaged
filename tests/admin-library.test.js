@@ -382,6 +382,13 @@ test("image uploads continue in a bounded background task panel", () => {
   assert.match(workbenchCss, /@media \(max-width:720px\)[\s\S]*\.admin-upload-status\s*\{[^}]*width:calc\(100vw - 16px\)/s);
 });
 
+test("tag filter counts come from full-library server metadata instead of loaded pages", () => {
+  const source = readFileSync(new URL("../public/assets/admin/library-page.js", import.meta.url), "utf8");
+  assert.match(source, /const count = Number\(tag\.imageCount \?\? 0\)/);
+  assert.match(source, /全库 \$\{count\} 张/);
+  assert.doesNotMatch(source, /state\.getImages\(\)\.filter\(\(image\) => \(image\.tags \?\? \[\]\)\.includes\(tag\.name\)\)\.length/);
+});
+
 test("image detail exposes copyable identity and direct browse and download URLs", () => {
   const source = readFileSync(new URL("../public/assets/admin/library-page.js", import.meta.url), "utf8");
   const workbenchCss = readFileSync(new URL("../public/assets/admin/workbench.css", import.meta.url), "utf8");
