@@ -48,6 +48,7 @@ const dialogs = createDialogHost(elements.dialogHost);
 const notifier = createNotifier(document.querySelector("#admin-toast-host"));
 let state = createLibraryState({ initialRenderLimit: Number.MAX_SAFE_INTEGER });
 let libraryPage = { totalCount: 0, nextOffset: 0, hasMore: false, loading: false, generation: 0 };
+let libraryPageRequest = null;
 let searchTimer = null;
 let compact = false;
 let bulkMode = false;
@@ -59,6 +60,7 @@ let detailSaving = false;
 let detailSequenceIds = [];
 let detailPreloadImages = new Map();
 let detailExpandedTagGroups = null;
+let detailNavigationLoading = false;
 let uploadSession = null;
 let uploadRenderFrame = null;
 let uploadPollTimer = null;
@@ -472,7 +474,7 @@ function libraryPagePath(offset) {
 }
 
 async function fetchLibraryPage({ reset = false } = {}) {
-  if (libraryPage.loading && !reset) return;
+  if (libraryPage.loading && !reset) return libraryPageRequest ?? false;
   const generation = reset ? libraryPage.generation + 1 : libraryPage.generation;
   if (reset) {
     libraryPage = { totalCount: 0, nextOffset: 0, hasMore: false, loading: true, generation };
@@ -483,28 +485,35 @@ async function fetchLibraryPage({ reset = false } = {}) {
     renderLibrary();
   }
   const offset = reset ? 0 : libraryPage.nextOffset;
-  try {
-    const page = await client.request(libraryPagePath(offset));
-    if (generation !== libraryPage.generation) return;
-    const current = reset ? [] : state.getImages();
-    const known = new Set(current.map((image) => Number(image.id)));
-    const additions = (page.images ?? []).filter((image) => !known.has(Number(image.id)));
-    state.syncImages([...current, ...additions]);
-    libraryPage.totalCount = Number(page.totalCount ?? state.getImages().length);
-    libraryPage.nextOffset = Number(page.nextOffset ?? offset + additions.length);
-    libraryPage.hasMore = Boolean(page.hasMore);
-    renderAll();
-  } catch (error) {
-    if (generation !== libraryPage.generation) return;
-    if (error instanceof AdminUnauthorizedError) throw error;
-    if (reset) renderLoadError(null, error, () => void fetchLibraryPage({ reset: true }));
-    else notifier.error(errorMessage(error));
-  } finally {
-    if (generation === libraryPage.generation) {
-      libraryPage.loading = false;
-      renderLibrary();
+  const request = (async () => {
+    try {
+      const page = await client.request(libraryPagePath(offset));
+      if (generation !== libraryPage.generation) return false;
+      const current = reset ? [] : state.getImages();
+      const known = new Set(current.map((image) => Number(image.id)));
+      const additions = (page.images ?? []).filter((image) => !known.has(Number(image.id)));
+      state.syncImages([...current, ...additions]);
+      libraryPage.totalCount = Number(page.totalCount ?? state.getImages().length);
+      libraryPage.nextOffset = Number(page.nextOffset ?? offset + additions.length);
+      libraryPage.hasMore = Boolean(page.hasMore);
+      renderAll();
+      return true;
+    } catch (error) {
+      if (generation !== libraryPage.generation) return false;
+      if (error instanceof AdminUnauthorizedError) throw error;
+      if (reset) renderLoadError(null, error, () => void fetchLibraryPage({ reset: true }));
+      else notifier.error(errorMessage(error));
+      return false;
+    } finally {
+      if (generation === libraryPage.generation) {
+        libraryPage.loading = false;
+        renderLibrary();
+      }
+      if (libraryPageRequest === request) libraryPageRequest = null;
     }
-  }
+  })();
+  libraryPageRequest = request;
+  return request;
 }
 
 async function authenticate(key) {
@@ -539,6 +548,7 @@ function closeDetail({ restoreFocus = true } = {}) {
   detailControls = null;
   detailDrafts = new Map();
   detailSaving = false;
+  detailNavigationLoading = false;
   detailSequenceIds = [];
   detailPreloadImages.clear();
   if (restoreFocus) detailOpener?.focus();
@@ -589,8 +599,10 @@ function renderDetailSaveState() {
   detailControls.fileName.disabled = detailSaving;
   detailControls.category.disabled = detailSaving;
   detailControls.tags.disabled = detailSaving;
-  detailControls.previous.disabled = detailSaving || !detailControls.canPrevious;
-  detailControls.next.disabled = detailSaving || !detailControls.canNext;
+  detailControls.previous.disabled = detailSaving || detailNavigationLoading || !detailControls.canPrevious;
+  detailControls.next.disabled = detailSaving || detailNavigationLoading || !detailControls.canNext;
+  detailControls.next.setAttribute("aria-busy", String(detailNavigationLoading));
+  detailControls.next.title = detailNavigationLoading ? "正在加载下一页" : "下一张";
 }
 
 function captureDetailDraft(imageId = detailImageId, controls = detailControls) {
@@ -636,16 +648,46 @@ async function requestCloseDetail() {
   closeDetail();
 }
 
+function syncDetailSequenceIds() {
+  const visibleIds = state.visibleImages().map((image) => Number(image.id));
+  const visibleSet = new Set(visibleIds);
+  const next = detailSequenceIds.filter((id) => visibleSet.has(Number(id)));
+  const known = new Set(next.map(Number));
+  for (const id of visibleIds) {
+    if (!known.has(id)) {
+      next.push(id);
+      known.add(id);
+    }
+  }
+  detailSequenceIds = next;
+}
+
 function detailNavigationState(imageId) {
-  const currentIds = new Set(state.getImages().map((image) => Number(image.id)));
-  detailSequenceIds = detailSequenceIds.filter((id) => currentIds.has(Number(id)));
+  syncDetailSequenceIds();
   const index = detailSequenceIds.findIndex((id) => Number(id) === Number(imageId));
+  const previousId = index > 0 ? detailSequenceIds[index - 1] : null;
+  const nextId = index >= 0 && index < detailSequenceIds.length - 1 ? detailSequenceIds[index + 1] : null;
+  const hasUnloadedNext = index >= 0 && nextId === null && libraryPage.hasMore;
   return {
     index,
-    total: detailSequenceIds.length,
-    previousId: index > 0 ? detailSequenceIds[index - 1] : null,
-    nextId: index >= 0 && index < detailSequenceIds.length - 1 ? detailSequenceIds[index + 1] : null,
+    total: Math.max(detailSequenceIds.length, Number(libraryPage.totalCount) || 0),
+    previousId,
+    nextId,
+    hasUnloadedNext,
+    canPrevious: previousId !== null,
+    canNext: nextId !== null || hasUnloadedNext,
   };
+}
+
+function updateDetailNavigationControls() {
+  if (!detailControls || detailImageId === null) return;
+  const navigation = detailNavigationState(detailImageId);
+  detailControls.position.textContent = navigation.index >= 0
+    ? `${navigation.index + 1} / ${navigation.total}`
+    : "";
+  detailControls.canPrevious = navigation.canPrevious;
+  detailControls.canNext = navigation.canNext;
+  renderDetailSaveState();
 }
 
 function detailPreviewUrl(image) {
@@ -688,13 +730,43 @@ function preloadDetailNeighbors(imageId) {
       detailPreloadImages.delete(detailPreloadImages.keys().next().value);
     }
   }
+  const remainingLoaded = detailSequenceIds.length - navigation.index - 1;
+  if (libraryPage.hasMore && remainingLoaded <= 2) {
+    const openedImageId = Number(imageId);
+    const generation = libraryPage.generation;
+    const loadedCount = detailSequenceIds.length;
+    void fetchLibraryPage().then((loaded) => {
+      if (!loaded || generation !== libraryPage.generation || Number(detailImageId) !== openedImageId) return;
+      updateDetailNavigationControls();
+      if (detailSequenceIds.length > loadedCount) preloadDetailNeighbors(openedImageId);
+    }).catch(() => {});
+  }
 }
 
-function navigateDetail(direction) {
-  if (detailSaving) return;
+async function navigateDetail(direction) {
+  if (detailSaving || detailNavigationLoading) return;
   captureActiveDetailDraft();
-  const navigation = detailNavigationState(detailImageId);
-  const targetId = direction < 0 ? navigation.previousId : navigation.nextId;
+  const openedImageId = Number(detailImageId);
+  let navigation = detailNavigationState(openedImageId);
+  let targetId = direction < 0 ? navigation.previousId : navigation.nextId;
+  if (direction > 0 && !targetId && navigation.hasUnloadedNext) {
+    detailNavigationLoading = true;
+    updateDetailNavigationControls();
+    try {
+      const generation = libraryPage.generation;
+      const loaded = await fetchLibraryPage();
+      if (!loaded || generation !== libraryPage.generation || Number(detailImageId) !== openedImageId) return;
+      navigation = detailNavigationState(openedImageId);
+      targetId = navigation.nextId;
+    } catch {
+      return;
+    } finally {
+      if (Number(detailImageId) === openedImageId) {
+        detailNavigationLoading = false;
+        updateDetailNavigationControls();
+      }
+    }
+  }
   if (!targetId) return;
   const target = state.getImages().find((image) => Number(image.id) === Number(targetId));
   if (target) openDetail(target, detailOpener, { focusField: false });
@@ -801,6 +873,7 @@ function imageTechnicalInfo(image) {
 
 function openDetail(image, opener, { sequenceIds = null, focusField = true } = {}) {
   detailImageId = Number(image.id);
+  detailNavigationLoading = false;
   if (opener) detailOpener = opener;
   if (sequenceIds) detailSequenceIds = [...new Set(sequenceIds.map(Number))];
   if (!detailSequenceIds.length) detailSequenceIds = state.visibleImages().map((item) => Number(item.id));
@@ -827,8 +900,8 @@ function openDetail(image, opener, { sequenceIds = null, focusField = true } = {
   }
   const previous = createElement("button", { type: "button", className: "detail-preview-nav detail-preview-prev", "aria-label": "上一张", title: "上一张" }, "‹");
   const next = createElement("button", { type: "button", className: "detail-preview-nav detail-preview-next", "aria-label": "下一张", title: "下一张" }, "›");
-  previous.disabled = navigation.previousId === null;
-  next.disabled = navigation.nextId === null;
+  previous.disabled = !navigation.canPrevious;
+  next.disabled = !navigation.canNext;
   previous.addEventListener("click", () => { void navigateDetail(-1); });
   next.addEventListener("click", () => { void navigateDetail(1); });
   previewStage.append(previous, preview, next);
@@ -877,10 +950,11 @@ function openDetail(image, opener, { sequenceIds = null, focusField = true } = {
     error,
     remove,
     save,
+    position,
     previous,
     next,
-    canPrevious: navigation.previousId !== null,
-    canNext: navigation.nextId !== null,
+    canPrevious: navigation.canPrevious,
+    canNext: navigation.canNext,
   };
   detailControls = controls;
   form.addEventListener("input", () => captureDetailDraft(image.id, controls));
@@ -1053,6 +1127,7 @@ async function deleteDetailImage(image, controls) {
     detailDrafts.delete(deletedImageId);
     detailSequenceIds = detailSequenceIds.filter((id) => Number(id) !== deletedImageId);
     state.syncImages(state.getImages().filter((item) => Number(item.id) !== deletedImageId));
+    libraryPage.totalCount = Math.max(0, libraryPage.totalCount - 1);
     renderAll();
     const fallback = state.getImages().find((item) => Number(item.id) === Number(fallbackId));
     if (fallback) openDetail(fallback, detailOpener, { focusField: false });

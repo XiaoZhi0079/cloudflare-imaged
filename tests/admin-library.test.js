@@ -317,8 +317,8 @@ test("image detail navigates drafts quickly and saves every edited image", () =>
   assert.match(source, /sequenceIds:\s*state\.visibleImages\(\)\.map/);
   assert.match(source, /className:\s*"detail-preview-nav detail-preview-prev"[^\n]*"aria-label":\s*"上一张"/);
   assert.match(source, /className:\s*"detail-preview-nav detail-preview-next"[^\n]*"aria-label":\s*"下一张"/);
-  assert.match(source, /previous\.disabled = navigation\.previousId === null/);
-  assert.match(source, /next\.disabled = navigation\.nextId === null/);
+  assert.match(source, /previous\.disabled = !navigation\.canPrevious/);
+  assert.match(source, /next\.disabled = !navigation\.canNext/);
   assert.match(source, /function detailNavigationState/);
   assert.match(source, /let detailDrafts = new Map\(\)/);
   assert.match(source, /function captureDetailDraft/);
@@ -342,6 +342,23 @@ test("image detail navigates drafts quickly and saves every edited image", () =>
   assert.match(workbenchCss, /\.detail-preview-prev\s*\{[^}]*left:12px/s);
   assert.match(workbenchCss, /\.detail-preview-next\s*\{[^}]*right:12px/s);
   assert.match(workbenchCss, /\.detail-position\s*\{[^}]*text-align:right/s);
+});
+
+test("image detail navigation continues across server-side library pages", () => {
+  const source = readFileSync(new URL("../public/assets/admin/library-page.js", import.meta.url), "utf8");
+
+  assert.match(source, /let libraryPageRequest = null/);
+  assert.match(source, /if \(libraryPage\.loading && !reset\) return libraryPageRequest \?\? false/);
+  assert.match(source, /libraryPageRequest = request/);
+  assert.match(source, /function syncDetailSequenceIds/);
+  assert.match(source, /total: Math\.max\(detailSequenceIds\.length, Number\(libraryPage\.totalCount\) \|\| 0\)/);
+  assert.match(source, /hasUnloadedNext = index >= 0 && nextId === null && libraryPage\.hasMore/);
+  assert.match(source, /canNext: nextId !== null \|\| hasUnloadedNext/);
+  assert.match(source, /remainingLoaded <= 2[\s\S]*fetchLibraryPage\(\)/s);
+  assert.match(source, /async function navigateDetail[\s\S]*navigation\.hasUnloadedNext[\s\S]*await fetchLibraryPage\(\)[\s\S]*targetId = navigation\.nextId/s);
+  assert.match(source, /detailControls\.next\.setAttribute\("aria-busy", String\(detailNavigationLoading\)\)/);
+  assert.match(source, /detailControls\.position\.textContent = navigation\.index >= 0[\s\S]*navigation\.total/s);
+  assert.match(source, /libraryPage\.totalCount = Math\.max\(0, libraryPage\.totalCount - 1\)/);
 });
 
 test("image detail keeps a compact independently scrolling tag workspace", () => {
