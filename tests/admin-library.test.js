@@ -358,6 +358,9 @@ test("image detail keeps a compact independently scrolling tag workspace", () =>
   assert.match(source, /title:\s*`移除标签：\$\{tag\.name\}`/);
   assert.match(source, /detailExpandedTagGroups = initiallySelectedGroups/);
   assert.match(source, /const basicFields = createElement\("div", \{ className: "detail-basic-fields" \}\)/);
+  const selectedTagsRule = workbenchCss.match(/\.detail-selected-tags\s*\{([^}]*)\}/)?.[1] ?? "";
+  assert.match(selectedTagsRule, /flex-wrap:wrap/);
+  assert.doesNotMatch(selectedTagsRule, /max-height|overflow/);
   assert.match(workbenchCss, /\.detail-edit-pane\s*\{[^}]*overflow:hidden/s);
   assert.match(workbenchCss, /\.detail-form\s*\{[^}]*height:100%[^}]*grid-template-rows:auto minmax\(0,1fr\) auto auto/s);
   assert.match(workbenchCss, /\.detail-tags\s*\{[^}]*grid-template-rows:auto auto minmax\(0,1fr\)[^}]*overflow:hidden/s);

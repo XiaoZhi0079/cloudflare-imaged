@@ -133,7 +133,7 @@
 .detail-tags-overview-heading { display:flex; align-items:center; justify-content:space-between; gap:10px; }
 .detail-tags-overview-heading strong { font-size:12px; }
 .detail-tags-overview-heading button { min-height:28px; padding:0 7px; border:0; background:transparent; color:var(--admin-accent); font-size:11px; }
-.detail-selected-tags { min-height:35px; max-height:78px; display:flex; flex-wrap:wrap; align-content:start; gap:5px; overflow:auto; padding:1px; }
+.detail-selected-tags { min-height:35px; display:flex; flex-wrap:wrap; align-content:start; gap:5px; padding:1px; }
 .detail-selected-tags-empty { align-self:center; color:var(--admin-muted); font-size:12px; }
 .detail-selected-tag { min-height:31px; display:inline-flex; align-items:center; gap:7px; padding:0 8px; border:1px solid rgba(180,78,39,.34); border-radius:6px; background:rgba(180,78,39,.09); color:var(--admin-text); font-size:11px; }
 .detail-selected-tag span:last-child { color:var(--admin-accent); font-size:15px; line-height:1; }

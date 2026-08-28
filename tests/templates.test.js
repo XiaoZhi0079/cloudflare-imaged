@@ -472,7 +472,7 @@ test("changed admin assets use targeted cache-busting versions", () => {
     Array(uploadIdempotencyReferences.length).fill(uploadIdempotencyVersion),
   );
 
-  const detailTagWorkspaceVersion = "20260829-detail-tag-workspace";
+  const detailTagWorkspaceVersion = "20260829-selected-tags-expanded";
   const libraryEntryMatch = libraryHtml.match(/src="\/assets\/admin\/library-page\.js\?v=([^"]+)"/);
   assert.ok(libraryEntryMatch, "library-page.js must include a cache-busting release version");
   assert.equal(libraryEntryMatch[1], detailTagWorkspaceVersion);
