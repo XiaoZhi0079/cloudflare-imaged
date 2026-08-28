@@ -58,6 +58,7 @@ let detailDrafts = new Map();
 let detailSaving = false;
 let detailSequenceIds = [];
 let detailPreloadImages = new Map();
+let detailExpandedTagGroups = null;
 let uploadSession = null;
 let uploadRenderFrame = null;
 let uploadPollTimer = null;
@@ -199,6 +200,144 @@ function appendGroupedTagChoices(container, { selectedNames = new Set(), labelCl
     section.append(choices); container.append(section);
   }
   return inputs;
+}
+
+function createDetailTagEditor(selectedTagIds) {
+  const selectedIds = new Set(selectedTagIds.map(Number));
+  const groups = groupedTags();
+  const tagsById = new Map(state.getTags().map((tag) => [Number(tag.id), tag]));
+  const fieldset = createElement("fieldset", { className: "detail-tags" });
+  fieldset.append(createElement("legend", {}, "标签"));
+
+  const overview = createElement("div", { className: "detail-tags-overview" });
+  const overviewHeading = createElement("div", { className: "detail-tags-overview-heading" });
+  const selectedCount = createElement("strong", {}, "已选 0 个");
+  const clearSelected = createElement("button", { type: "button" }, "清空");
+  overviewHeading.append(selectedCount, clearSelected);
+  const selectedList = createElement("div", {
+    className: "detail-selected-tags",
+    "aria-live": "polite",
+    "aria-label": "已选标签",
+  });
+  overview.append(overviewHeading, selectedList);
+
+  const searchLabel = createElement("label", { className: "detail-tag-search" });
+  const search = createElement("input", {
+    type: "search",
+    placeholder: "搜索标签",
+    "aria-label": "搜索图片标签",
+  });
+  const searchStatus = createElement("span", { "aria-live": "polite" }, `${state.getTags().length} 个标签`);
+  searchLabel.append(search, searchStatus);
+
+  const groupList = createElement("div", { className: "detail-tag-groups" });
+  const emptySearch = createElement("p", { className: "detail-tag-empty" }, "没有匹配的标签");
+  emptySearch.hidden = true;
+  groupList.append(emptySearch);
+  const records = [];
+  const initiallySelectedGroups = new Set(groups
+    .filter((group) => group.tags.some((tag) => selectedIds.has(Number(tag.id))))
+    .map((group) => String(group.id)));
+  if (detailExpandedTagGroups === null) {
+    detailExpandedTagGroups = initiallySelectedGroups;
+    if (!detailExpandedTagGroups.size && groups[0]) detailExpandedTagGroups.add(String(groups[0].id));
+  }
+
+  for (const group of groups) {
+    const key = String(group.id);
+    const section = createElement("details", { className: "detail-tag-group" });
+    section.open = detailExpandedTagGroups.has(key);
+    const summary = createElement("summary");
+    const groupName = createElement("strong", {}, group.name);
+    const groupCount = createElement("span");
+    summary.append(groupName, groupCount);
+    const choices = createElement("div", { className: "tag-choice-options" });
+    const inputs = [];
+    const labels = [];
+    for (const tag of group.tags) {
+      const input = createElement("input", { type: "checkbox", value: tag.id, checked: selectedIds.has(Number(tag.id)) });
+      const label = createElement("label", { className: "detail-check", title: tag.name });
+      label.append(input, createElement("span", {}, tag.name));
+      choices.append(label);
+      inputs.push(input);
+      labels.push({ element: label, name: tag.name.toLocaleLowerCase("zh-CN") });
+    }
+    section.append(summary, choices);
+    section.addEventListener("toggle", () => {
+      if (search.value.trim()) return;
+      if (section.open) detailExpandedTagGroups.add(key);
+      else detailExpandedTagGroups.delete(key);
+    });
+    groupList.append(section);
+    records.push({ section, group, groupCount, inputs, labels });
+  }
+
+  function renderSelection() {
+    const checked = records.flatMap((record) => record.inputs).filter((input) => input.checked);
+    selectedCount.textContent = `已选 ${checked.length} 个`;
+    clearSelected.disabled = checked.length === 0;
+    selectedList.replaceChildren();
+    if (!checked.length) {
+      selectedList.append(createElement("span", { className: "detail-selected-tags-empty" }, "尚未选择标签"));
+    } else {
+      for (const input of checked) {
+        const tag = tagsById.get(Number(input.value));
+        if (!tag) continue;
+        const remove = createElement("button", {
+          type: "button",
+          className: "detail-selected-tag",
+          title: `移除标签：${tag.name}`,
+          "aria-label": `移除标签：${tag.name}`,
+        });
+        remove.append(createElement("span", {}, tag.name), createElement("span", { "aria-hidden": "true" }, "×"));
+        remove.addEventListener("click", () => {
+          input.checked = false;
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+        selectedList.append(remove);
+      }
+    }
+    for (const record of records) {
+      const count = record.inputs.filter((input) => input.checked).length;
+      record.groupCount.textContent = `${count} / ${record.inputs.length}`;
+      record.section.classList.toggle("has-selection", count > 0);
+      record.inputs.forEach((input, index) => record.labels[index].element.classList.toggle("is-selected", input.checked));
+    }
+  }
+
+  function applySearch() {
+    const query = search.value.trim().toLocaleLowerCase("zh-CN");
+    let matchCount = 0;
+    for (const record of records) {
+      const groupMatches = Boolean(query) && record.group.name.toLocaleLowerCase("zh-CN").includes(query);
+      let groupTagMatches = 0;
+      for (const label of record.labels) {
+        const matches = !query || groupMatches || label.name.includes(query);
+        label.element.hidden = !matches;
+        if (matches) groupTagMatches += 1;
+      }
+      record.section.hidden = groupTagMatches === 0;
+      record.section.open = query ? groupTagMatches > 0 : detailExpandedTagGroups.has(String(record.group.id));
+      matchCount += groupTagMatches;
+    }
+    searchStatus.textContent = query ? `找到 ${matchCount} 个` : `${state.getTags().length} 个标签`;
+    emptySearch.hidden = matchCount > 0;
+  }
+
+  fieldset.addEventListener("change", (event) => {
+    if (event.target.matches('input[type="checkbox"]')) renderSelection();
+  });
+  clearSelected.addEventListener("click", () => {
+    const checked = records.flatMap((record) => record.inputs).filter((input) => input.checked);
+    for (const input of checked) input.checked = false;
+    renderSelection();
+    fieldset.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  search.addEventListener("input", applySearch);
+  fieldset.append(overview, searchLabel, groupList);
+  renderSelection();
+  applySearch();
+  return fieldset;
 }
 
 function renderFilters() {
@@ -719,19 +858,17 @@ function openDetail(image, opener, { sequenceIds = null, focusField = true } = {
     category.append(option);
   }
   categoryLabel.append(createElement("span", {}, "目录"), category);
-  const tags = createElement("fieldset", { className: "detail-tags" });
-  tags.append(createElement("legend", {}, "标签"));
   const selectedTagIds = new Set(draft.tagIds.map(Number));
-  appendGroupedTagChoices(tags, {
-    selectedNames: new Set(state.getTags().filter((tag) => selectedTagIds.has(Number(tag.id))).map((tag) => tag.name)),
-  });
+  const tags = createDetailTagEditor([...selectedTagIds]);
   const technicalInfo = imageTechnicalInfo(image);
   const error = createElement("p", { className: "admin-field-error", "aria-live": "polite" });
   const remove = createElement("button", { type: "button", className: "admin-button-danger" }, "删除图片");
   const save = createElement("button", { type: "submit", className: "admin-button-primary" }, "保存修改");
   const actions = createElement("div", { className: "detail-form-actions" });
   actions.append(remove, save);
-  form.append(nameLabel, categoryLabel, tags, error, actions);
+  const basicFields = createElement("div", { className: "detail-basic-fields" });
+  basicFields.append(nameLabel, categoryLabel);
+  form.append(basicFields, tags, error, actions);
   const controls = {
     imageId: Number(image.id),
     fileName,

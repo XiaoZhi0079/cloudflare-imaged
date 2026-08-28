@@ -472,16 +472,14 @@ test("changed admin assets use targeted cache-busting versions", () => {
     Array(uploadIdempotencyReferences.length).fill(uploadIdempotencyVersion),
   );
 
-  const imageDeliveryVersion = "20260728-image-delivery";
-  const tagCountVersion = "20260813-tag-counts";
+  const detailTagWorkspaceVersion = "20260829-detail-tag-workspace";
   const libraryEntryMatch = libraryHtml.match(/src="\/assets\/admin\/library-page\.js\?v=([^"]+)"/);
   assert.ok(libraryEntryMatch, "library-page.js must include a cache-busting release version");
-  assert.equal(libraryEntryMatch[1], tagCountVersion);
+  assert.equal(libraryEntryMatch[1], detailTagWorkspaceVersion);
 
-  const workbenchDialogVersion = imageDeliveryVersion;
   const workbenchDialogMatch = libraryHtml.match(/href="\/assets\/admin\/workbench\.css\?v=([^"]+)"/);
   assert.ok(workbenchDialogMatch, "workbench.css must include a cache-busting release version");
-  assert.equal(workbenchDialogMatch[1], workbenchDialogVersion);
+  assert.equal(workbenchDialogMatch[1], detailTagWorkspaceVersion);
 
   const albumsRedesignVersion = "20260722-directory-preview-fit";
   const albumsRedesignReferences = [

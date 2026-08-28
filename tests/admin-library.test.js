@@ -297,10 +297,10 @@ test("image detail uses a centered responsive modal workspace", () => {
   assert.match(source, /detail-edit-pane/);
   assert.match(source, /detailOverlay: document\.querySelector\("#admin-detail-overlay"\)/);
   assert.match(source, /event\.target === elements\.detailOverlay[^}]*requestCloseDetail\(\)/s);
-  assert.match(workbenchCss, /\.admin-detail-dialog\s*\{[^}]*width:\s*min\(1180px,\s*calc\(100vw - 40px\)\)[^}]*max-height:\s*calc\(100dvh - 40px\)[^}]*overflow:\s*auto/s);
+  assert.match(workbenchCss, /\.admin-detail-dialog\s*\{[^}]*width:\s*min\(1320px,\s*calc\(100vw - 40px\)\)[^}]*height:\s*min\(900px,calc\(100dvh - 40px\)\)[^}]*overflow:\s*hidden[^}]*grid-template-rows:auto minmax\(0,1fr\)/s);
   assert.match(workbenchCss, /#admin-dialog-host \.admin-dialog-backdrop\s*\{[^}]*z-index:\s*90/s);
-  assert.match(workbenchCss, /\.admin-detail-workspace\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1\.4fr\)\s+minmax\(320px,\s*1fr\)/s);
-  assert.match(workbenchCss, /\.detail-preview-stage\s*\{[^}]*height:\s*min\(68dvh,\s*720px\)/s);
+  assert.match(workbenchCss, /\.admin-detail-workspace\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1\.25fr\)\s+minmax\(390px,\s*\.9fr\)[^}]*overflow:hidden/s);
+  assert.match(workbenchCss, /\.detail-preview-stage\s*\{[^}]*height:\s*min\(58dvh,\s*650px\)/s);
   assert.match(workbenchCss, /\.detail-preview\s*\{[^}]*width:\s*100%[^}]*height:\s*100%[^}]*object-fit:\s*contain[^}]*object-position:\s*center/s);
   assert.doesNotMatch(source, /detailDrawer|admin-detail-drawer/);
   assert.doesNotMatch(adminCss, /\.admin-drawer/);
@@ -342,6 +342,28 @@ test("image detail navigates drafts quickly and saves every edited image", () =>
   assert.match(workbenchCss, /\.detail-preview-prev\s*\{[^}]*left:12px/s);
   assert.match(workbenchCss, /\.detail-preview-next\s*\{[^}]*right:12px/s);
   assert.match(workbenchCss, /\.detail-position\s*\{[^}]*text-align:right/s);
+});
+
+test("image detail keeps a compact independently scrolling tag workspace", () => {
+  const source = readFileSync(new URL("../public/assets/admin/library-page.js", import.meta.url), "utf8");
+  const workbenchCss = readFileSync(new URL("../public/assets/admin/workbench.css", import.meta.url), "utf8");
+
+  assert.match(source, /function createDetailTagEditor\(selectedTagIds\)/);
+  assert.match(source, /className:\s*"detail-selected-tags"/);
+  assert.match(source, /placeholder:\s*"搜索标签"/);
+  assert.match(source, /"没有匹配的标签"/);
+  assert.match(source, /createElement\("details", \{ className: "detail-tag-group" \}\)/);
+  assert.match(source, /record\.section\.open = query \? groupTagMatches > 0 : detailExpandedTagGroups\.has/);
+  assert.match(source, /groupCount\.textContent = `\$\{count\} \/ \$\{record\.inputs\.length\}`/);
+  assert.match(source, /title:\s*`移除标签：\$\{tag\.name\}`/);
+  assert.match(source, /detailExpandedTagGroups = initiallySelectedGroups/);
+  assert.match(source, /const basicFields = createElement\("div", \{ className: "detail-basic-fields" \}\)/);
+  assert.match(workbenchCss, /\.detail-edit-pane\s*\{[^}]*overflow:hidden/s);
+  assert.match(workbenchCss, /\.detail-form\s*\{[^}]*height:100%[^}]*grid-template-rows:auto minmax\(0,1fr\) auto auto/s);
+  assert.match(workbenchCss, /\.detail-tags\s*\{[^}]*grid-template-rows:auto auto minmax\(0,1fr\)[^}]*overflow:hidden/s);
+  assert.match(workbenchCss, /\.detail-tag-groups\s*\{[^}]*overflow:auto/s);
+  assert.match(workbenchCss, /\.detail-form-actions\s*\{[^}]*border-top:1px solid var\(--admin-line\)/s);
+  assert.match(workbenchCss, /@media \(max-width:900px\)[\s\S]*\.admin-detail-dialog\s*\{[^}]*overflow:auto/s);
 });
 
 test("image card tag rows wrap instead of clipping assigned tags", () => {
@@ -401,7 +423,8 @@ test("image detail exposes copyable identity and direct browse and download URLs
   assert.match(source, /buildDownloadImageUrl\(image\.fileUrl\)/);
   assert.match(source, /target\s*=\s*"_blank"/);
   assert.match(source, /previewPane\.append\(previewStage, dimensions, technicalInfo\)/);
-  assert.match(source, /form\.append\(nameLabel, categoryLabel, tags, error, actions\)/);
+  assert.match(source, /basicFields\.append\(nameLabel, categoryLabel\)/);
+  assert.match(source, /form\.append\(basicFields, tags, error, actions\)/);
   assert.doesNotMatch(source, /form\.append\([^\n]*technicalInfo/);
   assert.match(workbenchCss, /\.detail-preview-pane\s*\{[^}]*display:grid[^}]*align-content:start[^}]*gap:12px/s);
   assert.match(workbenchCss, /\.detail-technical-row\s*\{[^}]*grid-template-columns:82px minmax\(0,1fr\) auto/s);
