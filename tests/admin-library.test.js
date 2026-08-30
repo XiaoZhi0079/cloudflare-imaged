@@ -380,6 +380,7 @@ test("image detail keeps a compact independently scrolling tag workspace", () =>
   assert.doesNotMatch(selectedTagsRule, /max-height|overflow/);
   assert.match(workbenchCss, /\.detail-edit-pane\s*\{[^}]*overflow:hidden/s);
   assert.match(workbenchCss, /\.detail-form\s*\{[^}]*height:100%[^}]*grid-template-rows:auto minmax\(0,1fr\) auto auto/s);
+  assert.match(workbenchCss, /\.detail-form > \.admin-field-error:empty\s*\{[^}]*display:none/s);
   assert.match(workbenchCss, /\.detail-tags\s*\{[^}]*grid-template-rows:auto auto minmax\(0,1fr\)[^}]*overflow:hidden/s);
   assert.match(workbenchCss, /\.detail-tag-groups\s*\{[^}]*overflow:auto/s);
   assert.match(workbenchCss, /\.detail-form-actions\s*\{[^}]*border-top:1px solid var\(--admin-line\)/s);
